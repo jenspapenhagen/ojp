@@ -25,8 +25,12 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
- * Manages multinode connections to OJP servers with round-robin routing,
+ * Manages multinode connections to OJP servers with load-aware routing,
  * session stickiness, and failover support.
+ * 
+ * Server Selection Strategies:
+ * - Load-aware (default): Selects the healthy server with the fewest active connections
+ * - Round-robin (legacy): Cycles through healthy servers in order
  * 
  * Addressing PR #39 review comments:
  * - Comment #3: Throws exception when session server is unavailable (enforces session stickiness)
@@ -583,7 +587,66 @@ public class MultinodeConnectionManager {
             return null;
         }
         
-        // Round-robin selection among healthy servers
+        // Choose selection strategy based on configuration
+        if (healthCheckConfig.isLoadAwareSelectionEnabled()) {
+            return selectByLeastConnections(healthyServers);
+        } else {
+            return selectByRoundRobin(healthyServers);
+        }
+    }
+    
+    /**
+     * Selects the healthy server with the fewest active connections.
+     * This provides automatic load balancing by directing new connections
+     * to the least-loaded server.
+     * 
+     * @param healthyServers List of healthy servers to choose from
+     * @return The server with the lowest connection count
+     */
+    private ServerEndpoint selectByLeastConnections(List<ServerEndpoint> healthyServers) {
+        if (healthyServers.isEmpty()) {
+            return null;
+        }
+        
+        // Get current connection counts per server
+        Map<ServerEndpoint, Integer> connectionCounts = connectionTracker.getCounts();
+        
+        // Find server with minimum connections (defaults to 0 if not in map)
+        ServerEndpoint selected = healthyServers.stream()
+                .min((s1, s2) -> {
+                    int count1 = connectionCounts.getOrDefault(s1, 0);
+                    int count2 = connectionCounts.getOrDefault(s2, 0);
+                    // If counts are equal, use round-robin as tie-breaker for fairness
+                    if (count1 == count2) {
+                        return Integer.compare(
+                            healthyServers.indexOf(s1),
+                            healthyServers.indexOf(s2)
+                        );
+                    }
+                    return Integer.compare(count1, count2);
+                })
+                .orElse(healthyServers.get(0));
+        
+        int selectedCount = connectionCounts.getOrDefault(selected, 0);
+        log.debug("Selected server {} with {} active connections (load-aware)", 
+                selected.getAddress(), selectedCount);
+        
+        return selected;
+    }
+    
+    /**
+     * Selects a healthy server using round-robin strategy.
+     * This is the legacy selection method that cycles through servers
+     * without considering their current load.
+     * 
+     * @param healthyServers List of healthy servers to choose from
+     * @return The next server in round-robin order
+     */
+    private ServerEndpoint selectByRoundRobin(List<ServerEndpoint> healthyServers) {
+        if (healthyServers.isEmpty()) {
+            return null;
+        }
+        
         int index = Math.abs(roundRobinCounter.getAndIncrement()) % healthyServers.size();
         ServerEndpoint selected = healthyServers.get(index);
         

@@ -22,6 +22,7 @@ public class HealthCheckConfig {
     private static final boolean DEFAULT_REDISTRIBUTION_ENABLED = true;
     private static final double DEFAULT_IDLE_REBALANCE_FRACTION = 0.2;
     private static final int DEFAULT_MAX_CLOSE_PER_RECOVERY = 10;
+    private static final boolean DEFAULT_LOAD_AWARE_SELECTION_ENABLED = true;
     
     // Property keys
     private static final String PROP_HEALTH_CHECK_INTERVAL = "ojp.health.check.interval";
@@ -31,6 +32,7 @@ public class HealthCheckConfig {
     private static final String PROP_REDISTRIBUTION_ENABLED = "ojp.redistribution.enabled";
     private static final String PROP_REDISTRIBUTION_IDLE_FRACTION = "ojp.redistribution.idleRebalanceFraction";
     private static final String PROP_REDISTRIBUTION_MAX_CLOSE = "ojp.redistribution.maxClosePerRecovery";
+    private static final String PROP_LOAD_AWARE_SELECTION = "ojp.loadaware.selection.enabled";
     
     private final long healthCheckIntervalMs;
     private final long healthCheckThresholdMs;
@@ -39,11 +41,12 @@ public class HealthCheckConfig {
     private final boolean redistributionEnabled;
     private final double idleRebalanceFraction;
     private final int maxClosePerRecovery;
+    private final boolean loadAwareSelectionEnabled;
     
     private HealthCheckConfig(long healthCheckIntervalMs, long healthCheckThresholdMs,
                             int healthCheckTimeoutMs, String healthCheckQuery,
                             boolean redistributionEnabled, double idleRebalanceFraction,
-                            int maxClosePerRecovery) {
+                            int maxClosePerRecovery, boolean loadAwareSelectionEnabled) {
         this.healthCheckIntervalMs = healthCheckIntervalMs;
         this.healthCheckThresholdMs = healthCheckThresholdMs;
         this.healthCheckTimeoutMs = healthCheckTimeoutMs;
@@ -51,6 +54,7 @@ public class HealthCheckConfig {
         this.redistributionEnabled = redistributionEnabled;
         this.idleRebalanceFraction = idleRebalanceFraction;
         this.maxClosePerRecovery = maxClosePerRecovery;
+        this.loadAwareSelectionEnabled = loadAwareSelectionEnabled;
     }
     
     /**
@@ -72,11 +76,12 @@ public class HealthCheckConfig {
         boolean enabled = getBooleanProperty(props, PROP_REDISTRIBUTION_ENABLED, DEFAULT_REDISTRIBUTION_ENABLED);
         double idleFraction = getDoubleProperty(props, PROP_REDISTRIBUTION_IDLE_FRACTION, DEFAULT_IDLE_REBALANCE_FRACTION);
         int maxClose = getIntProperty(props, PROP_REDISTRIBUTION_MAX_CLOSE, DEFAULT_MAX_CLOSE_PER_RECOVERY);
+        boolean loadAware = getBooleanProperty(props, PROP_LOAD_AWARE_SELECTION, DEFAULT_LOAD_AWARE_SELECTION_ENABLED);
         
-        log.info("Health check configuration loaded: interval={}ms, threshold={}ms, timeout={}ms, enabled={}, idleFraction={}, maxClose={}", 
-                interval, threshold, timeout, enabled, idleFraction, maxClose);
+        log.info("Health check configuration loaded: interval={}ms, threshold={}ms, timeout={}ms, enabled={}, idleFraction={}, maxClose={}, loadAwareSelection={}", 
+                interval, threshold, timeout, enabled, idleFraction, maxClose, loadAware);
         
-        return new HealthCheckConfig(interval, threshold, timeout, query, enabled, idleFraction, maxClose);
+        return new HealthCheckConfig(interval, threshold, timeout, query, enabled, idleFraction, maxClose, loadAware);
     }
     
     /**
@@ -92,7 +97,8 @@ public class HealthCheckConfig {
             DEFAULT_HEALTH_CHECK_QUERY,
             DEFAULT_REDISTRIBUTION_ENABLED,
             DEFAULT_IDLE_REBALANCE_FRACTION,
-            DEFAULT_MAX_CLOSE_PER_RECOVERY
+            DEFAULT_MAX_CLOSE_PER_RECOVERY,
+            DEFAULT_LOAD_AWARE_SELECTION_ENABLED
         );
     }
     
@@ -186,6 +192,10 @@ public class HealthCheckConfig {
         return maxClosePerRecovery;
     }
     
+    public boolean isLoadAwareSelectionEnabled() {
+        return loadAwareSelectionEnabled;
+    }
+    
     @Override
     public String toString() {
         return "HealthCheckConfig{" +
@@ -196,6 +206,7 @@ public class HealthCheckConfig {
                 ", enabled=" + redistributionEnabled +
                 ", idleFraction=" + idleRebalanceFraction +
                 ", maxClose=" + maxClosePerRecovery +
+                ", loadAwareSelection=" + loadAwareSelectionEnabled +
                 '}';
     }
 }
