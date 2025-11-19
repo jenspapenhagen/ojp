@@ -65,7 +65,7 @@ class XASessionInvalidationTest {
         server2.setHealthy(true); // Simulate successful validation
         
         // Manually call the invalidation method to test it directly
-        invokeInvalidateXASessionsForServer(manager, server2);
+        invokeInvalidateSessionsForServer(manager, server2);
         
         // Verify sessions bound to server2 were invalidated
         sessionMap = getSessionToServerMap(manager);
@@ -96,7 +96,7 @@ class XASessionInvalidationTest {
         server1.setHealthy(true);
         
         // Call invalidation
-        invokeInvalidateXASessionsForServer(manager, server1);
+        invokeInvalidateSessionsForServer(manager, server1);
         
         // Verify sessions were removed
         Map<String, ServerEndpoint> sessionMap = getSessionToServerMap(manager);
@@ -125,7 +125,7 @@ class XASessionInvalidationTest {
         server2.setHealthy(true); // Simulate recovery
         
         // Invalidate sessions for server2
-        invokeInvalidateXASessionsForServer(manager, server2);
+        invokeInvalidateSessionsForServer(manager, server2);
         
         // Verify no sessions were invalidated (none were bound to server2)
         Map<String, ServerEndpoint> sessionMapAfter = getSessionToServerMap(manager);
@@ -135,29 +135,26 @@ class XASessionInvalidationTest {
     }
 
     @Test
-    void testOnlyXAModeAffected() {
-        // In XA mode, sessions are tracked in sessionToServerMap
-        // In non-XA mode, sessionToServerMap is empty (sessions not tracked)
+    void testSessionInvalidationAppliesToAllModes() {
+        // Session invalidation now applies to both XA and non-XA modes
+        // This test verifies that invalidation works regardless of XA redistributor
         
-        // This test verifies the check for xaConnectionRedistributor != null
         MultinodeConnectionManager managerWithoutXA = new MultinodeConnectionManager(
             endpoints, 3, 1000, config, connectionTracker);
         // Don't set XA redistributor
         
-        // Bind a session (simulating XA behavior)
+        // Bind a session
         managerWithoutXA.bindSession("session-1", "server1:1059");
         
         Map<String, ServerEndpoint> sessionMap = getSessionToServerMap(managerWithoutXA);
         assertEquals(1, sessionMap.size());
         
-        // Mark server as unhealthy and recover (without XA redistributor)
+        // Invoke session invalidation for server1
         ServerEndpoint server1 = endpoints.get(0);
-        server1.setHealthy(false);
-        server1.setHealthy(true);
+        invokeInvalidateSessionsForServer(managerWithoutXA, server1);
         
-        // Since xaConnectionRedistributor is null, invalidation won't be triggered
-        // Session should still be bound
-        assertEquals(1, sessionMap.size(), "Session should not be invalidated without XA support");
+        // Session invalidation should work regardless of XA mode
+        assertEquals(0, sessionMap.size(), "Session should be invalidated in all modes");
     }
 
     @Test
@@ -180,7 +177,7 @@ class XASessionInvalidationTest {
         
         // Recover server1
         server1.setHealthy(true);
-        invokeInvalidateXASessionsForServer(manager, server1);
+        invokeInvalidateSessionsForServer(manager, server1);
         
         // Verify only server1 sessions were invalidated
         sessionMap = getSessionToServerMap(manager);
@@ -193,7 +190,7 @@ class XASessionInvalidationTest {
         
         // Recover server2
         server2.setHealthy(true);
-        invokeInvalidateXASessionsForServer(manager, server2);
+        invokeInvalidateSessionsForServer(manager, server2);
         
         // Verify server2 sessions were invalidated
         sessionMap = getSessionToServerMap(manager);
@@ -211,11 +208,11 @@ class XASessionInvalidationTest {
         manager.bindSession("session-2", "server1:1059");
         
         // Should log: "Invalidating 2 XA session(s)..."
-        invokeInvalidateXASessionsForServer(manager, server1);
+        invokeInvalidateSessionsForServer(manager, server1);
         
         // Test without sessions
         // Should log: "No sessions bound to recovered server..."
-        invokeInvalidateXASessionsForServer(manager, server1);
+        invokeInvalidateSessionsForServer(manager, server1);
     }
 
     // Helper methods to access private fields and methods for testing
@@ -231,14 +228,14 @@ class XASessionInvalidationTest {
         }
     }
 
-    private void invokeInvalidateXASessionsForServer(MultinodeConnectionManager manager, ServerEndpoint endpoint) {
+    private void invokeInvalidateSessionsForServer(MultinodeConnectionManager manager, ServerEndpoint endpoint) {
         try {
             java.lang.reflect.Method method = MultinodeConnectionManager.class.getDeclaredMethod(
-                "invalidateXASessionsForServer", ServerEndpoint.class);
+                "invalidateSessionsForServer", ServerEndpoint.class);
             method.setAccessible(true);
             method.invoke(manager, endpoint);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to invoke invalidateXASessionsForServer", e);
+            throw new RuntimeException("Failed to invoke invalidateSessionsForServer", e);
         }
     }
 }
