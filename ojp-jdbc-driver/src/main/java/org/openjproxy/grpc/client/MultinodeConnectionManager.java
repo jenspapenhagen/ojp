@@ -415,18 +415,20 @@ public class MultinodeConnectionManager {
             selectedServer.setHealthy(true);
             selectedServer.setLastFailureTime(0);
             
-            // Bind session to this server
+            // Bind session to the ACTUAL server where it was created
+            // Important: Do NOT use targetServer from response - that's for coordinator routing
+            // The session actually exists on the server we connected to (selectedServer)
             if (sessionInfo.getSessionUUID() != null && !sessionInfo.getSessionUUID().isEmpty()) {
+                String actualServerAddress = selectedServer.getHost() + ":" + selectedServer.getPort();
+                sessionToServerMap.put(sessionInfo.getSessionUUID(), selectedServer);
+                log.info("=== XA session {} bound to actual connected server {} - Map size now: {} ===", 
+                        sessionInfo.getSessionUUID(), actualServerAddress, sessionToServerMap.size());
+                
+                // Log targetServer for debugging if it differs
                 String targetServer = sessionInfo.getTargetServer();
-                if (targetServer != null && !targetServer.isEmpty()) {
-                    bindSession(sessionInfo.getSessionUUID(), targetServer);
-                    log.info("=== XA session {} bound to target server {} (from response) ===", 
-                            sessionInfo.getSessionUUID(), targetServer);
-                } else {
-                    String serverAddress = selectedServer.getHost() + ":" + selectedServer.getPort();
-                    sessionToServerMap.put(sessionInfo.getSessionUUID(), selectedServer);
-                    log.info("=== XA session {} bound to server {} (fallback) - Map size now: {} ===", 
-                            sessionInfo.getSessionUUID(), serverAddress, sessionToServerMap.size());
+                if (targetServer != null && !targetServer.isEmpty() && !targetServer.equals(actualServerAddress)) {
+                    log.debug("Note: SessionInfo.targetServer={} differs from actual connected server {}. " +
+                            "Using actual server for session binding.", targetServer, actualServerAddress);
                 }
             }
             
