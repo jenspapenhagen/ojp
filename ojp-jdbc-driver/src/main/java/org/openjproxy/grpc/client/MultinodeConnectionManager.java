@@ -214,9 +214,11 @@ public class MultinodeConnectionManager {
                 if (validateServer(endpoint)) {
                     log.info("Server {} has recovered", endpoint.getAddress());
                     
-                    // Invalidate sessions bound to recovered server
+                    // Invalidate XA sessions bound to recovered server
                     // This prevents "Connection not found" errors when server loses session state
-                    invalidateSessionsForServer(endpoint);
+                    if (xaConnectionRedistributor != null) {
+                        invalidateXASessionsForServer(endpoint);
+                    }
                     
                     endpoint.markHealthy();
                     recoveredServers.add(endpoint);
@@ -248,7 +250,7 @@ public class MultinodeConnectionManager {
     }
     
     /**
-     * Invalidates all sessions bound to a recovered server.
+     * Invalidates all XA sessions bound to a recovered server.
      * 
      * When a server is killed and resurrected, it loses all session state (sessions are stored 
      * in-memory). However, client-side session bindings persist. This causes "Connection not found" 
@@ -259,11 +261,11 @@ public class MultinodeConnectionManager {
      * 2. Marks actual Connection objects as invalid so connection pools will discard them
      * 3. Forces connection pools to create new connections with fresh sessions
      * 
-     * Applies to both XA and non-XA modes.
+     * Only affects XA mode - non-XA mode doesn't maintain session bindings in sessionToServerMap.
      * 
      * @param endpoint The server endpoint that has recovered
      */
-    private void invalidateSessionsForServer(ServerEndpoint endpoint) {
+    private void invalidateXASessionsForServer(ServerEndpoint endpoint) {
         // Step 1: Invalidate session bindings in sessionToServerMap
         List<String> sessionsToInvalidate = sessionToServerMap.entrySet().stream()
                 .filter(entry -> entry.getValue().equals(endpoint))
@@ -271,12 +273,12 @@ public class MultinodeConnectionManager {
                 .collect(Collectors.toList());
         
         if (!sessionsToInvalidate.isEmpty()) {
-            log.info("Invalidating {} session binding(s) for recovered server {}", 
+            log.info("Invalidating {} XA session binding(s) for recovered server {}", 
                     sessionsToInvalidate.size(), endpoint.getAddress());
             
             for (String sessionUUID : sessionsToInvalidate) {
                 sessionToServerMap.remove(sessionUUID);
-                log.debug("Invalidated session binding {} for recovered server {}", 
+                log.debug("Invalidated XA session binding {} for recovered server {}", 
                         sessionUUID, endpoint.getAddress());
             }
         }
@@ -413,21 +415,34 @@ public class MultinodeConnectionManager {
             selectedServer.setHealthy(true);
             selectedServer.setLastFailureTime(0);
             
-            // Bind session to the ACTUAL server where it was created
-            // Important: Do NOT use targetServer from response - that's for coordinator routing
-            // The session actually exists on the server we connected to (selectedServer)
+            // Bind session to this server
             if (sessionInfo.getSessionUUID() != null && !sessionInfo.getSessionUUID().isEmpty()) {
-                String actualServerAddress = selectedServer.getHost() + ":" + selectedServer.getPort();
-                sessionToServerMap.put(sessionInfo.getSessionUUID(), selectedServer);
-                log.info("=== XA session {} bound to actual connected server {} - Map size now: {} ===", 
-                        sessionInfo.getSessionUUID(), actualServerAddress, sessionToServerMap.size());
-                
-                // Log targetServer for debugging if it differs
                 String targetServer = sessionInfo.getTargetServer();
-                if (targetServer != null && !targetServer.isEmpty() && !targetServer.equals(actualServerAddress)) {
-                    log.debug("Note: SessionInfo.targetServer={} differs from actual connected server {}. " +
-                            "Using actual server for session binding.", targetServer, actualServerAddress);
+                String connectedServerAddress = selectedServer.getHost() + ":" + selectedServer.getPort();
+                
+                log.info("DIAGNOSTIC XA: SessionUUID={}, ConnectedToServer={}, TargetServerFromResponse={}", 
+                        sessionInfo.getSessionUUID(), connectedServerAddress, 
+                        targetServer != null ? targetServer : "NULL");
+                
+                if (targetServer != null && !targetServer.isEmpty()) {
+                    bindSession(sessionInfo.getSessionUUID(), targetServer);
+                    if (!targetServer.equals(connectedServerAddress)) {
+                        log.warn("DIAGNOSTIC XA: Session {} bound to targetServer {} which DIFFERS from connected server {}. " +
+                                "If targetServer is wrong, queries may route to incorrect server causing 'Connection not found' errors.", 
+                                sessionInfo.getSessionUUID(), targetServer, connectedServerAddress);
+                    } else {
+                        log.info("=== XA session {} bound to target server {} (matches connected server) ===", 
+                                sessionInfo.getSessionUUID(), targetServer);
+                    }
+                } else {
+                    sessionToServerMap.put(sessionInfo.getSessionUUID(), selectedServer);
+                    log.info("=== XA session {} bound to server {} (fallback, no targetServer) - Map size now: {} ===", 
+                            sessionInfo.getSessionUUID(), connectedServerAddress, sessionToServerMap.size());
                 }
+            } else {
+                log.warn("DIAGNOSTIC XA: No sessionUUID from server response! SessionUUID: '{}'. " +
+                        "This will cause NULL sessionKey in affinityServer, leading to round-robin routing.", 
+                        sessionInfo.getSessionUUID());
             }
             
             // Track the server for this connection hash
@@ -505,23 +520,37 @@ public class MultinodeConnectionManager {
                 server.setHealthy(true);
                 server.setLastFailureTime(0);
                 
-                // Bind session to the ACTUAL server where it was created
-                // Important: Do NOT use targetServer from response - that's for coordinator routing
-                // The session actually exists on the server we connected to
+                // NEW: Use targetServer-based binding if available
+                // Bind session using targetServer from response if both sessionUUID and targetServer are present
                 if (sessionInfo.getSessionUUID() != null && !sessionInfo.getSessionUUID().isEmpty()) {
-                    String actualServerAddress = server.getHost() + ":" + server.getPort();
-                    sessionToServerMap.put(sessionInfo.getSessionUUID(), server);
-                    log.info("Session {} bound to actual connected server {} (non-XA)", 
-                            sessionInfo.getSessionUUID(), actualServerAddress);
-                    
-                    // Log targetServer for debugging if it differs
                     String targetServer = sessionInfo.getTargetServer();
-                    if (targetServer != null && !targetServer.isEmpty() && !targetServer.equals(actualServerAddress)) {
-                        log.debug("Note: SessionInfo.targetServer={} differs from actual connected server {}. " +
-                                "Using actual server for session binding.", targetServer, actualServerAddress);
+                    String connectedServerAddress = server.getHost() + ":" + server.getPort();
+                    
+                    log.info("DIAGNOSTIC NON-XA: SessionUUID={}, ConnectedToServer={}, TargetServerFromResponse={}", 
+                            sessionInfo.getSessionUUID(), connectedServerAddress, 
+                            targetServer != null ? targetServer : "NULL");
+                    
+                    if (targetServer != null && !targetServer.isEmpty()) {
+                        // Use the server-returned targetServer as authoritative for binding
+                        bindSession(sessionInfo.getSessionUUID(), targetServer);
+                        if (!targetServer.equals(connectedServerAddress)) {
+                            log.warn("DIAGNOSTIC NON-XA: Session {} bound to targetServer {} which DIFFERS from connected server {}. " +
+                                    "If targetServer is wrong, queries may route to incorrect server causing 'Connection not found' errors.", 
+                                    sessionInfo.getSessionUUID(), targetServer, connectedServerAddress);
+                        } else {
+                            log.info("Session {} bound to target server {} (matches connected server)", 
+                                    sessionInfo.getSessionUUID(), targetServer);
+                        }
+                    } else {
+                        // Fallback: bind using current server endpoint if targetServer not provided
+                        sessionToServerMap.put(sessionInfo.getSessionUUID(), server);
+                        log.info("Session {} bound to server {} (fallback, no targetServer in response)", 
+                                sessionInfo.getSessionUUID(), connectedServerAddress);
                     }
                 } else {
-                    log.info("No sessionUUID from server {}, session not bound", server.getAddress());
+                    log.warn("DIAGNOSTIC NON-XA: No sessionUUID from server {}! SessionUUID: '{}'. " +
+                            "This will cause NULL sessionKey in affinityServer, leading to round-robin routing.", 
+                            server.getAddress(), sessionInfo.getSessionUUID());
                 }
                 
                 log.info("Successfully connected to server {}", server.getAddress());
@@ -579,7 +608,12 @@ public class MultinodeConnectionManager {
     public ServerEndpoint affinityServer(String sessionKey) throws SQLException {
         if (sessionKey == null || sessionKey.isEmpty()) {
             // No session identifier, use round-robin
-            log.info("No session key, using round-robin selection");
+            log.warn("DIAGNOSTIC: affinityServer called with NULL or EMPTY sessionKey - routing via round-robin. " +
+                    "This may cause 'Connection not found' errors if queries reach wrong server. " +
+                    "SessionKey value: '{}', isEmpty: {}, isNull: {}", 
+                    sessionKey, 
+                    sessionKey != null && sessionKey.isEmpty(),
+                    sessionKey == null);
             return selectHealthyServer();
         }
         
@@ -824,9 +858,11 @@ public class MultinodeConnectionManager {
                     log.debug("Attempting to recover server {}", endpoint.getAddress());
                     createChannelAndStub(endpoint);
                     
-                    // Invalidate sessions bound to recovered server
+                    // Invalidate XA sessions bound to recovered server
                     // This prevents "Connection not found" errors when server loses session state
-                    invalidateSessionsForServer(endpoint);
+                    if (xaConnectionRedistributor != null) {
+                        invalidateXASessionsForServer(endpoint);
+                    }
                     
                     endpoint.setHealthy(true);
                     endpoint.setLastFailureTime(0);
