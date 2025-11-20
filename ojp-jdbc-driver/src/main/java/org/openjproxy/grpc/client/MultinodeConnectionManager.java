@@ -507,10 +507,16 @@ public class MultinodeConnectionManager {
             selectedServer.setHealthy(true);
             selectedServer.setLastFailureTime(0);
             
+            // Log connection creation details
+            String connectedServerAddress = selectedServer.getHost() + ":" + selectedServer.getPort();
+            log.info("CONNECTION CREATED: XA connection to endpoint={}, targetServer={}, sessionUUID={}", 
+                    connectedServerAddress, 
+                    sessionInfo.getTargetServer() != null ? sessionInfo.getTargetServer() : "NULL",
+                    sessionInfo.getSessionUUID());
+            
             // Bind session to this server - but only for NEW sessions to avoid re-binding invalidated sessions
             if (sessionInfo.getSessionUUID() != null && !sessionInfo.getSessionUUID().isEmpty()) {
                 String targetServer = sessionInfo.getTargetServer();
-                String connectedServerAddress = selectedServer.getHost() + ":" + selectedServer.getPort();
                 
                 log.info("DIAGNOSTIC XA: SessionUUID={}, ConnectedToServer={}, TargetServerFromResponse={}", 
                         sessionInfo.getSessionUUID(), connectedServerAddress, 
@@ -608,6 +614,11 @@ public class MultinodeConnectionManager {
                 
                 log.info("Connecting to server {}", server.getAddress());
                 SessionInfo sessionInfo = channelAndStub.blockingStub.connect(connectionDetails);
+                
+                // Log connection creation details
+                log.info("NON-XA Connection created: TargetServer={}, ConnectedEndpoint={}", 
+                        sessionInfo.getTargetServer() != null ? sessionInfo.getTargetServer() : "NULL",
+                        server.getHost() + ":" + server.getPort());
                 
                 // Mark server as healthy
                 server.setHealthy(true);
