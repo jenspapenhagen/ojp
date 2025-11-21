@@ -910,7 +910,15 @@ public class MultinodeConnectionManager {
         return selected;
     }
     
-    private void handleServerFailure(ServerEndpoint endpoint, Exception exception) {
+    /**
+     * Handles server failure by marking it unhealthy and invalidating sessions/connections in XA mode.
+     * This method can be called from both internal connection attempts and external callers (e.g., MultinodeStatementService)
+     * when they detect connection-level failures.
+     * 
+     * @param endpoint The server endpoint that failed
+     * @param exception The exception that caused the failure
+     */
+    public void handleServerFailure(ServerEndpoint endpoint, Exception exception) {
         // Only mark server unhealthy for connection-level failures
         // Database-level errors (e.g., table not found, syntax errors) should not affect server health
         boolean shouldMarkUnhealthy = isConnectionLevelError(exception);
