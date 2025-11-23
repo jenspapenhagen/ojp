@@ -208,7 +208,7 @@ Database-specific alternatives:
 - `5000ms` (default): Balanced - recovery detected within 5-10 seconds
 - `30000ms`: Lower overhead, but recovery takes 30-60 seconds to detect
 
-**Note:** Total recovery time = detection time (interval) + threshold time before retry. With defaults (5s + 5s), expect 10-15 seconds total.
+**Note:** Total time from server recovery to redistribution = interval (detection) + threshold (retry wait) + processing time. With defaults (5s + 5s + overhead), typically 10-12 seconds.
 
 **Impact on system:**
 - Lower values: Faster recovery, slightly higher CPU/network usage
@@ -230,8 +230,9 @@ Database-specific alternatives:
 - `60000ms`: After a server fails, wait 60s before checking again (good for planned maintenance)
 
 **Relationship with interval:**
-- Should be ≥ interval to avoid checking failed servers on every health check cycle
-- If threshold < interval, may waste resources checking servers known to be down
+- Should be ≥ interval to avoid re-checking failed servers before the next health check cycle
+- If threshold < interval, server becomes eligible for retry before the next health check runs
+- Best practice: Set threshold = interval for consistent behavior
 
 ### ojp.health.check.timeout
 
@@ -476,7 +477,7 @@ Session invalidation only affects XA mode. In non-XA mode, applications should i
 2. **Plan for downtime**
    - Health checks will detect planned restarts
    - Redistribution automatic in XA mode (no manual intervention)
-   - Expect 5-15 seconds delay for rebalancing (based on default 5s interval + 5s threshold)
+   - Expect 10-12 seconds delay for rebalancing (interval 5s + threshold 5s + processing)
    - Non-XA mode: Connection pools will naturally redistribute
 
 3. **Test recovery scenarios**
