@@ -15,8 +15,8 @@ public class HealthCheckConfig {
     private static final Logger log = LoggerFactory.getLogger(HealthCheckConfig.class);
     
     // Default values
-    private static final long DEFAULT_HEALTH_CHECK_INTERVAL_MS = 5000L; // 30 seconds
-    private static final long DEFAULT_HEALTH_CHECK_THRESHOLD_MS = 5000L; // 30 seconds
+    private static final long DEFAULT_HEALTH_CHECK_INTERVAL_MS = 5000L; // 5 seconds
+    private static final long DEFAULT_HEALTH_CHECK_THRESHOLD_MS = 5000L; // 5 seconds
     private static final int DEFAULT_HEALTH_CHECK_TIMEOUT_MS = 5000; // 5 seconds
     private static final String DEFAULT_HEALTH_CHECK_QUERY = "SELECT 1";
     private static final boolean DEFAULT_REDISTRIBUTION_ENABLED = true;
