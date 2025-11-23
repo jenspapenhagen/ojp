@@ -12,20 +12,12 @@ In multinode XA deployments, when a server fails:
 3. When the failed server recovers, it remains idle (receives no connections)
 4. Load imbalance becomes permanent until application restart
 
-**Additional Issue - Session State Loss:**
-
-When a server is killed and resurrected:
-1. Server loses all session state (sessions stored in-memory)
-2. Client-side session bindings persist
-3. Queries sent with old session UUIDs fail with "Connection not found" error
-4. Applications experience failures until connections are manually recreated
 
 **Example:**
 ```
 Initial:  Server1=10, Server2=10, Server3=10 connections
 Failure:  Server2=0 (failed), Server1=15, Server3=15 (redistributed)
 Recovery: Server2=0 (healthy but unused), Server1=15, Server3=15 (still imbalanced)
-          + Old sessions bound to Server2 fail with "Connection not found"
 ```
 
 ## Solution
