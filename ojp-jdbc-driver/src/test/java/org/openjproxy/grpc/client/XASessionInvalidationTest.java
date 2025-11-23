@@ -231,7 +231,7 @@ class XASessionInvalidationTest {
     private void invokeInvalidateSessionsForServer(MultinodeConnectionManager manager, ServerEndpoint endpoint) {
         try {
             java.lang.reflect.Method method = MultinodeConnectionManager.class.getDeclaredMethod(
-                "invalidateSessionsForServer", ServerEndpoint.class);
+                "invalidateSessionsAndConnectionsForFailedServer", ServerEndpoint.class);
             method.setAccessible(true);
             method.invoke(manager, endpoint);
         } catch (Exception e) {
