@@ -283,8 +283,6 @@ ojp.health.check.threshold=10000      # Match interval
 ojp.health.check.timeout=15000        # Account for network latency
 ```
 
-### Database-Specific Health Queries
-
 ## Performance
 
 ### Overhead
@@ -476,7 +474,7 @@ Session invalidation only affects XA mode. In non-XA mode, applications should i
 2. **Plan for downtime**
    - Health checks will detect planned restarts
    - Redistribution automatic in XA mode (no manual intervention)
-   - Expect 5-10 seconds delay for rebalancing (based on default 5s interval)
+   - Expect 5-15 seconds delay for rebalancing (based on default 5s interval + 5s threshold)
    - Non-XA mode: Connection pools will naturally redistribute
 
 3. **Test recovery scenarios**
