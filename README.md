@@ -11,6 +11,9 @@
 
 A JDBC Driver and Layer 7 Proxy Server to decouple applications from relational database connection management.
 
+_"The only open-source JDBC Type 3 driver globally, this project introduces a transparent Quality-of-Service layer that decouples application performance from database bottlenecks. It's a must-try for any team struggling with data access contention, offering easy-to-implement back-pressure and pooling management." (Bruno Bossola - Java Champion and CTO@Meterian.io)_  
+
+
 [![Discord](https://img.shields.io/discord/1385189361565433927?label=Discord&logo=discord)](https://discord.gg/J5DdHpaUzu)
 
 
@@ -119,8 +122,13 @@ Welcome to OJP! We appreciate your interest in contributing. This guide will hel
 
 ## Partners
 <a href=https://www.linkedin.com/in/devsjava/>
-<img width="150px" height="150px" src="documents/images/comunidade_brasil_jug.jpeg" alt="Comunidade Brasil JUG" />
+<img width="120px" height="120px" src="documents/images/comunidade_brasil_jug.jpeg" alt="Comunidade Brasil JUG" />
 </a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 <a href=https://github.com/switcherapi>
-<img width="180px" src="documents/images/switcherapi_grey.png" alt="Comunidade Brasil JUG" />
+<img width="180px" src="https://github.com/switcherapi/switcherapi-assets/blob/master/logo/switcherapi_grey.png?raw=true" alt="Comunidade Brasil JUG" />
+</a>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+<a href=https://www.meterian.io/>
+<img width="180px" src="https://www.meterian.io/images/brand/meterian_logo_blue.svg" alt="Materian" />
 </a>
