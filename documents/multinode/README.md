@@ -7,7 +7,7 @@ Open J Proxy supports multinode deployment for high availability, load distribut
 ## Features
 
 - **Multinode URL Support**: Connect to multiple OJP servers with a single JDBC URL
-- **Round-Robin Load Balancing**: Distributes requests across healthy servers
+- **Load-Aware Server Selection**: Automatically directs new connections to the least-loaded server
 - **Session Stickiness**: Ensures session-bound operations stay on the same server
 - **Automatic Failover**: Seamlessly handles server failures with retry logic
 - **Server Health Monitoring**: Tracks server health and attempts recovery
@@ -63,6 +63,11 @@ ojp.connection.pool.connectionTimeout=15000
 ojp.multinode.retryAttempts=-1        # -1 for infinite retry, or positive number
 ojp.multinode.retryDelayMs=5000       # milliseconds between retry attempts
 
+# Load-aware server selection
+ojp.loadaware.selection.enabled=true  # Enable load-aware selection (default: true)
+                                       # When enabled, new connections go to the server with fewest active connections
+                                       # When disabled, uses legacy round-robin distribution
+
 # XA (distributed transaction) configuration
 ojp.xa.maxTransactions=50              # Maximum concurrent XA transactions (divided among servers)
 ojp.xa.startTimeout=30000              # XA transaction start timeout in milliseconds
@@ -90,9 +95,9 @@ This automatic coordination prevents exceeding database connection or transactio
 ### Connection Establishment
 
 1. **URL Parsing**: The JDBC driver parses the comma-separated list of server addresses
-2. **Initial Connection**: The driver attempts to connect to servers using round-robin selection
+2. **Initial Connection**: The driver attempts to connect to servers using load-aware selection
 3. **Health Tracking**: Each server's health status is monitored continuously
-4. **Load Balancing**: New connections are distributed across healthy servers
+4. **Load Balancing**: New connections are distributed across healthy servers based on their current load
 
 ### Session Management
 
@@ -102,9 +107,29 @@ This automatic coordination prevents exceeding database connection or transactio
 
 ### Request Routing
 
-- **Non-Session Requests**: Routed using round-robin load balancing
+- **Non-Session Requests**: Routed using load-aware selection (default) or round-robin if disabled
 - **Session-Bound Requests**: Always routed to the specific server associated with the session
 - **Transaction Requests**: Always routed to the session's server to maintain ACID properties
+
+### Load-Aware Server Selection
+
+By default, OJP uses load-aware server selection to automatically balance connections across healthy servers:
+
+1. **Connection Tracking**: The client tracks the number of active connections to each server
+2. **Least-Loaded Selection**: New connections are directed to the server with the fewest active connections
+3. **Dynamic Balancing**: As connections are opened and closed, the load automatically balances across servers
+4. **Tie-Breaking**: When servers have equal load, round-robin is used as a tie-breaker for fairness
+
+**Benefits:**
+- Prevents overloading individual servers
+- Automatically adapts to varying workloads
+- Improves response times during uneven traffic patterns
+- Better resource utilization across the cluster
+
+**Configuration:**
+- Enabled by default (`ojp.loadaware.selection.enabled=true`)
+- Can be disabled to use legacy round-robin distribution
+- No code changes required - works transparently with existing applications
 
 ### Failure Handling
 
@@ -254,7 +279,7 @@ No code changes are required - simply update the JDBC URL to include multiple se
 ## Future Enhancements
 
 1. **Dynamic Server Discovery**: Automatic discovery of new servers in the cluster
-2. **Advanced Load Balancing**: Support for weighted round-robin and least-connections strategies
+2. **Advanced Load Balancing**: Support for weighted round-robin and response-time-based strategies
 3. **Health Check Endpoints**: Dedicated health check endpoints for monitoring systems
 4. **Configuration Synchronization**: Automatic synchronization of configuration changes across servers
 

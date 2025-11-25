@@ -185,7 +185,7 @@ public class ConnectionTracker {
      * 
      * @param connectionUUID The UUID of the connection to mark invalid
      */
-    public void markConnectionInvalid(String connectionUUID) {
+    public void markConnectionInvalid(String connectionUUID) throws SQLException {
         // Find the connection by UUID (using identity hash code)
         Connection toMark = null;
         for (Connection conn : connectionToServerMap.keySet()) {
@@ -199,6 +199,7 @@ public class ConnectionTracker {
             // Cast to OJP Connection to access markForceInvalid method
             if (toMark instanceof org.openjproxy.jdbc.Connection) {
                 ((org.openjproxy.jdbc.Connection) toMark).markForceInvalid();
+                toMark.close();
                 log.debug("Marked connection {} as invalid for pool replacement", connectionUUID);
             } else {
                 log.warn("Connection {} is not an OJP Connection, cannot mark invalid", connectionUUID);

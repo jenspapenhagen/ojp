@@ -2,13 +2,14 @@ package org.openjproxy.grpc.client;
 
 import com.openjproxy.grpc.ConnectionDetails;
 import com.openjproxy.grpc.SessionInfo;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
 
 /**
- * Validates server health by attempting a direct connection and executing a health check query.
+ * Validates server health by attempting a direct connection.
  * Used to detect when a failed server has recovered.
  */
 public class HealthCheckValidator {
@@ -24,7 +25,7 @@ public class HealthCheckValidator {
     }
     
     /**
-     * Validates if a server is healthy by attempting a connection and executing the health check query.
+     * Validates if a server is healthy by attempting a connection.
      * 
      * @param endpoint The server endpoint to validate
      * @param connectionDetails Connection details to use for validation
@@ -50,13 +51,16 @@ public class HealthCheckValidator {
             // Try to establish a test connection
             log.debug("Attempting test connection to {}", endpoint.getAddress());
             SessionInfo sessionInfo = channelAndStub.blockingStub.connect(connectionDetails);
-            
+            if (StringUtils.isBlank(connectionDetails.getUrl()) && StringUtils.isBlank(connectionDetails.getUser()) &&
+            StringUtils.isBlank(connectionDetails.getPassword())) {
+                log.debug("Using default connection details for health check to {}", endpoint.getAddress());
+                return true;
+            }
+
             if (sessionInfo != null && sessionInfo.getSessionUUID() != null && 
                 !sessionInfo.getSessionUUID().isEmpty()) {
                 
-                // Connection successful - now try the health check query
-                // Note: In a real implementation, we would execute the health check query here
-                // For now, we consider a successful connection as a health check pass
+                // Connection successful
                 log.info("Server {} health check PASSED", endpoint.getAddress());
                 
                 // Close the test session

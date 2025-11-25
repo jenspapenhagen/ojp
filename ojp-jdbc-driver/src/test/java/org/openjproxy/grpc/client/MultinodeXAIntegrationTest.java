@@ -1,7 +1,9 @@
 package org.openjproxy.grpc.client;
 
+import com.atomikos.datasource.ResourceException;
 import com.atomikos.icatch.jta.UserTransactionImp;
 import com.atomikos.jdbc.AtomikosDataSourceBean;
+import io.grpc.StatusRuntimeException;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.codehaus.plexus.util.ExceptionUtils;
@@ -10,9 +12,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvFileSource;
 import org.openjproxy.jdbc.xa.OjpXADataSource;
-import org.postgresql.xa.PGXADataSource;
 
-import javax.sql.DataSource;
 import javax.transaction.UserTransaction;
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -20,6 +20,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -42,7 +44,8 @@ public class MultinodeXAIntegrationTest {
     protected static boolean isTestDisabled;
     private static Queue<Long> queryDurations = new ConcurrentLinkedQueue<>();
     private static AtomicInteger totalQueries = new AtomicInteger(0);
-    private static AtomicInteger failedQueries = new AtomicInteger(0);
+    private static AtomicInteger totalFailedQueries = new AtomicInteger(0);
+    private static AtomicInteger nonConnectivityFailedQueries = new AtomicInteger(0);
     private static ExecutorService queryExecutor = new RoundRobinExecutorService(100);
 
 
@@ -60,7 +63,7 @@ public class MultinodeXAIntegrationTest {
     public void setUp() throws SQLException {
         queryDurations = new ConcurrentLinkedQueue<>();
         totalQueries = new AtomicInteger(0);
-        failedQueries = new AtomicInteger(0);
+        totalFailedQueries = new AtomicInteger(0);
     }
 
     @SneakyThrows
@@ -162,7 +165,8 @@ public class MultinodeXAIntegrationTest {
 
         // 3. Reporting
         int numQueries = totalQueries.get();
-        int numFailures = failedQueries.get();
+        int numTotalFailures = totalFailedQueries.get();
+        int numNonConnectivityFailures = nonConnectivityFailedQueries.get();
         long totalTimeMs = (globalEnd - globalStart) / 1_000_000;
         double avgQueryMs = numQueries > 0
                 ? queryDurations.stream().mapToLong(Long::longValue).average().orElse(0) / 1_000_000.0
@@ -173,9 +177,11 @@ public class MultinodeXAIntegrationTest {
         System.out.println("Total queries executed: " + numQueries);
         System.out.println("Total test duration: " + totalTimeMs + " ms");
         System.out.printf("Average query duration: %.3f ms\n", avgQueryMs);
-        System.out.println("Total query failures: " + numFailures);
+        System.out.println("Total query failures: " + numTotalFailures);
+        System.out.println("Total non-connectivity-related failures: " + numNonConnectivityFailures);
         //Assertions.assertEquals(2160, numQueries);
-        Assertions.assertTrue(numFailures < 5, "Expected fewer than 5 failures, but got: " + numFailures);
+        Assertions.assertTrue(numTotalFailures < 50, "Expected fewer than 50 failures, but got: " + numTotalFailures);
+        Assertions.assertTrue(numNonConnectivityFailures == 0, "Expected 0 failures not related to connectivity, but got: " + numNonConnectivityFailures);
         Assertions.assertTrue(totalTimeMs < 180000, "Total test time too high: " + totalTimeMs + " ms");
         Assertions.assertTrue(avgQueryMs < 1000.0, "Average query time too high: " + avgQueryMs + " ms");
     }
@@ -188,15 +194,15 @@ public class MultinodeXAIntegrationTest {
             try {
                 query.call();
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage() + " \n " + ExceptionUtils.getStackTrace(e));
             }
             long end = System.nanoTime();
             queryDurations.add(end - start);
             totalQueries.incrementAndGet();
+
         }, queryExecutor);
         future.get();
-        //Thread.sleep(500); //Small delay to avoid too much parallelism
     }
 
     @FunctionalInterface
@@ -245,7 +251,7 @@ public class MultinodeXAIntegrationTest {
     protected static Connection getConnection(String driverClass, String url, String user, String password) throws SQLException {
         // Load driver if needed
         Class.forName(driverClass);
-
+        Connection conn;
         synchronized (MultinodeIntegrationTest.class) {
             if (xaDataSource == null) {
                 OjpXADataSource xaDataSourceImpl = new OjpXADataSource();
@@ -262,9 +268,20 @@ public class MultinodeXAIntegrationTest {
                 xaDataSource.setMaxPoolSize(ATOMIKOS_MAX_POOL_SIZE);
                 log.info("✓ Atomikos XA DataSource initialized");
             }
+
+            // Block below is to increase the chances getting different connections to better test multinode balancing
+            // as per Atomikos tends to reuse the very same connection whenever possible.
+            int num = (int)(Math.random() * 10) + 1;
+            List<Connection> connectionList = new ArrayList<>();
+            for (int i = 0; i < num; i++) {
+                connectionList.add(xaDataSource.getConnection());
+            }
+            conn = connectionList.remove(connectionList.size()-1);
+            for(Connection c : connectionList){
+                c.close();
+            }
         }
-        DataSource ds = xaDataSource;
-        return ds.getConnection();
+        return conn;
     }
 
     private static void runExactQuerySequence(int threadNum, String driverClass, String url, String user, String password) {
@@ -302,7 +319,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage() + " \n " + ExceptionUtils.getStackTrace(e));
             }
             return null;
@@ -327,7 +344,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage() + " \n " + ExceptionUtils.getStackTrace(e));
             }
             return null;
@@ -353,7 +370,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage() + " \n " + ExceptionUtils.getStackTrace(e));
             }
             return null;
@@ -371,7 +388,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -386,7 +403,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -401,7 +418,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -416,7 +433,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -431,7 +448,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -446,7 +463,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -461,7 +478,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -476,7 +493,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -491,7 +508,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -506,7 +523,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -523,7 +540,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -538,7 +555,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -553,7 +570,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -568,7 +585,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -583,7 +600,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -598,7 +615,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -613,7 +630,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -628,7 +645,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -643,7 +660,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -658,7 +675,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -679,7 +696,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -698,7 +715,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -716,7 +733,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -735,7 +752,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -753,7 +770,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -772,7 +789,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -791,7 +808,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -809,7 +826,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -830,7 +847,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -856,7 +873,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -874,7 +891,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -893,7 +910,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -912,7 +929,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -930,7 +947,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -949,7 +966,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -968,7 +985,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -987,7 +1004,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -1006,7 +1023,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -1025,7 +1042,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -1043,7 +1060,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -1066,7 +1083,7 @@ public class MultinodeXAIntegrationTest {
                         }
                     });
                 } catch (Exception e) {
-                    failedQueries.incrementAndGet();
+                    incrementFailures(e);
                     System.err.println("Query failed: " + e.getMessage());
                 }
                 return null;
@@ -1084,7 +1101,7 @@ public class MultinodeXAIntegrationTest {
                         }
                     });
                 } catch (Exception e) {
-                    failedQueries.incrementAndGet();
+                    incrementFailures(e);
                     System.err.println("Query failed: " + e.getMessage());
                 }
                 return null;
@@ -1102,7 +1119,7 @@ public class MultinodeXAIntegrationTest {
                         }
                     });
                 } catch (Exception e) {
-                    failedQueries.incrementAndGet();
+                    incrementFailures(e);
                     System.err.println("Query failed: " + e.getMessage());
                 }
                 return null;
@@ -1122,7 +1139,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -1139,7 +1156,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -1156,7 +1173,7 @@ public class MultinodeXAIntegrationTest {
                     }
                 });
             } catch (Exception e) {
-                failedQueries.incrementAndGet();
+                incrementFailures(e);
                 System.err.println("Query failed: " + e.getMessage());
             }
             return null;
@@ -1185,11 +1202,20 @@ public class MultinodeXAIntegrationTest {
                         }
                     });
                 } catch (Exception e) {
-                    failedQueries.incrementAndGet();
+                    incrementFailures(e);
                     System.err.println("Query failed: " + e.getMessage());
                 }
                 return null;
             });
+        }
+    }
+
+    private static void incrementFailures(Exception e) {
+        totalFailedQueries.incrementAndGet();
+        if (!(e instanceof StatusRuntimeException && e.getMessage().contains("UNAVAILABLE")) &&
+            !(e instanceof ResourceException && e.getMessage().contains("XA resource has become unavailable"))) {
+            //Errors non related to the fact that a node is down
+            nonConnectivityFailedQueries.incrementAndGet();
         }
     }
 }

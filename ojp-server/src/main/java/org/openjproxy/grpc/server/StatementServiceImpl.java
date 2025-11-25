@@ -174,8 +174,17 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
 
     @Override
     public void connect(ConnectionDetails connectionDetails, StreamObserver<SessionInfo> responseObserver) {
+        if (StringUtils.isBlank(connectionDetails.getUrl()) &&
+            StringUtils.isBlank(connectionDetails.getUser()) &&
+            StringUtils.isBlank(connectionDetails.getPassword())) {
+            // Empty connection details - return empty session info - used for initial health checks only
+            responseObserver.onNext(SessionInfo.newBuilder().build());
+            responseObserver.onCompleted();
+            return;
+        }
+
         String connHash = ConnectionHashGenerator.hashConnectionDetails(connectionDetails);
-        
+
         // Extract maxXaTransactions from properties
         int maxXaTransactions = org.openjproxy.constants.CommonConstants.DEFAULT_MAX_XA_TRANSACTIONS;
         long xaStartTimeoutMillis = org.openjproxy.constants.CommonConstants.DEFAULT_XA_START_TIMEOUT_MILLIS;

@@ -143,7 +143,6 @@ public class OjpXAConnection implements XAConnection, ServerHealthListener {
         log.debug("getXAResource called");
         checkClosed();
         if (xaResource == null) {
-            // Lazily create session when XAResource is first requested
             SessionInfo session = getOrCreateSession();
             xaResource = new OjpXAResource(statementService, session, this); // Phase 1: Pass this connection to XAResource
         }
@@ -160,7 +159,6 @@ public class OjpXAConnection implements XAConnection, ServerHealthListener {
             logicalConnection.close();
         }
         
-        // Lazily create session when Connection is first requested
         SessionInfo session = getOrCreateSession();
         
         // Verify session was created successfully
@@ -196,12 +194,12 @@ public class OjpXAConnection implements XAConnection, ServerHealthListener {
      */
     private ServerEndpoint findServerEndpoint(MultinodeConnectionManager connectionManager, String serverAddress) {
         try {
-            // The connectionManager has access to all server endpoints
-            // We need to find the one matching our boundServerAddress
-            // For now, return null as we don't have direct access to the endpoint list
-            // This will be enhanced in Phase 4
             log.debug("Finding server endpoint for address: {}", serverAddress);
-            return null;
+            ServerEndpoint serverEndpoint = connectionManager.getServerEndpoints().stream().filter(se ->
+                se.getAddress().equalsIgnoreCase(serverAddress)
+            ).findFirst().orElse(null);
+            log.debug("Server endpoint for address {} found {}", serverAddress, serverEndpoint != null ? "successfully" : "not found");
+            return serverEndpoint;
         } catch (Exception e) {
             log.warn("Failed to find server endpoint for {}: {}", serverAddress, e.getMessage());
             return null;

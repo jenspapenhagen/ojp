@@ -274,6 +274,8 @@ public class MultinodeStatementService implements StatementService {
             // Only mark server unhealthy for connection-level errors
             if (connectionManager.isConnectionLevelError(e)) {
                 log.warn("Connection-level error on server {}: {}", server.getAddress(), sqlEx.getMessage());
+                // Notify connection manager to mark server unhealthy and invalidate sessions/connections
+                connectionManager.handleServerFailure(server, e);
             } else {
                 log.debug("Database-level error on server {}: {}", server.getAddress(), sqlEx.getMessage());
             }
@@ -362,6 +364,8 @@ public class MultinodeStatementService implements StatementService {
             // Only mark server unhealthy for connection-level errors
             if (connectionManager.isConnectionLevelError(e)) {
                 log.warn("Connection-level error on server {}: {}", server.getAddress(), sqlEx.getMessage());
+                // Notify connection manager to mark server unhealthy and invalidate sessions/connections
+                connectionManager.handleServerFailure(server, e);
             } else {
                 log.debug("Database-level error on server {}: {}", server.getAddress(), sqlEx.getMessage());
             }
@@ -423,10 +427,12 @@ public class MultinodeStatementService implements StatementService {
             } catch (SQLException ex) {
                 sqlEx = ex;
             }
-            
+
             // Only mark server unhealthy for connection-level errors
             if (connectionManager.isConnectionLevelError(e)) {
                 log.warn("Connection-level error on server {}: {}", server.getAddress(), sqlEx.getMessage());
+                // Notify connection manager to mark server unhealthy and invalidate sessions/connections
+                connectionManager.handleServerFailure(server, e);
             } else {
                 log.debug("Database-level error on server {}: {}", server.getAddress(), sqlEx.getMessage());
             }
@@ -780,25 +786,13 @@ public class MultinodeStatementService implements StatementService {
             
         } catch (StatusRuntimeException e) {
             // Let GrpcExceptionHandler convert the exception
-            SQLException sqlEx;
             try {
+                // Convert and capture the SQLException if possible.
                 throw GrpcExceptionHandler.handle(e);
-            } catch (SQLException ex) {
-                sqlEx = ex;
+            } catch (SQLException | StatusRuntimeException ex) {
+                invalidateSessionIfConnectionLevelError(sessionInfo, e, server);
+                throw ex;
             }
-            
-            // Only mark server unhealthy for connection-level errors
-            // Database-level errors (e.g., syntax errors, constraint violations) should not affect server health
-            if (connectionManager.isConnectionLevelError(e)) {
-                log.warn("Connection-level error on server {}: {}", server.getAddress(), sqlEx.getMessage());
-                // Note: For session-bound requests, we don't failover - we throw the exception
-                // This enforces session stickiness as per the requirements
-            } else {
-                log.debug("Database-level error on server {}: {}", server.getAddress(), sqlEx.getMessage());
-            }
-            
-            throw sqlEx;
-            
         } catch (SQLException e) {
             // Already a SQLException, just throw it
             throw e;
@@ -808,7 +802,21 @@ public class MultinodeStatementService implements StatementService {
                     server.getAddress() + ": " + e.getMessage(), e);
         }
     }
-    
+
+    private void invalidateSessionIfConnectionLevelError(SessionInfo sessionInfo, StatusRuntimeException e, ServerEndpoint server) {
+        // Only mark server unhealthy for connection-level errors
+        // Database-level errors (e.g., syntax errors, constraint violations) should not affect server health
+        if (connectionManager.isConnectionLevelError(e)) {
+            log.warn("Connection-level error on server {}: {}", server.getAddress(), e.getMessage());
+            // Notify connection manager to mark server unhealthy and invalidate sessions/connections
+            connectionManager.handleServerFailure(server, e);
+            // Note: For session-bound requests, we don't failover - we throw the exception
+            // This enforces session stickiness as per the requirements
+        } else {
+            log.debug("Database-level error on server {}: {}", server.getAddress(), e.getMessage());
+        }
+    }
+
     /**
      * Functional interface for operations that throw SQLException.
      */

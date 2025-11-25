@@ -25,8 +25,12 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
- * Manages multinode connections to OJP servers with round-robin routing,
+ * Manages multinode connections to OJP servers with load-aware routing,
  * session stickiness, and failover support.
+ * 
+ * Server Selection Strategies:
+ * - Load-aware (default): Selects the healthy server with the fewest active connections
+ * - Round-robin (legacy): Cycles through healthy servers in order
  * 
  * Addressing PR #39 review comments:
  * - Comment #3: Throws exception when session server is unavailable (enforces session stickiness)
@@ -36,7 +40,7 @@ public class MultinodeConnectionManager {
     
     private static final Logger log = LoggerFactory.getLogger(MultinodeConnectionManager.class);
     private static final String DNS_PREFIX = "dns:///";
-    
+
     private final List<ServerEndpoint> serverEndpoints;
     private final Map<ServerEndpoint, ChannelAndStub> channelMap;
     private final Map<String, ServerEndpoint> sessionToServerMap; // sessionUUID -> server
@@ -103,10 +107,11 @@ public class MultinodeConnectionManager {
         for (ServerEndpoint endpoint : serverEndpoints) {
             try {
                 createChannelAndStub(endpoint);
+                endpoint.markHealthy();
                 log.debug("Successfully initialized connection to {}", endpoint.getAddress());
             } catch (Exception e) {
                 log.warn("Failed to initialize connection to {}: {}", endpoint.getAddress(), e.getMessage());
-                endpoint.setHealthy(false);
+                endpoint.markUnhealthy();
                 endpoint.setLastFailureTime(System.currentTimeMillis());
             }
         }
@@ -182,12 +187,38 @@ public class MultinodeConnectionManager {
     }
     
     /**
-     * Performs health check on unhealthy servers.
-     * If any servers have recovered, notifies listeners and triggers redistribution.
+     * Performs health check on all servers.
+     * - For XA mode: Proactively checks healthy servers and invalidates sessions when they fail
+     * - For all modes: Checks unhealthy servers to see if they've recovered
      */
     private void performHealthCheck() {
-        log.debug("Performing health check on unhealthy servers");
+        log.debug("Performing health check on servers");
         
+        // XA Mode: Proactively check healthy servers to detect failures early
+        // This ensures sessions are invalidated even if no active operations are hitting the server
+        if (xaConnectionRedistributor != null) {
+            List<ServerEndpoint> healthyServers = serverEndpoints.stream()
+                    .filter(ServerEndpoint::isHealthy)
+                    .collect(Collectors.toList());
+            
+            for (ServerEndpoint endpoint : healthyServers) {
+                if (!validateServer(endpoint)) {
+                    log.info("XA Health check: Server {} has become unhealthy", endpoint.getAddress());
+                    
+                    // Mark server unhealthy
+                    endpoint.setHealthy(false);
+                    endpoint.setLastFailureTime(System.currentTimeMillis());
+                    
+                    // XA Mode: Immediately invalidate sessions and connections for the failed server
+                    invalidateSessionsAndConnectionsForFailedServer(endpoint);
+                    
+                    // Notify listeners
+                    notifyServerUnhealthy(endpoint, new Exception("Health check failed"));
+                }
+            }
+        }
+        
+        // Check unhealthy servers to see if they've recovered
         List<ServerEndpoint> unhealthyServers = serverEndpoints.stream()
                 .filter(endpoint -> !endpoint.isHealthy())
                 .collect(Collectors.toList());
@@ -209,6 +240,7 @@ public class MultinodeConnectionManager {
             if (timeSinceFailure >= healthCheckConfig.getHealthCheckThresholdMs()) {
                 if (validateServer(endpoint)) {
                     log.info("Server {} has recovered", endpoint.getAddress());
+                    
                     endpoint.markHealthy();
                     recoveredServers.add(endpoint);
                     notifyServerRecovered(endpoint);
@@ -220,8 +252,9 @@ public class MultinodeConnectionManager {
             }
         }
         
-        // If any servers recovered, trigger connection redistribution
-        if (!recoveredServers.isEmpty() && healthCheckConfig.isRedistributionEnabled()) {
+        // For non-XA mode: trigger connection redistribution when servers recover
+        // XA mode handles redistribution differently (through invalidation), so skip it
+        if (!recoveredServers.isEmpty() && xaConnectionRedistributor == null && healthCheckConfig.isRedistributionEnabled()) {
             log.info("Triggering connection redistribution for {} recovered server(s)", 
                     recoveredServers.size());
             
@@ -235,6 +268,97 @@ public class MultinodeConnectionManager {
                 log.error("Failed to redistribute connections after server recovery: {}", 
                         e.getMessage(), e);
             }
+        }
+    }
+
+    /**
+     * Invalidates a specified number of connections for a server.
+     * 
+     * @param server The server whose connections should be invalidated
+     * @param connections The list of connections for this server
+     * @param count The number of connections to invalidate
+     * @return The actual number of connections invalidated
+     */
+    private int invalidateConnectionsForServer(ServerEndpoint server, List<java.sql.Connection> connections, int count) {
+        int invalidated = 0;
+        int toInvalidate = Math.min(count, connections.size());
+        
+        for (int i = 0; i < toInvalidate; i++) {
+            java.sql.Connection conn = connections.get(i);
+            if (conn instanceof org.openjproxy.jdbc.Connection) {
+                org.openjproxy.jdbc.Connection ojpConn = (org.openjproxy.jdbc.Connection) conn;
+                ojpConn.markForceInvalid();
+                try {
+                    conn.close();
+                    invalidated++;
+                    log.debug("Invalidated and closed connection {} for server {} during rebalancing", 
+                            System.identityHashCode(conn), server.getAddress());
+                } catch (Exception e) {
+                    log.warn("Failed to close connection {} for server {} during rebalancing: {}", 
+                            System.identityHashCode(conn), server.getAddress(), e.getMessage());
+                }
+            }
+        }
+        
+        log.info("Invalidated {} of {} connections for server {} during rebalancing", 
+                invalidated, toInvalidate, server.getAddress());
+        return invalidated;
+    }
+    
+    /**
+     * Invalidates all XA sessions and connections for a server that has become unhealthy.
+     * 
+     * In XA mode, when a server fails, we immediately:
+     * 1. Clear client-side session bindings from sessionToServerMap
+     * 2. Mark Connection objects as invalid (forceInvalid) so pools discard them
+     * 3. Close connections to force pool replacement
+     * 
+     * This prevents attempts to use stale sessions on the failed server. When the server
+     * recovers, new connections will be created with fresh sessions.
+     * 
+     * @param endpoint The server endpoint that has failed
+     */
+    private void invalidateSessionsAndConnectionsForFailedServer(ServerEndpoint endpoint) {
+        log.info("Invalidating all XA sessions and connections for failed server {}", endpoint.getAddress());
+        
+        // Step 1: Remove all session bindings for this server
+        List<String> sessionsToInvalidate = sessionToServerMap.entrySet().stream()
+                .filter(entry -> entry.getValue().equals(endpoint))
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+        
+        for (String sessionUUID : sessionsToInvalidate) {
+            sessionToServerMap.remove(sessionUUID);
+            log.debug("Removed session binding {} for failed server {}", sessionUUID, endpoint.getAddress());
+        }
+        
+        // Step 2: Mark all connections for this server as invalid and close them
+        Map<ServerEndpoint, List<java.sql.Connection>> distribution = connectionTracker.getDistribution();
+        List<java.sql.Connection> connectionsToInvalidate = distribution.get(endpoint);
+        
+        if (connectionsToInvalidate != null && !connectionsToInvalidate.isEmpty()) {
+            int invalidatedCount = 0;
+            for (java.sql.Connection conn : connectionsToInvalidate) {
+                if (conn instanceof org.openjproxy.jdbc.Connection) {
+                    org.openjproxy.jdbc.Connection ojpConn = (org.openjproxy.jdbc.Connection) conn;
+                    ojpConn.markForceInvalid();
+                    try {
+                        conn.close();
+                        invalidatedCount++;
+                        log.debug("Invalidated and closed connection {} for failed server {}", 
+                                System.identityHashCode(conn), endpoint.getAddress());
+                    } catch (Exception e) {
+                        log.warn("Failed to close connection {} for failed server {}: {}", 
+                                System.identityHashCode(conn), endpoint.getAddress(), e.getMessage());
+                    }
+                }
+            }
+            
+            log.info("Invalidated {} session(s) and {} connection(s) for failed server {}",
+                    sessionsToInvalidate.size(), invalidatedCount, endpoint.getAddress());
+        } else {
+            log.info("Invalidated {} session(s) for failed server {} (no connections tracked)",
+                    sessionsToInvalidate.size(), endpoint.getAddress());
         }
     }
     
@@ -330,25 +454,46 @@ public class MultinodeConnectionManager {
             
             log.info("Connecting to server {} (XA) with datasource '{}'", 
                     selectedServer.getAddress(), selectedServerDataSource);
-            SessionInfo sessionInfo = channelAndStub.blockingStub.connect(connectionDetails);
-            
+            SessionInfo sessionInfo = withSelectedServer(channelAndStub.blockingStub.connect(connectionDetails), selectedServer);
             // Mark server as healthy
             selectedServer.setHealthy(true);
             selectedServer.setLastFailureTime(0);
             
-            // Bind session to this server
+            // Log connection creation details
+            String connectedServerAddress = selectedServer.getHost() + ":" + selectedServer.getPort();
+            log.info("CONNECTION CREATED: XA connection to endpoint={}, targetServer={}, sessionUUID={}", 
+                    connectedServerAddress, 
+                    sessionInfo.getTargetServer() != null ? sessionInfo.getTargetServer() : "NULL",
+                    sessionInfo.getSessionUUID());
+            
+            // Bind session to this server - but only for NEW sessions to avoid re-binding invalidated sessions
             if (sessionInfo.getSessionUUID() != null && !sessionInfo.getSessionUUID().isEmpty()) {
                 String targetServer = sessionInfo.getTargetServer();
+                
+                log.info("DIAGNOSTIC XA: SessionUUID={}, ConnectedToServer={}, TargetServerFromResponse={}", 
+                        sessionInfo.getSessionUUID(), connectedServerAddress, 
+                        targetServer != null ? targetServer : "NULL");
+                
+                // Bind the session to the target server from the response
                 if (targetServer != null && !targetServer.isEmpty()) {
                     bindSession(sessionInfo.getSessionUUID(), targetServer);
-                    log.info("=== XA session {} bound to target server {} (from response) ===", 
-                            sessionInfo.getSessionUUID(), targetServer);
+                    if (!targetServer.equals(connectedServerAddress)) {
+                        log.warn("DIAGNOSTIC XA: Session {} bound to targetServer {} which DIFFERS from connected server {}. " +
+                                "If targetServer is wrong, queries may route to incorrect server causing 'Connection not found' errors.", 
+                                sessionInfo.getSessionUUID(), targetServer, connectedServerAddress);
+                    } else {
+                        log.info("=== XA session {} bound to target server {} (matches connected server) ===", 
+                                sessionInfo.getSessionUUID(), targetServer);
+                    }
                 } else {
-                    String serverAddress = selectedServer.getHost() + ":" + selectedServer.getPort();
                     sessionToServerMap.put(sessionInfo.getSessionUUID(), selectedServer);
-                    log.info("=== XA session {} bound to server {} (fallback) - Map size now: {} ===", 
-                            sessionInfo.getSessionUUID(), serverAddress, sessionToServerMap.size());
+                    log.info("=== XA session {} bound to server {} (fallback, no targetServer) - Map size now: {} ===", 
+                            sessionInfo.getSessionUUID(), connectedServerAddress, sessionToServerMap.size());
                 }
+            } else {
+                log.warn("DIAGNOSTIC XA: No sessionUUID from server response! SessionUUID: '{}'. " +
+                        "This will cause NULL sessionKey in affinityServer, leading to round-robin routing.", 
+                        sessionInfo.getSessionUUID());
             }
             
             // Track the server for this connection hash
@@ -377,7 +522,20 @@ public class MultinodeConnectionManager {
             throw sqlEx;
         }
     }
-    
+
+    private SessionInfo withSelectedServer(SessionInfo sessionInfo, ServerEndpoint selectedServer) {
+        return SessionInfo.newBuilder()
+                .setConnHash(sessionInfo.getConnHash())
+                .setClientUUID(sessionInfo.getClientUUID())
+                .setSessionUUID(sessionInfo.getSessionUUID())
+                .setTargetServer(selectedServer.getAddress())
+                .setTransactionInfo(sessionInfo.getTransactionInfo())
+                .setIsXA(sessionInfo.getIsXA())
+                .setSessionStatus(sessionInfo.getSessionStatus())
+                .setClusterHealth(sessionInfo.getClusterHealth())
+                .build();
+    }
+
     /**
      * Connects to all servers to ensure datasource information is available on all nodes.
      * Used for non-XA connections.
@@ -422,6 +580,11 @@ public class MultinodeConnectionManager {
                 log.info("Connecting to server {}", server.getAddress());
                 SessionInfo sessionInfo = channelAndStub.blockingStub.connect(connectionDetails);
                 
+                // Log connection creation details
+                log.info("NON-XA Connection created: TargetServer={}, ConnectedEndpoint={}", 
+                        sessionInfo.getTargetServer() != null ? sessionInfo.getTargetServer() : "NULL",
+                        server.getHost() + ":" + server.getPort());
+                
                 // Mark server as healthy
                 server.setHealthy(true);
                 server.setLastFailureTime(0);
@@ -430,20 +593,33 @@ public class MultinodeConnectionManager {
                 // Bind session using targetServer from response if both sessionUUID and targetServer are present
                 if (sessionInfo.getSessionUUID() != null && !sessionInfo.getSessionUUID().isEmpty()) {
                     String targetServer = sessionInfo.getTargetServer();
+                    String connectedServerAddress = server.getHost() + ":" + server.getPort();
+                    
+                    log.info("DIAGNOSTIC NON-XA: SessionUUID={}, ConnectedToServer={}, TargetServerFromResponse={}", 
+                            sessionInfo.getSessionUUID(), connectedServerAddress, 
+                            targetServer != null ? targetServer : "NULL");
+                    
                     if (targetServer != null && !targetServer.isEmpty()) {
                         // Use the server-returned targetServer as authoritative for binding
                         bindSession(sessionInfo.getSessionUUID(), targetServer);
-                        log.info("Session {} bound to target server {} (from response)", 
-                                sessionInfo.getSessionUUID(), targetServer);
+                        if (!targetServer.equals(connectedServerAddress)) {
+                            log.warn("DIAGNOSTIC NON-XA: Session {} bound to targetServer {} which DIFFERS from connected server {}. " +
+                                    "If targetServer is wrong, queries may route to incorrect server causing 'Connection not found' errors.", 
+                                    sessionInfo.getSessionUUID(), targetServer, connectedServerAddress);
+                        } else {
+                            log.info("Session {} bound to target server {} (matches connected server)", 
+                                    sessionInfo.getSessionUUID(), targetServer);
+                        }
                     } else {
                         // Fallback: bind using current server endpoint if targetServer not provided
-                        String serverAddress = server.getHost() + ":" + server.getPort();
                         sessionToServerMap.put(sessionInfo.getSessionUUID(), server);
                         log.info("Session {} bound to server {} (fallback, no targetServer in response)", 
-                                sessionInfo.getSessionUUID(), serverAddress);
+                                sessionInfo.getSessionUUID(), connectedServerAddress);
                     }
                 } else {
-                    log.info("No sessionUUID from server {}, session not bound", server.getAddress());
+                    log.warn("DIAGNOSTIC NON-XA: No sessionUUID from server {}! SessionUUID: '{}'. " +
+                            "This will cause NULL sessionKey in affinityServer, leading to round-robin routing.", 
+                            server.getAddress(), sessionInfo.getSessionUUID());
                 }
                 
                 log.info("Successfully connected to server {}", server.getAddress());
@@ -501,7 +677,12 @@ public class MultinodeConnectionManager {
     public ServerEndpoint affinityServer(String sessionKey) throws SQLException {
         if (sessionKey == null || sessionKey.isEmpty()) {
             // No session identifier, use round-robin
-            log.info("No session key, using round-robin selection");
+            log.warn("DIAGNOSTIC: affinityServer called with NULL or EMPTY sessionKey - routing via round-robin. " +
+                    "This may cause 'Connection not found' errors if queries reach wrong server. " +
+                    "SessionKey value: '{}', isEmpty: {}, isNull: {}", 
+                    sessionKey, 
+                    sessionKey != null && sessionKey.isEmpty(),
+                    sessionKey == null);
             return selectHealthyServer();
         }
         
@@ -583,7 +764,82 @@ public class MultinodeConnectionManager {
             return null;
         }
         
-        // Round-robin selection among healthy servers
+        // Choose selection strategy based on configuration
+        if (healthCheckConfig.isLoadAwareSelectionEnabled()) {
+            return selectByLeastConnections(healthyServers);
+        } else {
+            return selectByRoundRobin(healthyServers);
+        }
+    }
+    
+    /**
+     * Selects the healthy server with the fewest active connections.
+     * This provides automatic load balancing by directing new connections
+     * to the least-loaded server.
+     * 
+     * When all servers have equal connection counts (e.g., in non-XA mode where 
+     * ConnectionTracker is empty), falls back to true round-robin selection to 
+     * ensure proper load distribution.
+     * 
+     * @param healthyServers List of healthy servers to choose from
+     * @return The server with the lowest connection count
+     */
+    private ServerEndpoint selectByLeastConnections(List<ServerEndpoint> healthyServers) {
+        if (healthyServers.isEmpty()) {
+            return null;
+        }
+        
+        // Get current connection counts per server
+        Map<ServerEndpoint, Integer> connectionCounts = connectionTracker.getCounts();
+        
+        // Check if all servers have the same count (including when tracker is empty)
+        boolean allEqual = true;
+        Integer firstCount = null;
+        for (ServerEndpoint server : healthyServers) {
+            int count = connectionCounts.getOrDefault(server, 0);
+            if (firstCount == null) {
+                firstCount = count;
+            } else if (firstCount != count) {
+                allEqual = false;
+                break;
+            }
+        }
+        
+        // If all counts are equal, use true round-robin instead of load-aware
+        if (allEqual) {
+            log.debug("All servers have equal load ({}), using round-robin selection", firstCount);
+            return selectByRoundRobin(healthyServers);
+        }
+        
+        // Find server with minimum connections
+        ServerEndpoint selected = healthyServers.stream()
+                .min((s1, s2) -> {
+                    int count1 = connectionCounts.getOrDefault(s1, 0);
+                    int count2 = connectionCounts.getOrDefault(s2, 0);
+                    return Integer.compare(count1, count2);
+                })
+                .orElse(healthyServers.get(0));
+        
+        int selectedCount = connectionCounts.getOrDefault(selected, 0);
+        log.debug("Selected server {} with {} active connections (load-aware)", 
+                selected.getAddress(), selectedCount);
+        
+        return selected;
+    }
+    
+    /**
+     * Selects a healthy server using round-robin strategy.
+     * This is the legacy selection method that cycles through servers
+     * without considering their current load.
+     * 
+     * @param healthyServers List of healthy servers to choose from
+     * @return The next server in round-robin order
+     */
+    private ServerEndpoint selectByRoundRobin(List<ServerEndpoint> healthyServers) {
+        if (healthyServers.isEmpty()) {
+            return null;
+        }
+        
         int index = Math.abs(roundRobinCounter.getAndIncrement()) % healthyServers.size();
         ServerEndpoint selected = healthyServers.get(index);
         
@@ -591,7 +847,15 @@ public class MultinodeConnectionManager {
         return selected;
     }
     
-    private void handleServerFailure(ServerEndpoint endpoint, Exception exception) {
+    /**
+     * Handles server failure by marking it unhealthy and invalidating sessions/connections in XA mode.
+     * This method can be called from both internal connection attempts and external callers (e.g., MultinodeStatementService)
+     * when they detect connection-level failures.
+     * 
+     * @param endpoint The server endpoint that failed
+     * @param exception The exception that caused the failure
+     */
+    public void handleServerFailure(ServerEndpoint endpoint, Exception exception) {
         // Only mark server unhealthy for connection-level failures
         // Database-level errors (e.g., table not found, syntax errors) should not affect server health
         boolean shouldMarkUnhealthy = isConnectionLevelError(exception);
@@ -607,6 +871,12 @@ public class MultinodeConnectionManager {
         
         log.warn("Marked server {} as unhealthy due to connection-level error: {}", 
                 endpoint.getAddress(), exception.getMessage());
+        
+        // XA Mode: Immediately invalidate all sessions and connections for the failed server
+        // This prevents attempts to use stale sessions after server failure
+        if (xaConnectionRedistributor != null) {
+            invalidateSessionsAndConnectionsForFailedServer(endpoint);
+        }
         
         // Phase 2: Notify listeners that server became unhealthy
         notifyServerUnhealthy(endpoint, exception);
@@ -670,6 +940,7 @@ public class MultinodeConnectionManager {
                 try {
                     log.debug("Attempting to recover server {}", endpoint.getAddress());
                     createChannelAndStub(endpoint);
+                    
                     endpoint.setHealthy(true);
                     endpoint.setLastFailureTime(0);
                     log.info("Successfully recovered server {}", endpoint.getAddress());
@@ -883,33 +1154,6 @@ public class MultinodeConnectionManager {
     public void setXaConnectionRedistributor(XAConnectionRedistributor redistributor) {
         this.xaConnectionRedistributor = redistributor;
         log.info("XA connection redistributor registered");
-    }
-    
-    /**
-     * Validates or creates a channel for the given endpoint.
-     * Used by the redistributor and health check systems.
-     * 
-     * @param endpoint The server endpoint to validate/create channel for
-     */
-    public void validateOrCreateChannelForEndpoint(ServerEndpoint endpoint) {
-        if (endpoint == null) {
-            return;
-        }
-        
-        String addr = endpoint.getAddress();
-        ChannelAndStub cas = channelMap.get(endpoint);
-        if (cas != null && !cas.channel.isShutdown() && !cas.channel.isTerminated()) {
-            log.debug("Channel for {} is valid", addr);
-            return;
-        }
-        
-        // Channel doesn't exist or is invalid, create a new one
-        try {
-            createChannelAndStub(endpoint);
-            log.info("Created/validated channel for endpoint: {}", addr);
-        } catch (Exception e) {
-            log.error("Failed to create channel for endpoint {}: {}", addr, e.getMessage());
-        }
     }
     
     /**

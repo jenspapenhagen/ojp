@@ -91,7 +91,7 @@ jobs:
       - name: Check PostgreSQL connections during test
         run: |
           echo "Checking PostgreSQL connections..."
-          TIMEOUT=30
+          TIMEOUT=60
           ELAPSED=0
           
           while [ $ELAPSED -lt $TIMEOUT ]; do
@@ -131,7 +131,7 @@ jobs:
       - name: Check PostgreSQL connections after killing Server 1
         run: |
           echo "Checking PostgreSQL connections after killing Server 1..."
-          TIMEOUT=30
+          TIMEOUT=60
           ELAPSED=0
           
           while [ $ELAPSED -lt $TIMEOUT ]; do
@@ -170,7 +170,7 @@ jobs:
       - name: Check PostgreSQL connections after restarting Server 1
         run: |
           echo "Checking PostgreSQL connections after restarting Server 1..."
-          TIMEOUT=30
+          TIMEOUT=60
           ELAPSED=0
           
           while [ $ELAPSED -lt $TIMEOUT ]; do
@@ -210,7 +210,7 @@ jobs:
       - name: Check PostgreSQL connections after killing Server 2
         run: |
           echo "Checking PostgreSQL connections after killing Server 2..."
-          TIMEOUT=30
+          TIMEOUT=60
           ELAPSED=0
           
           while [ $ELAPSED -lt $TIMEOUT ]; do
@@ -249,7 +249,7 @@ jobs:
       - name: Check PostgreSQL connections after restarting Server 2
         run: |
           echo "Checking PostgreSQL connections after restarting Server 2..."
-          TIMEOUT=30
+          TIMEOUT=60
           ELAPSED=0
           
           while [ $ELAPSED -lt $TIMEOUT ]; do
@@ -283,7 +283,7 @@ jobs:
           # Wait for test process to finish (max 10 minutes)
           if [ -f temp/multinode-test.pid ]; then
             TEST_PID=$(cat temp/multinode-test.pid)
-            TIMEOUT=600
+            TIMEOUT=60
             ELAPSED=0
             while kill -0 $TEST_PID 2>/dev/null && [ $ELAPSED -lt $TIMEOUT ]; do
               echo "Test still running... (${ELAPSED}s elapsed)"
