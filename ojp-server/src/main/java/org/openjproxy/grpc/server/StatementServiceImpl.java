@@ -311,13 +311,31 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 DataSourceConfigurationManager.DataSourceConfiguration dsConfig = 
                         DataSourceConfigurationManager.getConfiguration(clientProperties);
                 
+                // Get pool sizes - apply multinode coordination if needed
+                int maxPoolSize = dsConfig.getMaximumPoolSize();
+                int minIdle = dsConfig.getMinimumIdle();
+                
+                List<String> serverEndpoints = connectionDetails.getServerEndpointsList();
+                if (serverEndpoints != null && !serverEndpoints.isEmpty()) {
+                    // Multinode: calculate divided pool sizes
+                    MultinodePoolCoordinator.PoolAllocation allocation = 
+                            ConnectionPoolConfigurer.getPoolCoordinator().calculatePoolSizes(
+                                    connHash, maxPoolSize, minIdle, serverEndpoints);
+                    
+                    maxPoolSize = allocation.getCurrentMaxPoolSize();
+                    minIdle = allocation.getCurrentMinIdle();
+                    
+                    log.info("Multinode pool coordination enabled for {}: {} servers, divided pool sizes: max={}, min={}", 
+                            connHash, serverEndpoints.size(), maxPoolSize, minIdle);
+                }
+                
                 // Build PoolConfig from connection details and configuration
                 PoolConfig poolConfig = PoolConfig.builder()
                         .url(UrlParser.parseUrl(connectionDetails.getUrl()))
                         .username(connectionDetails.getUser())
                         .password(connectionDetails.getPassword())
-                        .maxPoolSize(dsConfig.getMaximumPoolSize())
-                        .minIdle(dsConfig.getMinimumIdle())
+                        .maxPoolSize(maxPoolSize)
+                        .minIdle(minIdle)
                         .connectionTimeoutMs(dsConfig.getConnectionTimeout())
                         .idleTimeoutMs(dsConfig.getIdleTimeout())
                         .maxLifetimeMs(dsConfig.getMaxLifetime())
@@ -329,11 +347,12 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 this.datasourceMap.put(connHash, ds);
                 
                 // Create a slow query segregation manager for this datasource
-                createSlowQuerySegregationManagerForDatasource(connHash, dsConfig.getMaximumPoolSize());
+                createSlowQuerySegregationManagerForDatasource(connHash, maxPoolSize);
                 
-                log.info("Created new DataSource for dataSource '{}' with connHash: {} using provider: {}", 
+                log.info("Created new DataSource for dataSource '{}' with connHash: {} using provider: {}, maxPoolSize={}, minIdle={}", 
                         dsConfig.getDataSourceName(), connHash, 
-                        ConnectionPoolProviderRegistry.getDefaultProvider().map(p -> p.id()).orElse("unknown"));
+                        ConnectionPoolProviderRegistry.getDefaultProvider().map(p -> p.id()).orElse("unknown"),
+                        maxPoolSize, minIdle);
                 
             } catch (Exception e) {
                 log.error("Failed to create datasource for connection hash {}: {}", connHash, e.getMessage(), e);
