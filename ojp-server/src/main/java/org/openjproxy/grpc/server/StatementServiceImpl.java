@@ -1555,10 +1555,6 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 resultSetUUID, new HydratedResultSetMetadata(rs.getMetaData()));
     }
 
-    /**
-     * Backward compatibility wrapper for configureHikariPool method.
-
-
     // ===== XA Transaction Operations =====
 
     @Override
