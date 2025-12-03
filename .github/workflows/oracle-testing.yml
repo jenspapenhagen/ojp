@@ -56,7 +56,8 @@ jobs:
           docker exec ojp-oracle sqlplus -s system/testpassword@localhost/XEPDB1 <<'EOF'
           SET ECHO ON
           SET FEEDBACK ON
-          WHENEVER SQLERROR CONTINUE
+          SET SERVEROUTPUT ON
+          WHENEVER SQLERROR EXIT SQL.SQLCODE
           
           -- XA transaction permissions
           GRANT SELECT ON sys.dba_pending_transactions TO testuser;
@@ -67,12 +68,37 @@ jobs:
           GRANT EXECUTE ON sys.dbms_system TO testuser;
           GRANT FORCE ANY TRANSACTION TO testuser;
           
+          -- Also grant to C## common user if exists (for CDB/PDB setup)
+          BEGIN
+            EXECUTE IMMEDIATE 'GRANT SELECT ON sys.dba_pending_transactions TO c##testuser';
+            EXECUTE IMMEDIATE 'GRANT SELECT ON sys.pending_trans$ TO c##testuser';
+            EXECUTE IMMEDIATE 'GRANT SELECT ON sys.dba_2pc_pending TO c##testuser';
+            EXECUTE IMMEDIATE 'GRANT SELECT ON sys.dba_2pc_neighbors TO c##testuser';
+            EXECUTE IMMEDIATE 'GRANT EXECUTE ON sys.dbms_xa TO c##testuser';
+            EXECUTE IMMEDIATE 'GRANT EXECUTE ON sys.dbms_system TO c##testuser';
+            EXECUTE IMMEDIATE 'GRANT FORCE ANY TRANSACTION TO c##testuser';
+          EXCEPTION
+            WHEN OTHERS THEN
+              DBMS_OUTPUT.PUT_LINE('Note: c##testuser does not exist, skipping common user grants');
+          END;
+          /
+          
           -- Verify grants
           SELECT 'XA permissions granted successfully' AS status FROM dual;
+          
+          -- Show granted privileges
+          SELECT privilege, grantee FROM dba_sys_privs WHERE grantee IN ('TESTUSER', 'C##TESTUSER') ORDER BY grantee, privilege;
+          SELECT owner, table_name, privilege, grantee FROM dba_tab_privs WHERE grantee IN ('TESTUSER', 'C##TESTUSER') ORDER BY grantee, owner, table_name;
+          
           EXIT;
           EOF
           
-          echo "=== XA permissions granted to testuser ==="
+          if [ $? -ne 0 ]; then
+            echo "ERROR: Failed to grant XA permissions!"
+            exit 1
+          fi
+          
+          echo "=== XA permissions granted successfully ==="
 
       - name: Add Oracle JDBC Driver to ojp-server
         run: |
