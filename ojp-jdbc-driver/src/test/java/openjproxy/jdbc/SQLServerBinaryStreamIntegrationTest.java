@@ -1,10 +1,11 @@
 package openjproxy.jdbc;
 
+import openjproxy.jdbc.testutil.SQLServerConnectionProvider;
 import org.junit.Assert;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvFileSource;
+import org.junit.jupiter.params.provider.ArgumentsSource;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -21,6 +22,7 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 /**
  * SQL Server-specific binary stream integration tests.
  * Tests SQL Server-specific binary data types (VARBINARY, IMAGE) and stream handling.
+ * Uses TestContainers to provide a SQL Server instance for testing.
  */
 public class SQLServerBinaryStreamIntegrationTest {
 
@@ -32,7 +34,7 @@ public class SQLServerBinaryStreamIntegrationTest {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void createAndReadingBinaryStreamSuccessful(String driverClass, String url, String user, String pwd) throws SQLException, ClassNotFoundException, IOException {
         assumeFalse(isTestDisabled, "Skipping SQL Server tests");
 
@@ -93,7 +95,7 @@ public class SQLServerBinaryStreamIntegrationTest {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void createAndReadingLargeBinaryStreamSuccessful(String driverClass, String url, String user, String pwd) throws SQLException, ClassNotFoundException, IOException {
         assumeFalse(isTestDisabled, "Skipping SQL Server tests");
 
@@ -143,7 +145,7 @@ public class SQLServerBinaryStreamIntegrationTest {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerSpecificBinaryHandling(String driverClass, String url, String user, String pwd) throws SQLException, ClassNotFoundException, IOException {
         assumeFalse(isTestDisabled, "Skipping SQL Server tests");
 
