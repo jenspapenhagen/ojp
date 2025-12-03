@@ -69,6 +69,10 @@
             <version>42.7.8</version>
         </dependency>
 
+        <!-- PROPRIETARY DATABASE DRIVERS PLACEHOLDER -->
+        <!-- CI workflows dynamically add Oracle, SQL Server, and DB2 drivers here -->
+        <!-- Do not commit proprietary drivers to this pom.xml -->
+
         <!-- https://mvnrepository.com/artifact/com.zaxxer/HikariCP -->
         <dependency>
             <groupId>com.zaxxer</groupId>
