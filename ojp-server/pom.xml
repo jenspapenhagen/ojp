@@ -73,14 +73,6 @@
         <!-- CI workflows dynamically add Oracle, SQL Server, and DB2 drivers here -->
         <!-- Do not commit proprietary drivers to this pom.xml -->
 
-        <!-- SQL Server JDBC Driver - Added for test container support -->
-        <!-- https://mvnrepository.com/artifact/com.microsoft.sqlserver/mssql-jdbc -->
-        <dependency>
-            <groupId>com.microsoft.sqlserver</groupId>
-            <artifactId>mssql-jdbc</artifactId>
-            <version>12.8.1.jre11</version>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/com.zaxxer/HikariCP -->
         <dependency>
             <groupId>com.zaxxer</groupId>
@@ -218,6 +210,7 @@
                         <configuration>
                             <shadedArtifactAttached>true</shadedArtifactAttached>
                             <!-- Exclude signature files to prevent "Invalid signature file digest" errors -->
+                            <!-- This is necessary when shading signed JARs (e.g., SQL Server JDBC driver) -->
                             <filters>
                                 <filter>
                                     <artifact>*:*</artifact>
