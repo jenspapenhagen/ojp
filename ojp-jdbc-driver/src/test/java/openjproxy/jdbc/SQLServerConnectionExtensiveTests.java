@@ -4,7 +4,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvFileSource;
+import org.junit.jupiter.params.provider.ArgumentsSource;
+import openjproxy.jdbc.testutil.SQLServerConnectionProvider;
 import openjproxy.jdbc.testutil.TestDBUtils;
 
 import java.sql.Connection;
@@ -31,7 +32,7 @@ public class SQLServerConnectionExtensiveTests {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerBasicConnection(String driverClass, String url, String user, String pwd) throws SQLException {
         Assumptions.assumeFalse(!isSqlServerTestEnabled, "Skipping SQL Server tests");
         
@@ -67,7 +68,7 @@ public class SQLServerConnectionExtensiveTests {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerDataTypes(String driverClass, String url, String user, String pwd) throws SQLException {
         Assumptions.assumeFalse(!isSqlServerTestEnabled, "Skipping SQL Server tests");
         
@@ -104,7 +105,7 @@ public class SQLServerConnectionExtensiveTests {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerSpecificSyntax(String driverClass, String url, String user, String pwd) throws SQLException {
         Assumptions.assumeFalse(!isSqlServerTestEnabled, "Skipping SQL Server tests");
         
@@ -150,7 +151,7 @@ public class SQLServerConnectionExtensiveTests {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerUnicodeSupport(String driverClass, String url, String user, String pwd) throws SQLException {
         Assumptions.assumeFalse(!isSqlServerTestEnabled, "Skipping SQL Server tests");
         
@@ -183,7 +184,7 @@ public class SQLServerConnectionExtensiveTests {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerTransactionHandling(String driverClass, String url, String user, String pwd) throws SQLException {
         Assumptions.assumeFalse(!isSqlServerTestEnabled, "Skipping SQL Server tests");
         
@@ -233,7 +234,7 @@ public class SQLServerConnectionExtensiveTests {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerMetadata(String driverClass, String url, String user, String pwd) throws SQLException {
         Assumptions.assumeFalse(!isSqlServerTestEnabled, "Skipping SQL Server tests");
         

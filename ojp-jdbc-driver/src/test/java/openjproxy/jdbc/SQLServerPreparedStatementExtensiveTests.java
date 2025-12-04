@@ -4,7 +4,8 @@ import openjproxy.jdbc.testutil.TestDBUtils;
 import org.junit.Assert;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvFileSource;
+import org.junit.jupiter.params.provider.ArgumentsSource;
+import openjproxy.jdbc.testutil.SQLServerConnectionProvider;
 
 import java.math.BigDecimal;
 import java.sql.*;
@@ -25,7 +26,7 @@ public class SQLServerPreparedStatementExtensiveTests {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerPreparedStatementBasics(String driverClass, String url, String user, String pwd) throws SQLException {
         assumeFalse(isTestDisabled, "SQL Server tests are disabled");
         
@@ -58,7 +59,7 @@ public class SQLServerPreparedStatementExtensiveTests {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerParameterTypes(String driverClass, String url, String user, String pwd) throws SQLException {
         assumeFalse(isTestDisabled, "SQL Server tests are disabled");
         
@@ -113,7 +114,7 @@ public class SQLServerPreparedStatementExtensiveTests {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerBatchUpdates(String driverClass, String url, String user, String pwd) throws SQLException {
         assumeFalse(isTestDisabled, "SQL Server tests are disabled");
         
@@ -154,7 +155,7 @@ public class SQLServerPreparedStatementExtensiveTests {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerNullParameters(String driverClass, String url, String user, String pwd) throws SQLException {
         assumeFalse(isTestDisabled, "SQL Server tests are disabled");
         
@@ -198,7 +199,7 @@ public class SQLServerPreparedStatementExtensiveTests {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerBinaryParameters(String driverClass, String url, String user, String pwd) throws SQLException {
         assumeFalse(isTestDisabled, "SQL Server tests are disabled");
         
@@ -259,7 +260,7 @@ public class SQLServerPreparedStatementExtensiveTests {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerUpdateAndDelete(String driverClass, String url, String user, String pwd) throws SQLException {
         assumeFalse(isTestDisabled, "SQL Server tests are disabled");
         

@@ -4,7 +4,8 @@ import openjproxy.jdbc.testutil.TestDBUtils;
 import org.junit.Assert;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvFileSource;
+import org.junit.jupiter.params.provider.ArgumentsSource;
+import openjproxy.jdbc.testutil.SQLServerConnectionProvider;
 
 import java.math.BigDecimal;
 import java.sql.Connection;
@@ -29,7 +30,7 @@ public class SQLServerMultipleTypesIntegrationTest {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void typesCoverageTestSuccessful(String driverClass, String url, String user, String pwd) throws SQLException, ClassNotFoundException, ParseException {
         assumeFalse(isTestDisabled, "SQL Server tests are disabled");
         
@@ -105,7 +106,7 @@ public class SQLServerMultipleTypesIntegrationTest {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerSpecificTypes(String driverClass, String url, String user, String pwd) throws SQLException, ClassNotFoundException {
         assumeFalse(isTestDisabled, "SQL Server tests are disabled");
         
@@ -174,7 +175,7 @@ public class SQLServerMultipleTypesIntegrationTest {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerNullValues(String driverClass, String url, String user, String pwd) throws SQLException, ClassNotFoundException {
         assumeFalse(isTestDisabled, "SQL Server tests are disabled");
         
@@ -223,7 +224,7 @@ public class SQLServerMultipleTypesIntegrationTest {
     }
 
     @ParameterizedTest
-    @CsvFileSource(resources = "/sqlserver_connections.csv")
+    @ArgumentsSource(SQLServerConnectionProvider.class)
     public void testSqlServerLargeTypes(String driverClass, String url, String user, String pwd) throws SQLException, ClassNotFoundException {
         assumeFalse(isTestDisabled, "SQL Server tests are disabled");
         
