@@ -1,27 +1,21 @@
 # This workflow runs only SQL Server integration tests using TestContainers.
 # It disables all other database integration tests to focus on SQL Server testing.
 # TestContainers automatically manages the SQL Server container lifecycle.
-# On main branch: runs only after Main CI workflow completes successfully.
-# On PRs: runs in parallel with Main CI.
+# This workflow only runs after the Main CI workflow completes successfully.
 name: SQL Server Integration Tests
 
 on:
-  pull_request:
-    branches: [ main ]
   workflow_run:
     workflows: ["Main CI"]
     types:
       - completed
-    branches: [ main ]
   workflow_dispatch:  # Allow manual triggering
 
 jobs:
   sqlserver-tests:
     name: SQL Server Integration Tests
     runs-on: ubuntu-latest
-    # For workflow_run events, only run if Main CI succeeded
-    # For pull_request/workflow_dispatch events, always run
-    if: ${{ github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     
     permissions:
       contents: read

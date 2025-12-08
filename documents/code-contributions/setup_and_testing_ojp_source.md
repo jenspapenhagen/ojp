@@ -88,14 +88,11 @@ The CI workflows are organized in a hierarchical order to save CI cycles:
    - Multinode Integration Tests
    - Oracle Database Testing
    - SQL Server Integration Tests
-
-**Note:** The sequential workflow ordering (specialized workflows only after Main CI) applies when code is merged to the `main` branch. During pull request reviews, all workflows run in parallel to provide comprehensive test coverage. This ensures thorough testing during development while still providing the fail-fast benefit on the main branch.
-
+   
 This approach ensures that:
 - Quick feedback on broken code (H2 tests run in seconds)
-- Resource efficiency on main branch (expensive database setups only run if basic tests pass)
-- Comprehensive testing on PRs (all workflows run to catch issues before merge)
-- Reduced CI costs and execution time on main branch
+- Resource efficiency (expensive database setups only run if basic tests pass)
+- Reduced CI costs and execution time
 - Early detection of major issues before running full test suite
 
 ### Contributing code
