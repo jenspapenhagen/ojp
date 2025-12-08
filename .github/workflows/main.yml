@@ -1257,11 +1257,12 @@ jobs:
   # This job triggers a workflow in the ojp-framework-integration repository
   # to run integration tests with the latest OJP changes.
   #
-  # Note: This job runs independently and doesn't depend on other test jobs.
-  # It notifies the integration repo regardless of test outcomes.
+  # Note: This job depends on build-test (H2 tests) completing successfully.
+  # It only notifies the integration repo if the main H2 tests pass.
   #
   # ===========================================================================
   notify-integration:
+    needs: [build-test]
     runs-on: ubuntu-latest
     steps:
       - name: Trigger OJP Framework Integration Repo Workflow
