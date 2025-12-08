@@ -1,6 +1,7 @@
 package openjproxy.jdbc;
 
 import org.junit.Assert;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvFileSource;
@@ -35,9 +36,7 @@ public class HydratedLobValidationTest {
     }
 
     public void setUp(String driverClass, String url, String user, String pwd) throws SQLException, ClassNotFoundException {
-        if (!isH2TestEnabled) {
-            return;
-        }
+        Assumptions.assumeTrue(isH2TestEnabled, "Skipping H2 tests - not enabled");
         this.tableName = "hydrated_lob_test";
         conn = DriverManager.getConnection(url, user, pwd);
         
