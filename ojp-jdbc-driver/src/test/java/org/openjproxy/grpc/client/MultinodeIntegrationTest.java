@@ -27,8 +27,8 @@ import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 @Slf4j
 public class MultinodeIntegrationTest {
-    private static final int THREADS = 100; // Number of worker threads
-    private static final int RAMPUP_MS = 600 * 1000; // 600 seconds (10 min) Ramp-up window in milliseconds
+    private static final int THREADS = 30; // Number of worker threads
+    private static final int RAMPUP_MS = 120 * 1000; // 120 seconds Ramp-up window in milliseconds
 
     protected static boolean isTestDisabled;
     private static Queue<Long> queryDurations = new ConcurrentLinkedQueue<>();

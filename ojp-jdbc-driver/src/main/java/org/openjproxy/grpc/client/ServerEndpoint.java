@@ -1,36 +1,17 @@
 package org.openjproxy.grpc.client;
 
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Represents an OJP server endpoint with host and port information.
  * Tracks the health status of each server for failover purposes.
- * 
- * Thread-safety: Uses AtomicReference with immutable HealthState to ensure
- * atomic updates of health status and failure time together.
  */
 public class ServerEndpoint {
     private final String host;
     private final int port;
     private final String dataSourceName;
-    
-    /**
-     * Immutable holder for health state to ensure atomic reads/writes.
-     * Package-private to allow MultinodeConnectionManager to use it.
-     */
-    static class HealthState {
-        final boolean healthy;
-        final long lastFailureTime;
-        
-        HealthState(boolean healthy, long lastFailureTime) {
-            this.healthy = healthy;
-            this.lastFailureTime = lastFailureTime;
-        }
-    }
-    
-    private final AtomicReference<HealthState> healthState = 
-        new AtomicReference<>(new HealthState(true, 0));
+    private volatile boolean healthy = true;
+    private volatile long lastFailureTime = 0;
 
     public ServerEndpoint(String host, int port) {
         this(host, port, "default");
@@ -62,48 +43,35 @@ public class ServerEndpoint {
     }
 
     public boolean isHealthy() {
-        return healthState.get().healthy;
+        return healthy;
     }
 
     public void setHealthy(boolean healthy) {
-        HealthState current = healthState.get();
-        healthState.set(new HealthState(healthy, current.lastFailureTime));
+        this.healthy = healthy;
     }
 
     public long getLastFailureTime() {
-        return healthState.get().lastFailureTime;
+        return lastFailureTime;
     }
 
     public void setLastFailureTime(long lastFailureTime) {
-        HealthState current = healthState.get();
-        healthState.set(new HealthState(current.healthy, lastFailureTime));
+        this.lastFailureTime = lastFailureTime;
     }
 
     /**
      * Marks this server as healthy.
-     * Atomically sets both healthy=true and lastFailureTime=0.
      */
     public void markHealthy() {
-        healthState.set(new HealthState(true, 0));
+        this.healthy = true;
+        this.lastFailureTime = 0;
     }
 
     /**
      * Marks this server as unhealthy.
-     * Atomically sets both healthy=false and lastFailureTime=current time.
      */
     public void markUnhealthy() {
-        healthState.set(new HealthState(false, System.currentTimeMillis()));
-    }
-    
-    /**
-     * Gets the complete health state atomically.
-     * Use this when you need to read both healthy and lastFailureTime together
-     * to avoid race conditions.
-     * 
-     * @return immutable HealthState snapshot
-     */
-    HealthState getHealthState() {
-        return healthState.get();
+        this.healthy = false;
+        this.lastFailureTime = System.currentTimeMillis();
     }
 
     @Override

@@ -20,10 +20,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
 /**
@@ -55,8 +53,6 @@ public class MultinodeConnectionManager {
     // Health check and redistribution support
     private final HealthCheckConfig healthCheckConfig;
     private final AtomicLong lastHealthCheckTimestamp;
-    private final AtomicBoolean healthCheckInProgress;  // Prevents concurrent health check execution
-    private final ReentrantLock clusterHealthLock;  // Protects cluster health generation
     private final HealthCheckValidator healthCheckValidator;
     private final ConnectionTracker connectionTracker;
     private final ConnectionRedistributor connectionRedistributor;
@@ -96,8 +92,6 @@ public class MultinodeConnectionManager {
         this.healthListeners = new ArrayList<>(); // Phase 2: Initialize listener list
         this.healthCheckConfig = healthCheckConfig != null ? healthCheckConfig : HealthCheckConfig.createDefault();
         this.lastHealthCheckTimestamp = new AtomicLong(0);
-        this.healthCheckInProgress = new AtomicBoolean(false);
-        this.clusterHealthLock = new ReentrantLock();
         this.connectionTracker = connectionTracker != null ? connectionTracker : new ConnectionTracker();
         this.healthCheckValidator = new HealthCheckValidator(this.healthCheckConfig, this);
         this.connectionRedistributor = new ConnectionRedistributor(this.connectionTracker, this.healthCheckConfig);
@@ -170,7 +164,7 @@ public class MultinodeConnectionManager {
     
     /**
      * Attempts to trigger a health check if enough time has elapsed since the last check.
-     * Uses AtomicBoolean to ensure only one thread executes the health check at a time.
+     * Uses compareAndSet to ensure only one thread executes the health check.
      * Non-blocking - if another thread is already doing a health check, this returns immediately.
      */
     private void tryTriggerHealthCheck() {
@@ -180,21 +174,14 @@ public class MultinodeConnectionManager {
         
         // Only check if interval has passed
         if (elapsed >= healthCheckConfig.getHealthCheckIntervalMs()) {
-            // Try to acquire health check lock - prevents concurrent execution
-            if (healthCheckInProgress.compareAndSet(false, true)) {
+            // Atomic update - only one thread succeeds
+            if (lastHealthCheckTimestamp.compareAndSet(lastCheck, now)) {
                 try {
-                    // Update timestamp BEFORE starting (prevents other threads from trying)
-                    lastHealthCheckTimestamp.set(now);
                     performHealthCheck();
                 } catch (Exception e) {
                     log.warn("Health check failed: {}", e.getMessage());
                     // Don't fail the connection attempt - health check is best effort
-                } finally {
-                    // Always release lock
-                    healthCheckInProgress.set(false);
                 }
-            } else {
-                log.debug("Health check already in progress, skipping");
             }
         }
     }
@@ -561,16 +548,15 @@ public class MultinodeConnectionManager {
         
         // Try to connect to all servers
         for (ServerEndpoint server : serverEndpoints) {
-            // Atomically read health state to avoid race conditions
-            ServerEndpoint.HealthState state = server.getHealthState();
-            if (!state.healthy) {
+            if (!server.isHealthy()) {
                 // Attempt to recover unhealthy servers if enough time has passed
                 long currentTime = System.currentTimeMillis();
-                if ((currentTime - state.lastFailureTime) > retryDelayMs) {
+                if ((currentTime - server.getLastFailureTime()) > retryDelayMs) {
                     log.info("Attempting to recover unhealthy server {} during connect()", server.getAddress());
                     try {
                         createChannelAndStub(server);
-                        server.markHealthy();  // Atomically set both fields
+                        server.setHealthy(true);
+                        server.setLastFailureTime(0);
                         log.info("Successfully recovered server {} during connect()", server.getAddress());
                         // Continue to attempt connection below
                     } catch (Exception e) {
@@ -1110,20 +1096,12 @@ public class MultinodeConnectionManager {
      * Generates the cluster health status string.
      * Format: "host1:port1(UP);host2:port2(DOWN);host3:port3(UP)"
      * 
-     * Thread-safe: Uses ReentrantLock to ensure atomic snapshot of all server health states.
-     * This prevents generating inconsistent health strings where the state never existed.
-     * 
      * @return Cluster health status string
      */
     public String generateClusterHealth() {
-        clusterHealthLock.lock();
-        try {
-            return serverEndpoints.stream()
-                    .map(endpoint -> endpoint.getAddress() + "(" + (endpoint.isHealthy() ? "UP" : "DOWN") + ")")
-                    .collect(Collectors.joining(";"));
-        } finally {
-            clusterHealthLock.unlock();
-        }
+        return serverEndpoints.stream()
+                .map(endpoint -> endpoint.getAddress() + "(" + (endpoint.isHealthy() ? "UP" : "DOWN") + ")")
+                .collect(Collectors.joining(";"));
     }
     
     /**
