@@ -93,9 +93,11 @@ public class ClusterHealthTracker {
         // Atomic check-and-update using compute()
         lastKnownHealth.compute(connHash, (key, lastHealth) -> {
             if (lastHealth == null) {
-                // First time seeing this connHash, store the health and don't trigger rebalance
-                log.debug("First cluster health report for connHash {}: {}", connHash, normalizedCurrent);
-                hasChanged[0] = false;
+                // First time seeing this connHash, store the health and ALWAYS trigger rebalancing
+                // This ensures pools are properly configured even when servers restart (new tracker state)
+                log.info("First cluster health report for connHash {}: {} - triggering pool size verification", 
+                         connHash, normalizedCurrent);
+                hasChanged[0] = true;
                 return normalizedCurrent;
             }
             
