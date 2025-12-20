@@ -1,0 +1,146 @@
+# Migration Guide: Connection Pool Abstraction
+
+This guide explains the OJP connection pool abstraction layer and how to use different pool providers.
+
+## Overview
+
+The OJP connection pool abstraction provides:
+- Provider-agnostic configuration
+- Easy switching between pool implementations (HikariCP, DBCP, etc.)
+- Secure credential handling
+- ServiceLoader-based provider discovery
+
+## How It Works
+
+OJP now uses a Service Provider Interface (SPI) for connection pool implementations. By default, HikariCP is used as the provider, but you can switch to other providers like Apache Commons DBCP.
+
+The configuration properties have always been `ojp.` prefixed and continue to work unchanged.
+
+## Using Different Providers
+
+### Default (HikariCP)
+
+HikariCP is the default provider. No changes are needed if you're already using OJP's connection pool configuration:
+
+```properties
+# ojp.properties - existing configuration continues to work
+ojp.connection.pool.maximumPoolSize=20
+ojp.connection.pool.minimumIdle=5
+ojp.connection.pool.connectionTimeout=10000
+```
+
+### Switching to DBCP
+
+To use Apache Commons DBCP2 instead of HikariCP:
+
+1. Add the DBCP provider dependency:
+```xml
+<dependency>
+    <groupId>org.openjproxy</groupId>
+    <artifactId>ojp-datasource-dbcp</artifactId>
+    <version>${ojp.version}</version>
+</dependency>
+```
+
+2. Configure the provider:
+```properties
+# ojp.properties
+ojp.datasource.provider=dbcp
+```
+
+## Configuration Reference
+
+### OJP Connection Pool Properties
+
+| Property | Description |
+|----------|-------------|
+| `ojp.connection.pool.maximumPoolSize` | Maximum pool size |
+| `ojp.connection.pool.minimumIdle` | Minimum idle connections |
+| `ojp.connection.pool.connectionTimeout` | Connection timeout (ms) |
+| `ojp.connection.pool.idleTimeout` | Idle timeout (ms) |
+| `ojp.connection.pool.maxLifetime` | Max connection lifetime (ms) |
+| `ojp.datasource.name` | Logical datasource name |
+| `ojp.datasource.provider` | Provider ID (hikari, dbcp) |
+
+### Per-Datasource Configuration
+
+For named datasources, prefix properties with the datasource name:
+
+```properties
+# Default settings
+ojp.connection.pool.maximumPoolSize=20
+
+# Named datasource "mainApp"
+mainApp.ojp.connection.pool.maximumPoolSize=30
+
+# Named datasource "batchJob"
+batchJob.ojp.connection.pool.maximumPoolSize=5
+```
+
+## Programmatic Usage
+
+### Using the SPI Directly
+
+```java
+import org.openjproxy.datasource.PoolConfig;
+import org.openjproxy.datasource.ConnectionPoolProviderRegistry;
+
+// Build configuration
+PoolConfig config = PoolConfig.builder()
+    .url("jdbc:postgresql://localhost:5432/mydb")
+    .username("user")
+    .password("secret")
+    .maxPoolSize(20)
+    .minIdle(5)
+    .connectionTimeoutMs(10000)
+    .build();
+
+// Create DataSource using default provider (HikariCP)
+DataSource ds = ConnectionPoolProviderRegistry.createDataSource(config);
+
+// Or specify a provider
+DataSource ds = ConnectionPoolProviderRegistry.createDataSource("dbcp", config);
+
+// Close when done
+ConnectionPoolProviderRegistry.closeDataSource("hikari", ds);
+```
+
+## Provider Priority
+
+When no provider is specified, the registry selects the provider with the highest priority:
+
+| Provider | Priority |
+|----------|----------|
+| HikariCP | 100 (default) |
+| DBCP | 10 |
+| Custom | 0 (default) |
+
+## Environment Variable Override
+
+Override the provider via environment variable:
+
+```bash
+export OJP_DATASOURCE_PROVIDER=dbcp
+```
+
+## Troubleshooting
+
+### "Unknown provider" error
+
+Ensure the provider module is on the classpath:
+- For DBCP: Add `ojp-datasource-dbcp` dependency
+- For HikariCP: Already included by default
+
+### Pool Statistics
+
+Get pool statistics for monitoring:
+
+```java
+Map<String, Object> stats = ConnectionPoolProviderRegistry.getStatistics("hikari", dataSource);
+System.out.println("Active connections: " + stats.get("activeConnections"));
+System.out.println("Idle connections: " + stats.get("idleConnections"));
+```
+
+## Support
+
+For questions or issues, please open an issue on the [OJP GitHub repository](https://github.com/Open-J-Proxy/ojp).

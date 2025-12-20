@@ -81,8 +81,8 @@ class ClusterHealthTrackerTest {
         
         boolean changed = tracker.hasHealthChanged(connHash, clusterHealth);
         
-        // First report should not trigger change
-        assertFalse(changed);
+        // First report should trigger change to ensure pool rebalancing on server restart
+        assertTrue(changed);
         assertEquals(clusterHealth, tracker.getLastKnownHealth(connHash));
     }
 
