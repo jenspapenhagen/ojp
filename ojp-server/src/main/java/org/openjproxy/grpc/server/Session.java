@@ -37,7 +37,7 @@ public class Session {
     @Getter
     private XAResource xaResource;
     @Getter
-    private Object backendSession; // Holds BackendSession for XA pooling (avoids hard dependency)
+    private Object backendSession; // Holds XABackendSession for XA pooling (avoids hard dependency)
     private Map<String, ResultSet> resultSetMap;
     private Map<String, Statement> statementMap;
     private Map<String, PreparedStatement> preparedStatementMap;
@@ -81,7 +81,7 @@ public class Session {
      * This method is thread-safe and can only be called once.
      * 
      * @param xaConn The XAConnection to bind
-     * @param backendSession The BackendSession wrapper (from XA pool)
+     * @param backendSession The XABackendSession wrapper (from XA pool)
      * @throws IllegalStateException if XAConnection is already bound (unless both parameters are null for unbinding)
      */
     public synchronized void bindXAConnection(XAConnection xaConn, Object backendSession) {
@@ -117,7 +117,7 @@ public class Session {
     /**
      * Sets the backend session reference for XA pooling.
      * 
-     * @param backendSession The BackendSession from the XA pool
+     * @param backendSession The XABackendSession from the XA pool
      */
     public void setBackendSession(Object backendSession) {
         this.backendSession = backendSession;
@@ -207,17 +207,17 @@ public class Session {
             return;
         }
 
-        // For XA connections with pooled BackendSession, return session to pool first
+        // For XA connections with pooled XABackendSession, return session to pool first
         if (isXA && backendSession != null) {
             try {
-                log.debug("Returning BackendSession to pool for session {}", sessionUUID);
-                if (backendSession instanceof org.openjproxy.xa.pool.BackendSession) {
-                    org.openjproxy.xa.pool.BackendSession pooledSession = 
-                        (org.openjproxy.xa.pool.BackendSession) backendSession;
+                log.debug("Returning XABackendSession to pool for session {}", sessionUUID);
+                if (backendSession instanceof org.openjproxy.xa.pool.XABackendSession) {
+                    org.openjproxy.xa.pool.XABackendSession pooledSession = 
+                        (org.openjproxy.xa.pool.XABackendSession) backendSession;
                     pooledSession.close(); // Returns to pool
                 }
             } catch (Exception e) {
-                log.error("Error returning BackendSession to pool", e);
+                log.error("Error returning XABackendSession to pool", e);
             }
         }
 

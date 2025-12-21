@@ -1,6 +1,6 @@
 package org.openjproxy.xa.pool.commons;
 
-import org.openjproxy.xa.pool.BackendSession;
+import org.openjproxy.xa.pool.XABackendSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,7 +10,7 @@ import java.sql.Connection;
 import java.sql.SQLException;
 
 /**
- * Default implementation of {@link BackendSession} that wraps an {@link XAConnection}.
+ * Default implementation of {@link XABackendSession} that wraps an {@link XAConnection}.
  * <p>
  * This class provides the poolable session abstraction over a JDBC XA connection.
  * It handles lifecycle operations (open, close, reset, health checks) and provides
@@ -31,7 +31,7 @@ import java.sql.SQLException;
  * <p><strong>Critical Invariant:</strong> reset() is ONLY called after transaction
  * completion (COMMITTED or ROLLEDBACK state), never while in PREPARED state.</p>
  */
-public class BackendSessionImpl implements BackendSession {
+public class BackendSessionImpl implements XABackendSession {
     private static final Logger log = LoggerFactory.getLogger(BackendSessionImpl.class);
     
     private final XAConnection xaConnection;

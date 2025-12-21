@@ -24,7 +24,7 @@ import java.sql.SQLException;
  * <p><strong>Important:</strong> {@code reset()} must NEVER be called on a session in
  * PREPARED state. Sessions in PREPARED state must be pinned until commit/rollback.</p>
  */
-public interface BackendSession extends AutoCloseable {
+public interface XABackendSession extends AutoCloseable {
     
     /**
      * Opens and initializes the backend session.

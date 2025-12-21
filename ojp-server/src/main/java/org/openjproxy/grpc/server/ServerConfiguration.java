@@ -35,13 +35,6 @@ public class ServerConfiguration {
     private static final String SLOW_QUERY_FAST_SLOT_TIMEOUT_KEY = "ojp.server.slowQuerySegregation.fastSlotTimeout";
     private static final String SLOW_QUERY_UPDATE_GLOBAL_AVG_INTERVAL_KEY = "ojp.server.slowQuerySegregation.updateGlobalAvgInterval";
     
-    // XA pooling configuration keys
-    private static final String XA_POOLING_ENABLED_KEY = "ojp.xa.pooling.enabled";
-    private static final String XA_MAX_POOL_SIZE_KEY = "ojp.xa.maxPoolSize";
-    private static final String XA_MIN_IDLE_KEY = "ojp.xa.minIdle";
-    private static final String XA_MAX_WAIT_MILLIS_KEY = "ojp.xa.maxWaitMillis";
-    private static final String XA_IDLE_TIMEOUT_MINUTES_KEY = "ojp.xa.idleTimeoutMinutes";
-    private static final String XA_MAX_LIFETIME_MINUTES_KEY = "ojp.xa.maxLifetimeMinutes";
 
     // Default values
     public static final int DEFAULT_SERVER_PORT = CommonConstants.DEFAULT_PORT_NUMBER;
@@ -92,13 +85,6 @@ public class ServerConfiguration {
     private final long slowQueryFastSlotTimeout;
     private final long slowQueryUpdateGlobalAvgInterval;
     
-    // XA pooling configuration values
-    private final boolean xaPoolingEnabled;
-    private final int xaMaxPoolSize;
-    private final int xaMinIdle;
-    private final long xaMaxWaitMillis;
-    private final long xaIdleTimeoutMinutes;
-    private final long xaMaxLifetimeMinutes;
 
     public ServerConfiguration() {
         this.serverPort = getIntProperty(SERVER_PORT_KEY, DEFAULT_SERVER_PORT);
@@ -120,13 +106,6 @@ public class ServerConfiguration {
         this.slowQueryFastSlotTimeout = getLongProperty(SLOW_QUERY_FAST_SLOT_TIMEOUT_KEY, DEFAULT_SLOW_QUERY_FAST_SLOT_TIMEOUT);
         this.slowQueryUpdateGlobalAvgInterval = getLongProperty(SLOW_QUERY_UPDATE_GLOBAL_AVG_INTERVAL_KEY, DEFAULT_SLOW_QUERY_UPDATE_GLOBAL_AVG_INTERVAL);
         
-        // XA pooling configuration
-        this.xaPoolingEnabled = getBooleanProperty(XA_POOLING_ENABLED_KEY, DEFAULT_XA_POOLING_ENABLED);
-        this.xaMaxPoolSize = getIntProperty(XA_MAX_POOL_SIZE_KEY, DEFAULT_XA_MAX_POOL_SIZE);
-        this.xaMinIdle = getIntProperty(XA_MIN_IDLE_KEY, DEFAULT_XA_MIN_IDLE);
-        this.xaMaxWaitMillis = getLongProperty(XA_MAX_WAIT_MILLIS_KEY, DEFAULT_XA_MAX_WAIT_MILLIS);
-        this.xaIdleTimeoutMinutes = getLongProperty(XA_IDLE_TIMEOUT_MINUTES_KEY, DEFAULT_XA_IDLE_TIMEOUT_MINUTES);
-        this.xaMaxLifetimeMinutes = getLongProperty(XA_MAX_LIFETIME_MINUTES_KEY, DEFAULT_XA_MAX_LIFETIME_MINUTES);
 
         logConfigurationSummary();
     }
@@ -225,12 +204,6 @@ public class ServerConfiguration {
         logger.info("  Slow Query Slow Slot Timeout: {} ms", slowQuerySlowSlotTimeout);
         logger.info("  Slow Query Fast Slot Timeout: {} ms", slowQueryFastSlotTimeout);
         logger.info("  Slow Query Update Global Avg Interval: {} seconds", slowQueryUpdateGlobalAvgInterval);
-        logger.info("  XA Pooling Enabled: {}", xaPoolingEnabled);
-        logger.info("  XA Max Pool Size: {}", xaMaxPoolSize);
-        logger.info("  XA Min Idle: {}", xaMinIdle);
-        logger.info("  XA Max Wait Millis: {} ms", xaMaxWaitMillis);
-        logger.info("  XA Idle Timeout Minutes: {} minutes", xaIdleTimeoutMinutes);
-        logger.info("  XA Max Lifetime Minutes: {} minutes", xaMaxLifetimeMinutes);
     }
 
     // Getters
@@ -306,28 +279,4 @@ public class ServerConfiguration {
         return slowQueryUpdateGlobalAvgInterval;
     }
     
-    // XA pooling getters
-    public boolean isXaPoolingEnabled() {
-        return xaPoolingEnabled;
-    }
-    
-    public int getXaMaxPoolSize() {
-        return xaMaxPoolSize;
-    }
-    
-    public int getXaMinIdle() {
-        return xaMinIdle;
-    }
-    
-    public long getXaMaxWaitMillis() {
-        return xaMaxWaitMillis;
-    }
-    
-    public long getXaIdleTimeoutMinutes() {
-        return xaIdleTimeoutMinutes;
-    }
-    
-    public long getXaMaxLifetimeMinutes() {
-        return xaMaxLifetimeMinutes;
-    }
 }

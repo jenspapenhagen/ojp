@@ -13,7 +13,7 @@ import java.util.concurrent.locks.ReentrantLock;
  * <p>Each XA transaction branch (identified by {@link XidKey}) has one TxContext that tracks:</p>
  * <ul>
  *   <li>Current transaction state ({@link TxState})</li>
- *   <li>Bound backend session ({@link BackendSession})</li>
+ *   <li>Bound backend session ({@link XABackendSession})</li>
  *   <li>Timestamps for diagnostics and leak detection</li>
  *   <li>Optional timeout and read-only hints</li>
  * </ul>
@@ -42,7 +42,7 @@ public class TxContext {
     private final ReentrantLock lock = new ReentrantLock();
     
     private TxState state;
-    private BackendSession session;
+    private XABackendSession session;
     private javax.transaction.xa.Xid actualXid;  // Store the actual Xid object to reuse across XA calls
     private Integer timeoutSeconds;
     private Boolean readOnlyHint;
@@ -91,9 +91,9 @@ public class TxContext {
     /**
      * Gets the backend session binding.
      * 
-     * @return the BackendSession, or null if not bound
+     * @return the XABackendSession, or null if not bound
      */
-    public BackendSession getSession() {
+    public XABackendSession getSession() {
         lock.lock();
         try {
             return session;
@@ -107,7 +107,7 @@ public class TxContext {
      * 
      * @param session the backend session to bind
      */
-    public void setSession(BackendSession session) {
+    public void setSession(XABackendSession session) {
         lock.lock();
         try {
             this.session = session;
@@ -262,7 +262,7 @@ public class TxContext {
      * @param newSession optional new session binding (for ACTIVE transition)
      * @throws XAException if the transition is invalid
      */
-    public void transitionTo(TxState newState, BackendSession newSession) throws XAException {
+    public void transitionTo(TxState newState, XABackendSession newSession) throws XAException {
         lock.lock();
         try {
             validateTransition(state, newState);
@@ -330,7 +330,7 @@ public class TxContext {
      * @param newSession the backend session to bind
      * @throws IllegalStateException if current state is not NONEXISTENT
      */
-    public void transitionToActive(BackendSession newSession) {
+    public void transitionToActive(XABackendSession newSession) {
         lock.lock();
         try {
             if (state != TxState.NONEXISTENT) {

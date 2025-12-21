@@ -1,6 +1,6 @@
 package org.openjproxy.xa.pool.spi;
 
-import org.openjproxy.xa.pool.BackendSession;
+import org.openjproxy.xa.pool.XABackendSession;
 
 import javax.sql.XADataSource;
 import java.sql.SQLException;
@@ -235,7 +235,7 @@ public interface XAConnectionPoolProvider {
      * <p>The implementation should:</p>
      * <ul>
      *   <li>Obtain an XAConnection from the pool</li>
-     *   <li>Wrap it in a BackendSession implementation</li>
+     *   <li>Wrap it in a XABackendSession implementation</li>
      *   <li>Validate the connection if configured to do so</li>
      *   <li>Block if pool is exhausted (up to configured timeout)</li>
      * </ul>
@@ -244,7 +244,7 @@ public interface XAConnectionPoolProvider {
      * @return a backend session wrapping a pooled XAConnection, never null
      * @throws Exception if session cannot be borrowed (timeout, pool exhausted, etc.)
      */
-    BackendSession borrowSession(Object xaDataSource) throws Exception;
+    XABackendSession borrowSession(Object xaDataSource) throws Exception;
     
     /**
      * Returns a backend session to the pool after transaction completion.
@@ -254,7 +254,7 @@ public interface XAConnectionPoolProvider {
      * 
      * <p>The implementation should:</p>
      * <ul>
-     *   <li>Call {@link BackendSession#reset()} to clean session state</li>
+     *   <li>Call {@link XABackendSession#reset()} to clean session state</li>
      *   <li>Return the XAConnection to the pool</li>
      *   <li>If reset() fails, invalidate the session instead</li>
      * </ul>
@@ -266,7 +266,7 @@ public interface XAConnectionPoolProvider {
      * @param session the backend session to return
      * @throws Exception if session cannot be returned
      */
-    void returnSession(Object xaDataSource, BackendSession session) throws Exception;
+    void returnSession(Object xaDataSource, XABackendSession session) throws Exception;
     
     /**
      * Invalidates a backend session, removing it from the pool.
@@ -285,5 +285,5 @@ public interface XAConnectionPoolProvider {
      * @param session the backend session to invalidate
      * @throws Exception if session cannot be invalidated
      */
-    void invalidateSession(Object xaDataSource, BackendSession session) throws Exception;
+    void invalidateSession(Object xaDataSource, XABackendSession session) throws Exception;
 }

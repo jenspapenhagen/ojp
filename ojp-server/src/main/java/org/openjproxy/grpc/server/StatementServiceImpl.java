@@ -54,7 +54,7 @@ import org.openjproxy.grpc.server.utils.SessionInfoUtils;
 import org.openjproxy.grpc.server.utils.StatementRequestValidator;
 import org.openjproxy.grpc.server.utils.UrlParser;
 import org.openjproxy.grpc.server.xa.XADataSourceFactory;
-import org.openjproxy.xa.pool.BackendSession;
+import org.openjproxy.xa.pool.XABackendSession;
 import org.openjproxy.xa.pool.XATransactionRegistry;
 import org.openjproxy.xa.pool.XidKey;
 import org.openjproxy.xa.pool.spi.XAConnectionPoolProvider;
@@ -150,22 +150,33 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
      * Loads the provider via ServiceLoader (Commons Pool 2 by default).
      */
     private void initializeXAPoolProvider() {
-        if (!serverConfiguration.isXaPoolingEnabled()) {
-            log.info("XA pooling is disabled by configuration");
-            return;
-        }
+        // XA pooling is always enabled
+        // Select the provider with the HIGHEST priority (100 = highest, 0 = lowest)
         
         try {
             ServiceLoader<XAConnectionPoolProvider> loader = ServiceLoader.load(XAConnectionPoolProvider.class);
+            XAConnectionPoolProvider selectedProvider = null;
+            int highestPriority = Integer.MIN_VALUE;
+            
             for (XAConnectionPoolProvider provider : loader) {
                 if (provider.isAvailable()) {
-                    this.xaPoolProvider = provider;
-                    log.info("Loaded XA Pool Provider: {} (priority: {})", 
+                    log.debug("Found available XA Pool Provider: {} (priority: {})", 
                             provider.getClass().getName(), provider.getPriority());
-                    return;
+                    
+                    if (provider.getPriority() > highestPriority) {
+                        selectedProvider = provider;
+                        highestPriority = provider.getPriority();
+                    }
                 }
             }
-            log.warn("No XA Pool Provider found via ServiceLoader, XA pooling will be unavailable");
+            
+            if (selectedProvider != null) {
+                this.xaPoolProvider = selectedProvider;
+                log.info("Selected XA Pool Provider: {} (priority: {})", 
+                        selectedProvider.getClass().getName(), selectedProvider.getPriority());
+            } else {
+                log.warn("No available XA Pool Provider found via ServiceLoader, XA pooling will be unavailable");
+            }
         } catch (Exception e) {
             log.error("Failed to load XA Pool Provider: {}", e.getMessage(), e);
         }
@@ -285,14 +296,15 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             }
             
             // Branch based on XA pooling configuration
-            if (serverConfiguration.isXaPoolingEnabled() && xaPoolProvider != null) {
-                // **NEW PATH: XA Pool Provider SPI (enabled by default)**
+            // XA Pool Provider SPI (always enabled)
+            if (xaPoolProvider != null) {
                 handleXAConnectionWithPooling(connectionDetails, connHash, actualMaxXaTransactions, 
                         xaStartTimeoutMillis, responseObserver);
             } else {
-                // **OLD PATH: Pass-through XA (disabled, kept for rollback capability)**
-                handleXAConnectionPassThrough(connectionDetails, connHash, actualMaxXaTransactions, 
-                        xaStartTimeoutMillis, responseObserver);
+                log.error("XA Pool Provider not initialized");
+                responseObserver.onError(Status.INTERNAL
+                        .withDescription("XA Pool Provider not available")
+                        .asRuntimeException());
             }
             return;
         }
@@ -376,7 +388,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     
     /**
      * Handle XA connection using XA Pool Provider SPI (NEW PATH - enabled by default).
-     * Creates pooled XA DataSource and allocates a BackendSession immediately for the client.
+     * Creates pooled XA DataSource and allocates a XABackendSession immediately for the client.
      * <p>
      * Note: We allocate eagerly (not deferred) because XA applications expect getConnection()
      * to work immediately after creating an XAConnection, before xaStart() is called.
@@ -430,12 +442,12 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         
         this.sessionManager.registerClientUUID(connHash, connectionDetails.getClientUUID());
         
-        // Borrow a BackendSession from the pool for immediate use
+        // Borrow a XABackendSession from the pool for immediate use
         // Note: Unlike the original "deferred" approach, we allocate eagerly because
         // XA applications expect getConnection() to work immediately, before xaStart()
         try {
-            org.openjproxy.xa.pool.BackendSession backendSession = 
-                    (org.openjproxy.xa.pool.BackendSession) xaPoolProvider.borrowSession(registry.getPooledXADataSource());
+            org.openjproxy.xa.pool.XABackendSession backendSession = 
+                    (org.openjproxy.xa.pool.XABackendSession) xaPoolProvider.borrowSession(registry.getPooledXADataSource());
             
             XAConnection xaConnection = backendSession.getXAConnection();
             Connection connection = backendSession.getConnection();
@@ -444,7 +456,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             SessionInfo sessionInfo = this.sessionManager.createXASession(
                     connectionDetails.getClientUUID(), connection, xaConnection);
             
-            // Store the BackendSession reference in the session for later lifecycle management
+            // Store the XABackendSession reference in the session for later lifecycle management
             Session session = this.sessionManager.getSession(sessionInfo);
             if (session != null) {
                 session.setBackendSession(backendSession);
@@ -458,7 +470,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             responseObserver.onCompleted();
             
         } catch (Exception e) {
-            log.error("Failed to borrow BackendSession from pool for connection hash {}: {}", 
+            log.error("Failed to borrow XABackendSession from pool for connection hash {}: {}", 
                     connHash, e.getMessage(), e);
             SQLException sqlException = new SQLException("Failed to allocate XA session from pool: " + e.getMessage(), e);
             sendSQLExceptionMetadata(sqlException, responseObserver);
@@ -470,63 +482,6 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
      * Handle XA connection using pass-through approach (OLD PATH - disabled by default, kept for rollback).
      * Creates native XADataSource and eager XAConnection allocation.
      */
-    private void handleXAConnectionPassThrough(ConnectionDetails connectionDetails, String connHash,
-                                              int actualMaxXaTransactions, long xaStartTimeoutMillis,
-                                              StreamObserver<SessionInfo> responseObserver) {
-        log.info("Using XA pass-through (legacy) for connHash: {}", connHash);
-        
-        // Handle XA connection - create native XADataSource (pass-through approach)
-        XADataSource xaDataSource = this.xaDataSourceMap.get(connHash);
-        if (xaDataSource == null) {
-            try {
-                // Create XADataSource for the database using factory
-                String url = UrlParser.parseUrl(connectionDetails.getUrl());
-                xaDataSource = XADataSourceFactory.createXADataSource(url, connectionDetails);
-                
-                this.xaDataSourceMap.put(connHash, xaDataSource);
-                
-                // Create slow query segregation manager for XA datasource
-                // Use actualMaxXaTransactions as the pool size for XA operations
-                createSlowQuerySegregationManagerForDatasource(connHash, actualMaxXaTransactions, true, xaStartTimeoutMillis);
-                
-                log.info("Created new native XADataSource for XA pass-through with connHash: {}", connHash);
-                
-            } catch (Exception e) {
-                log.error("Failed to create XA datasource for connection hash {}: {}", connHash, e.getMessage(), e);
-                SQLException sqlException = new SQLException("Failed to create XA datasource: " + e.getMessage(), e);
-                sendSQLExceptionMetadata(sqlException, responseObserver);
-                return;
-            }
-        }
-        
-        this.sessionManager.registerClientUUID(connHash, connectionDetails.getClientUUID());
-        
-        // For XA connections, create session with XAConnection immediately
-        // (This ensures XAResource is available for client's JTA transaction manager)
-        try {
-            XAConnection xaConnection = xaDataSource.getXAConnection();
-            Connection connection = xaConnection.getConnection();
-            
-            // Create session with XA support using sessionManager
-            SessionInfo sessionInfo = this.sessionManager.createXASession(
-                    connectionDetails.getClientUUID(), connection, xaConnection);
-            
-            // Server does not populate targetServer - client will set it on future requests
-            
-            log.info("Created XA session (pass-through) with UUID: {} for client: {}", 
-                    sessionInfo.getSessionUUID(), connectionDetails.getClientUUID());
-            
-            responseObserver.onNext(sessionInfo);
-            this.dbNameMap.put(connHash, DatabaseUtils.resolveDbName(connectionDetails.getUrl()));
-            responseObserver.onCompleted();
-            return;
-            
-        } catch (SQLException e) {
-            log.error("Failed to create XA connection for hash {}: {}", connHash, e.getMessage(), e);
-            sendSQLExceptionMetadata(e, responseObserver);
-            return;
-        }
-    }
     
     /**
      * Determine XADataSource class name based on database URL.
@@ -1759,7 +1714,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             }
             
             // Branch based on XA pooling configuration
-            if (serverConfiguration.isXaPoolingEnabled() && xaPoolProvider != null) {
+            if (xaPoolProvider != null) {
                 // **NEW PATH: Use XATransactionRegistry**
                 handleXAStartWithPooling(request, session, responseObserver);
             } else {
@@ -1802,13 +1757,13 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         // Convert proto Xid to XidKey
         XidKey xidKey = XidKey.from(convertXid(request.getXid()));
         
-        // Get the existing BackendSession that was allocated during connect()
-        BackendSession backendSession = (BackendSession) session.getBackendSession();
+        // Get the existing XABackendSession that was allocated during connect()
+        XABackendSession backendSession = (XABackendSession) session.getBackendSession();
         if (backendSession == null) {
-            throw new SQLException("No BackendSession found in session");
+            throw new SQLException("No XABackendSession found in session");
         }
         
-        // Register the existing BackendSession with the XA transaction (avoids double allocation)
+        // Register the existing XABackendSession with the XA transaction (avoids double allocation)
         registry.registerExistingSession(xidKey, backendSession, request.getFlags());
         
         com.openjproxy.grpc.XaResponse response = com.openjproxy.grpc.XaResponse.newBuilder()
@@ -1850,7 +1805,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             }
             
             // Branch based on XA pooling configuration
-            if (serverConfiguration.isXaPoolingEnabled() && xaPoolProvider != null) {
+            if (xaPoolProvider != null) {
                 // **NEW PATH: Use XATransactionRegistry**
                 String connHash = session.getSessionInfo().getConnHash();
                 XATransactionRegistry registry = xaRegistries.get(connHash);
@@ -1898,7 +1853,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             int result;
             
             // Branch based on XA pooling configuration
-            if (serverConfiguration.isXaPoolingEnabled() && xaPoolProvider != null) {
+            if (xaPoolProvider != null) {
                 // **NEW PATH: Use XATransactionRegistry**
                 String connHash = session.getSessionInfo().getConnHash();
                 XATransactionRegistry registry = xaRegistries.get(connHash);
@@ -1943,7 +1898,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             }
             
             // Branch based on XA pooling configuration
-            if (serverConfiguration.isXaPoolingEnabled() && xaPoolProvider != null) {
+            if (xaPoolProvider != null) {
                 // **NEW PATH: Use XATransactionRegistry**
                 String connHash = session.getSessionInfo().getConnHash();
                 XATransactionRegistry registry = xaRegistries.get(connHash);
@@ -1955,7 +1910,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 registry.xaCommit(xidKey, request.getOnePhase());
                 
                 // NOTE: Do NOT unbind XAConnection here - it stays bound for session lifetime
-                // BackendSession will be returned to pool when OJP Session terminates
+                // XABackendSession will be returned to pool when OJP Session terminates
             } else {
                 // **OLD PATH: Pass-through (legacy)**
                 if (session.getXaResource() == null) {
@@ -1992,7 +1947,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             }
             
             // Branch based on XA pooling configuration
-            if (serverConfiguration.isXaPoolingEnabled() && xaPoolProvider != null) {
+            if (xaPoolProvider != null) {
                 // **NEW PATH: Use XATransactionRegistry**
                 String connHash = session.getSessionInfo().getConnHash();
                 XATransactionRegistry registry = xaRegistries.get(connHash);
@@ -2004,7 +1959,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 registry.xaRollback(xidKey);
                 
                 // NOTE: Do NOT unbind XAConnection here - it stays bound for session lifetime
-                // BackendSession will be returned to pool when OJP Session terminates
+                // XABackendSession will be returned to pool when OJP Session terminates
             } else {
                 // **OLD PATH: Pass-through (legacy)**
                 if (session.getXaResource() == null) {

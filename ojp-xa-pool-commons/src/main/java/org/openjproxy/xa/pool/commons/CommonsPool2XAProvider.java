@@ -1,6 +1,6 @@
 package org.openjproxy.xa.pool.commons;
 
-import org.openjproxy.xa.pool.BackendSession;
+import org.openjproxy.xa.pool.XABackendSession;
 import org.openjproxy.xa.pool.spi.XAConnectionPoolProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -153,7 +153,7 @@ public class CommonsPool2XAProvider implements XAConnectionPoolProvider {
     
     @Override
     public int getPriority() {
-        return 0; // Default priority (universal provider)
+        return 100; // Highest priority - default universal provider
     }
     
     @Override
@@ -175,7 +175,7 @@ public class CommonsPool2XAProvider implements XAConnectionPoolProvider {
     }
     
     @Override
-    public BackendSession borrowSession(Object xaDataSource) throws Exception {
+    public XABackendSession borrowSession(Object xaDataSource) throws Exception {
         if (!(xaDataSource instanceof CommonsPool2XADataSource)) {
             throw new IllegalArgumentException(
                     "xaDataSource must be CommonsPool2XADataSource, got: " + 
@@ -187,7 +187,7 @@ public class CommonsPool2XAProvider implements XAConnectionPoolProvider {
     }
     
     @Override
-    public void returnSession(Object xaDataSource, BackendSession session) throws Exception {
+    public void returnSession(Object xaDataSource, XABackendSession session) throws Exception {
         if (!(xaDataSource instanceof CommonsPool2XADataSource)) {
             throw new IllegalArgumentException(
                     "xaDataSource must be CommonsPool2XADataSource");
@@ -198,7 +198,7 @@ public class CommonsPool2XAProvider implements XAConnectionPoolProvider {
     }
     
     @Override
-    public void invalidateSession(Object xaDataSource, BackendSession session) throws Exception {
+    public void invalidateSession(Object xaDataSource, XABackendSession session) throws Exception {
         if (!(xaDataSource instanceof CommonsPool2XADataSource)) {
             throw new IllegalArgumentException(
                     "xaDataSource must be CommonsPool2XADataSource");

@@ -2,7 +2,7 @@ package org.openjproxy.xa.pool.commons;
 
 import org.apache.commons.pool2.impl.GenericObjectPool;
 import org.apache.commons.pool2.impl.GenericObjectPoolConfig;
-import org.openjproxy.xa.pool.BackendSession;
+import org.openjproxy.xa.pool.XABackendSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,7 +15,7 @@ import java.time.Duration;
 import java.util.Map;
 
 /**
- * XADataSource wrapper that pools {@link BackendSession} instances using Apache Commons Pool 2.
+ * XADataSource wrapper that pools {@link XABackendSession} instances using Apache Commons Pool 2.
  * <p>
  * This class wraps a vendor XADataSource and provides connection pooling with configurable
  * size, timeout, validation, and eviction policies optimized for XA transaction workloads.
@@ -48,7 +48,7 @@ public class CommonsPool2XADataSource implements XADataSource {
     private static final Logger log = LoggerFactory.getLogger(CommonsPool2XADataSource.class);
     
     private final XADataSource vendorXADataSource;
-    private final GenericObjectPool<BackendSession> pool;
+    private final GenericObjectPool<XABackendSession> pool;
     private final Map<String, String> config;
     
     /**
@@ -72,7 +72,7 @@ public class CommonsPool2XADataSource implements XADataSource {
         BackendSessionFactory factory = new BackendSessionFactory(vendorXADataSource);
         
         // Configure the pool
-        GenericObjectPoolConfig<BackendSession> poolConfig = createPoolConfig(config);
+        GenericObjectPoolConfig<XABackendSession> poolConfig = createPoolConfig(config);
         
         // Create the pool
         this.pool = new GenericObjectPool<>(factory, poolConfig);
@@ -92,11 +92,11 @@ public class CommonsPool2XADataSource implements XADataSource {
      * @return a backend session from the pool
      * @throws Exception if session cannot be borrowed
      */
-    public BackendSession borrowSession() throws Exception {
+    public XABackendSession borrowSession() throws Exception {
         log.debug("Borrowing session from pool");
         
         try {
-            BackendSession session = pool.borrowObject();
+            XABackendSession session = pool.borrowObject();
             
             log.debug("Session borrowed successfully (active={}, idle={})",
                     pool.getNumActive(), pool.getNumIdle());
@@ -118,7 +118,7 @@ public class CommonsPool2XADataSource implements XADataSource {
      *
      * @param session the session to return
      */
-    public void returnSession(BackendSession session) {
+    public void returnSession(XABackendSession session) {
         if (session == null) {
             return;
         }
@@ -147,7 +147,7 @@ public class CommonsPool2XADataSource implements XADataSource {
      *
      * @param session the session to invalidate
      */
-    public void invalidateSession(BackendSession session) {
+    public void invalidateSession(XABackendSession session) {
         if (session == null) {
             return;
         }
@@ -257,8 +257,8 @@ public class CommonsPool2XADataSource implements XADataSource {
     
     // Private helper methods
     
-    private static GenericObjectPoolConfig<BackendSession> createPoolConfig(Map<String, String> config) {
-        GenericObjectPoolConfig<BackendSession> poolConfig = new GenericObjectPoolConfig<>();
+    private static GenericObjectPoolConfig<XABackendSession> createPoolConfig(Map<String, String> config) {
+        GenericObjectPoolConfig<XABackendSession> poolConfig = new GenericObjectPoolConfig<>();
         
         // Pool sizing
         int maxTotal = getIntConfig(config, "xa.maxPoolSize", 10);

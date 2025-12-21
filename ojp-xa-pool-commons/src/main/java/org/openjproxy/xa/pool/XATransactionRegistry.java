@@ -69,18 +69,18 @@ public class XATransactionRegistry {
     }
     
     /**
-     * Registers an existing BackendSession with a new XA transaction.
+     * Registers an existing XABackendSession with a new XA transaction.
      * <p>
-     * Used when BackendSession is allocated eagerly (during connect) rather than 
+     * Used when XABackendSession is allocated eagerly (during connect) rather than 
      * lazily (during xaStart). This avoids double allocation from the pool.
      * </p>
      *
      * @param xid the transaction branch identifier
-     * @param session the existing BackendSession to register
+     * @param session the existing XABackendSession to register
      * @param flags XA start flags (must be TMNOFLAGS for new transaction)
      * @throws XAException if flags are invalid, xid already exists, or XA start fails
      */
-    public void registerExistingSession(XidKey xid, BackendSession session, int flags) throws XAException {
+    public void registerExistingSession(XidKey xid, XABackendSession session, int flags) throws XAException {
         log.debug("registerExistingSession: xid={}, flags={}", xid, flagsToString(flags));
         
         // Validate flags - only TMNOFLAGS allowed for new transaction
@@ -144,7 +144,7 @@ public class XATransactionRegistry {
             
             TxContext ctx = contexts.get(xid);
             try {
-                BackendSession session = poolProvider.borrowSession(poolDataSource);
+                XABackendSession session = poolProvider.borrowSession(poolDataSource);
                 ctx.transitionToActive(session);
                 
                 // Create Xid object once and store it for reuse
@@ -427,7 +427,7 @@ public class XATransactionRegistry {
         
         // Delegate to backend XAResource.recover()
         // In a real implementation, we'd need a backend session to call recover() on
-        BackendSession session = null;
+        XABackendSession session = null;
         try {
             session = poolProvider.borrowSession(poolDataSource);
             javax.transaction.xa.Xid[] xids = session.getXAResource().recover(flag);
@@ -490,7 +490,7 @@ public class XATransactionRegistry {
      * @param xid the transaction branch identifier
      * @return the backend session, or null if transaction not found or not in valid state
      */
-    public BackendSession getSessionForTransaction(XidKey xid) {
+    public XABackendSession getSessionForTransaction(XidKey xid) {
         TxContext ctx = contexts.get(xid);
         if (ctx != null && ctx.getState().canPerformWork()) {
             return ctx.getSession();
@@ -517,7 +517,7 @@ public class XATransactionRegistry {
     // Private helper methods
     
     private void returnSessionToPool(TxContext ctx) {
-        BackendSession session = ctx.getSession();
+        XABackendSession session = ctx.getSession();
         if (session != null) {
             try {
                 poolProvider.returnSession(poolDataSource, session);
