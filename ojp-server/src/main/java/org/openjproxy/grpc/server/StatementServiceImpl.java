@@ -19,7 +19,6 @@ import com.openjproxy.grpc.SessionTerminationStatus;
 import com.openjproxy.grpc.SqlErrorType;
 import com.openjproxy.grpc.StatementRequest;
 import com.openjproxy.grpc.StatementServiceGrpc;
-import com.openjproxy.grpc.TargetCall;
 import com.openjproxy.grpc.TransactionInfo;
 import com.openjproxy.grpc.TransactionStatus;
 import com.zaxxer.hikari.HikariDataSource;
@@ -33,47 +32,44 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.io.input.ReaderInputStream;
 import org.apache.commons.lang3.StringUtils;
-import javax.annotation.PostConstruct;
 import org.openjproxy.constants.CommonConstants;
+import org.openjproxy.database.DatabaseUtils;
+import org.openjproxy.datasource.ConnectionPoolProviderRegistry;
+import org.openjproxy.datasource.PoolConfig;
 import org.openjproxy.grpc.ProtoConverter;
 import org.openjproxy.grpc.dto.OpQueryResult;
 import org.openjproxy.grpc.dto.Parameter;
-import org.openjproxy.grpc.server.utils.DateTimeUtils;
-import org.openjproxy.database.DatabaseUtils;
-import org.openjproxy.grpc.server.utils.DriverUtils;
+import org.openjproxy.grpc.server.lob.LobProcessor;
 import org.openjproxy.grpc.server.pool.ConnectionPoolConfigurer;
 import org.openjproxy.grpc.server.pool.DataSourceConfigurationManager;
-import org.openjproxy.grpc.server.utils.ConnectionHashGenerator;
-import org.openjproxy.grpc.server.utils.UrlParser;
-import org.openjproxy.grpc.server.utils.MethodReflectionUtils;
-import org.openjproxy.grpc.server.utils.MethodNameGenerator;
-import org.openjproxy.grpc.server.utils.SessionInfoUtils;
-import org.openjproxy.grpc.server.statement.ParameterHandler;
-import org.openjproxy.grpc.server.xa.XADataSourceFactory;
-import org.openjproxy.grpc.server.statement.StatementFactory;
 import org.openjproxy.grpc.server.resultset.ResultSetWrapper;
-import org.openjproxy.grpc.server.lob.LobProcessor;
+import org.openjproxy.grpc.server.statement.ParameterHandler;
+import org.openjproxy.grpc.server.statement.StatementFactory;
+import org.openjproxy.grpc.server.utils.ConnectionHashGenerator;
+import org.openjproxy.grpc.server.utils.DateTimeUtils;
+import org.openjproxy.grpc.server.utils.DriverUtils;
+import org.openjproxy.grpc.server.utils.MethodNameGenerator;
+import org.openjproxy.grpc.server.utils.MethodReflectionUtils;
+import org.openjproxy.grpc.server.utils.SessionInfoUtils;
 import org.openjproxy.grpc.server.utils.StatementRequestValidator;
-import org.openjproxy.datasource.ConnectionPoolProviderRegistry;
-import org.openjproxy.datasource.PoolConfig;
-import org.openjproxy.xa.pool.spi.XAConnectionPoolProvider;
+import org.openjproxy.grpc.server.utils.UrlParser;
+import org.openjproxy.grpc.server.xa.XADataSourceFactory;
+import org.openjproxy.xa.pool.BackendSession;
 import org.openjproxy.xa.pool.XATransactionRegistry;
 import org.openjproxy.xa.pool.XidKey;
-import org.openjproxy.xa.pool.BackendSession;
+import org.openjproxy.xa.pool.spi.XAConnectionPoolProvider;
 
+import javax.annotation.PostConstruct;
 import javax.sql.DataSource;
 import javax.sql.XAConnection;
 import javax.sql.XADataSource;
-import javax.transaction.xa.Xid;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.io.Reader;
 import java.io.Writer;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.sql.Array;
 import java.sql.Blob;
 import java.sql.CallableStatement;
@@ -87,8 +83,6 @@ import java.sql.SQLDataException;
 import java.sql.SQLException;
 import java.sql.Savepoint;
 import java.sql.Statement;
-import java.sql.Time;
-import java.sql.Timestamp;
 import java.sql.Types;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -108,12 +102,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.openjproxy.constants.CommonConstants.MAX_LOB_DATA_BLOCK_SIZE;
 import static org.openjproxy.grpc.server.Constants.EMPTY_LIST;
 import static org.openjproxy.grpc.server.Constants.EMPTY_MAP;
-import static org.openjproxy.grpc.server.Constants.EMPTY_STRING;
-import static org.openjproxy.grpc.server.Constants.SHA_256;
 import static org.openjproxy.grpc.server.GrpcExceptionHandler.sendSQLExceptionMetadata;
 
 @Slf4j
-@RequiredArgsConstructor
 public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceImplBase {
 
     private final Map<String, DataSource> datasourceMap = new ConcurrentHashMap<>();
@@ -147,11 +138,10 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         DriverUtils.registerDrivers();
     }
 
-    /**
-     * Post-construct initialization to load XA Pool Provider if enabled.
-     */
-    @PostConstruct
-    public void init() {
+    public StatementServiceImpl(SessionManager sessionManager, CircuitBreaker circuitBreaker, ServerConfiguration serverConfiguration) {
+        this.sessionManager = sessionManager;
+        this.circuitBreaker = circuitBreaker;
+        this.serverConfiguration = serverConfiguration;
         initializeXAPoolProvider();
     }
 
