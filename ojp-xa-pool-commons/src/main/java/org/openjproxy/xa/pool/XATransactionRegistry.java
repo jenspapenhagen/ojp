@@ -60,6 +60,15 @@ public class XATransactionRegistry {
     }
     
     /**
+     * Gets the pooled XA DataSource managed by this registry.
+     *
+     * @return the pooled XA DataSource instance
+     */
+    public Object getPooledXADataSource() {
+        return poolDataSource;
+    }
+    
+    /**
      * Starts an XA transaction branch.
      * <p>
      * For TMNOFLAGS: Creates new TxContext and borrows a backend session.<br>

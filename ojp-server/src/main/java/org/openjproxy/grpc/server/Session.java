@@ -103,6 +103,15 @@ public class Session {
             throw new RuntimeException("Failed to bind XAConnection", e);
         }
     }
+    
+    /**
+     * Sets the backend session reference for XA pooling.
+     * 
+     * @param backendSession The BackendSession from the XA pool
+     */
+    public void setBackendSession(Object backendSession) {
+        this.backendSession = backendSession;
+    }
 
     public SessionInfo getSessionInfo() {
         log.debug("get session info -> " + this.connectionHash);

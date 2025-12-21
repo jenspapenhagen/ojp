@@ -376,7 +376,11 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     
     /**
      * Handle XA connection using XA Pool Provider SPI (NEW PATH - enabled by default).
-     * Creates pooled XA DataSource and deferred XA session (lazy allocation).
+     * Creates pooled XA DataSource and allocates a BackendSession immediately for the client.
+     * <p>
+     * Note: We allocate eagerly (not deferred) because XA applications expect getConnection()
+     * to work immediately after creating an XAConnection, before xaStart() is called.
+     * </p>
      */
     private void handleXAConnectionWithPooling(ConnectionDetails connectionDetails, String connHash,
                                                int actualMaxXaTransactions, long xaStartTimeoutMillis,
@@ -423,16 +427,40 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         
         this.sessionManager.registerClientUUID(connHash, connectionDetails.getClientUUID());
         
-        // Create DEFERRED XA session (no XAConnection allocated yet - lazy allocation on xaStart)
-        SessionInfo sessionInfo = this.sessionManager.createDeferredXASession(
-                connectionDetails.getClientUUID(), connHash);
-        
-        log.info("Created deferred XA session (pooled) with client UUID: {} for connHash: {}", 
-                connectionDetails.getClientUUID(), connHash);
-        
-        responseObserver.onNext(sessionInfo);
-        this.dbNameMap.put(connHash, DatabaseUtils.resolveDbName(connectionDetails.getUrl()));
-        responseObserver.onCompleted();
+        // Borrow a BackendSession from the pool for immediate use
+        // Note: Unlike the original "deferred" approach, we allocate eagerly because
+        // XA applications expect getConnection() to work immediately, before xaStart()
+        try {
+            org.openjproxy.xa.pool.BackendSession backendSession = 
+                    (org.openjproxy.xa.pool.BackendSession) xaPoolProvider.borrowSession(registry.getPooledXADataSource());
+            
+            XAConnection xaConnection = backendSession.getXAConnection();
+            Connection connection = backendSession.getConnection();
+            
+            // Create XA session with the pooled XAConnection
+            SessionInfo sessionInfo = this.sessionManager.createXASession(
+                    connectionDetails.getClientUUID(), connection, xaConnection);
+            
+            // Store the BackendSession reference in the session for later lifecycle management
+            Session session = this.sessionManager.getSession(sessionInfo.getSessionUUID());
+            if (session != null) {
+                session.setBackendSession(backendSession);
+            }
+            
+            log.info("Created XA session (pooled, eager allocation) with client UUID: {} for connHash: {}", 
+                    connectionDetails.getClientUUID(), connHash);
+            
+            responseObserver.onNext(sessionInfo);
+            this.dbNameMap.put(connHash, DatabaseUtils.resolveDbName(connectionDetails.getUrl()));
+            responseObserver.onCompleted();
+            
+        } catch (Exception e) {
+            log.error("Failed to borrow BackendSession from pool for connection hash {}: {}", 
+                    connHash, e.getMessage(), e);
+            SQLException sqlException = new SQLException("Failed to allocate XA session from pool: " + e.getMessage(), e);
+            sendSQLExceptionMetadata(sqlException, responseObserver);
+            return;
+        }
     }
     
     /**
