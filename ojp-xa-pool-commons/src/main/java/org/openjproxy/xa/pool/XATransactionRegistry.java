@@ -322,6 +322,19 @@ public class XATransactionRegistry {
             ctx.getSession().getXAResource().commit(actualXid, onePhase);
             
             ctx.transitionToCommitted();
+            
+            // IMPORTANT: Sanitize the session to reset XA state for next transaction
+            // The session stays bound to OJP Session (doesn't return to pool)
+            // but needs XA state reset between transactions
+            try {
+                ctx.getSession().sanitizeAfterTransaction();
+                log.debug("Session sanitized after commit for xid={}", xid);
+            } catch (java.sql.SQLException e) {
+                log.warn("Failed to sanitize session after commit for xid={}: {}", xid, e.getMessage());
+                // Don't throw - commit was successful, sanitization is best-effort
+                // If sanitization fails, next transaction may have issues, but commit succeeded
+            }
+            
             // NOTE: Do NOT return session to pool here - session stays bound to OJP Session
             // for multiple transactions. Pool return happens when OJP Session terminates.
             contexts.remove(xid);
@@ -382,6 +395,18 @@ public class XATransactionRegistry {
             ctx.getSession().getXAResource().rollback(actualXid);
             
             ctx.transitionToRolledBack();
+            
+            // IMPORTANT: Sanitize the session to reset XA state for next transaction
+            // The session stays bound to OJP Session (doesn't return to pool)
+            // but needs XA state reset between transactions
+            try {
+                ctx.getSession().sanitizeAfterTransaction();
+                log.debug("Session sanitized after rollback for xid={}", xid);
+            } catch (java.sql.SQLException e) {
+                log.warn("Failed to sanitize session after rollback for xid={}: {}", xid, e.getMessage());
+                // Don't throw - rollback was successful, sanitization is best-effort
+            }
+            
             // NOTE: Do NOT return session to pool here - session stays bound to OJP Session
             // for multiple transactions. Pool return happens when OJP Session terminates.
             contexts.remove(xid);

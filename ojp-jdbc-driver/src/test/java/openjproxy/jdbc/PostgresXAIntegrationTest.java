@@ -311,6 +311,162 @@ public class PostgresXAIntegrationTest {
     }
 
     /**
+     * Test multiple sequential transactions with session reuse.
+     * This validates that XA connections are properly sanitized between transactions.
+     */
+    @ParameterizedTest
+    @CsvFileSource(resources = "/postgres_xa_connection.csv")
+    public void testMultipleSequentialTransactionsWithSessionReuse(String driverClass, String url, String user, String password) throws Exception {
+        setUp(driverClass, url, user, password);
+        
+        XAResource xaResource = xaConnection.getXAResource();
+        
+        // Create test table
+        String tableName = "xa_sequential_test_" + System.currentTimeMillis();
+        try (Statement stmt = connection.createStatement()) {
+            stmt.executeUpdate("CREATE TABLE " + tableName + " (id INT PRIMARY KEY, name VARCHAR(100))");
+        }
+        
+        try {
+            // Transaction 1: Insert data
+            Xid xid1 = new TestXid(1, "gtrid-1".getBytes(), "bqual-1".getBytes());
+            xaResource.start(xid1, XAResource.TMNOFLAGS);
+            
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "INSERT INTO " + tableName + " (id, name) VALUES (?, ?)")) {
+                ps.setInt(1, 1);
+                ps.setString(2, "Transaction 1");
+                ps.executeUpdate();
+            }
+            
+            xaResource.end(xid1, XAResource.TMSUCCESS);
+            xaResource.commit(xid1, true); // One-phase commit
+            log.info("Transaction 1 committed");
+            
+            // Transaction 2: Read data (CRITICAL: This should work without errors)
+            Xid xid2 = new TestXid(2, "gtrid-2".getBytes(), "bqual-2".getBytes());
+            xaResource.start(xid2, XAResource.TMNOFLAGS); // Should NOT fail here after sanitization!
+            
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "SELECT name FROM " + tableName + " WHERE id = ?")) {
+                ps.setInt(1, 1);
+                try (ResultSet rs = ps.executeQuery()) {
+                    assertTrue(rs.next(), "Should find inserted row");
+                    assertEquals("Transaction 1", rs.getString("name"), "Name should match");
+                }
+            }
+            
+            xaResource.end(xid2, XAResource.TMSUCCESS);
+            xaResource.commit(xid2, true);
+            log.info("Transaction 2 committed");
+            
+            // Transaction 3: Update data (Triple test to ensure consistency)
+            Xid xid3 = new TestXid(3, "gtrid-3".getBytes(), "bqual-3".getBytes());
+            xaResource.start(xid3, XAResource.TMNOFLAGS);
+            
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "UPDATE " + tableName + " SET name = ? WHERE id = ?")) {
+                ps.setString(1, "Transaction 3");
+                ps.setInt(2, 1);
+                int rows = ps.executeUpdate();
+                assertEquals(1, rows, "Should update 1 row");
+            }
+            
+            xaResource.end(xid3, XAResource.TMSUCCESS);
+            xaResource.commit(xid3, true);
+            log.info("Transaction 3 committed");
+            
+            // Transaction 4: Verify update
+            Xid xid4 = new TestXid(4, "gtrid-4".getBytes(), "bqual-4".getBytes());
+            xaResource.start(xid4, XAResource.TMNOFLAGS);
+            
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "SELECT name FROM " + tableName + " WHERE id = ?")) {
+                ps.setInt(1, 1);
+                try (ResultSet rs = ps.executeQuery()) {
+                    assertTrue(rs.next(), "Should find updated row");
+                    assertEquals("Transaction 3", rs.getString("name"), "Name should be updated");
+                }
+            }
+            
+            xaResource.end(xid4, XAResource.TMSUCCESS);
+            xaResource.commit(xid4, true);
+            log.info("Transaction 4 committed");
+            
+        } finally {
+            try (Statement stmt = connection.createStatement()) {
+                stmt.executeUpdate("DROP TABLE " + tableName);
+            } catch (Exception e) {
+                log.warn("Error dropping test table: {}", e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * Test two-phase commit with session reuse.
+     * This validates that sanitization works correctly with 2PC.
+     */
+    @ParameterizedTest
+    @CsvFileSource(resources = "/postgres_xa_connection.csv")
+    public void testTwoPhaseCommitWithSessionReuse(String driverClass, String url, String user, String password) throws Exception {
+        setUp(driverClass, url, user, password);
+        
+        XAResource xaResource = xaConnection.getXAResource();
+        
+        // Create test table
+        String tableName = "xa_2pc_reuse_test_" + System.currentTimeMillis();
+        try (Statement stmt = connection.createStatement()) {
+            stmt.executeUpdate("CREATE TABLE " + tableName + " (id INT PRIMARY KEY, value INT)");
+        }
+        
+        try {
+            // Transaction 1: 2PC
+            Xid xid1 = new TestXid(1, "2pc-1".getBytes(), "branch-1".getBytes());
+            xaResource.start(xid1, XAResource.TMNOFLAGS);
+            
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "INSERT INTO " + tableName + " (id, value) VALUES (?, ?)")) {
+                ps.setInt(1, 1);
+                ps.setInt(2, 100);
+                ps.executeUpdate();
+            }
+            
+            xaResource.end(xid1, XAResource.TMSUCCESS);
+            int prepareResult = xaResource.prepare(xid1);
+            assertTrue(prepareResult == XAResource.XA_OK || prepareResult == XAResource.XA_RDONLY,
+                    "Prepare should return XA_OK or XA_RDONLY");
+            
+            if (prepareResult == XAResource.XA_OK) {
+                xaResource.commit(xid1, false); // Two-phase commit
+            }
+            log.info("Transaction 1 (2PC) committed");
+            
+            // Transaction 2: Should start cleanly after 2PC
+            Xid xid2 = new TestXid(2, "2pc-2".getBytes(), "branch-2".getBytes());
+            xaResource.start(xid2, XAResource.TMNOFLAGS); // Should work after sanitization!
+            
+            try (PreparedStatement ps = connection.prepareStatement(
+                    "SELECT COUNT(*) as cnt FROM " + tableName)) {
+                try (ResultSet rs = ps.executeQuery()) {
+                    assertTrue(rs.next());
+                    assertEquals(1, rs.getInt("cnt"), "Should have 1 row");
+                }
+            }
+            
+            xaResource.end(xid2, XAResource.TMSUCCESS);
+            xaResource.commit(xid2, true);
+            log.info("Transaction 2 committed");
+            
+        } finally {
+            try (Statement stmt = connection.createStatement()) {
+                stmt.executeUpdate("DROP TABLE " + tableName);
+            } catch (Exception e) {
+                log.warn("Error dropping test table: {}", e.getMessage());
+            }
+        }
+    }
+
+    /**
      * Simple Xid implementation for testing.
      */
     private static class TestXid implements Xid {

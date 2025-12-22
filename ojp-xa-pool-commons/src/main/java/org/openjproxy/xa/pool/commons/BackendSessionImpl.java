@@ -164,6 +164,49 @@ public class BackendSessionImpl implements XABackendSession {
     }
     
     @Override
+    public void sanitizeAfterTransaction() throws SQLException {
+        if (closed) {
+            throw new IllegalStateException("Cannot sanitize closed session");
+        }
+        
+        log.debug("Sanitizing backend session after transaction: {}", sessionId);
+        
+        try {
+            // Close the current logical connection
+            // This tells the XAConnection we're done with this transaction context
+            if (connection != null) {
+                try {
+                    connection.close();
+                    log.debug("Closed logical connection during sanitization");
+                } catch (SQLException e) {
+                    log.warn("Error closing logical connection during sanitization: {}", e.getMessage());
+                    // Continue anyway - we'll get a fresh one
+                }
+            }
+            
+            // Get a fresh logical connection from the XAConnection
+            // This resets the XA state to IDLE in most XA drivers (PostgreSQL, MySQL, etc.)
+            this.connection = xaConnection.getConnection();
+            
+            // The XAResource should remain the same (from the XAConnection)
+            // No need to re-obtain it - it's tied to the XAConnection, not the logical connection
+            
+            // Clear warnings on the new connection
+            try {
+                connection.clearWarnings();
+            } catch (SQLException e) {
+                log.warn("Error clearing warnings after sanitization: {}", e.getMessage());
+            }
+            
+            log.debug("Backend session sanitized successfully, fresh logical connection obtained");
+            
+        } catch (SQLException e) {
+            log.error("Failed to sanitize session: {}", e.getMessage(), e);
+            throw e;
+        }
+    }
+    
+    @Override
     public XAResource getXAResource() {
         if (xaResource == null) {
             throw new IllegalStateException("Session not opened");
