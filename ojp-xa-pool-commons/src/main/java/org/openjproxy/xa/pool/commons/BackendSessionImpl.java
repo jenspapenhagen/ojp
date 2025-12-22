@@ -164,6 +164,40 @@ public class BackendSessionImpl implements XABackendSession {
     }
     
     @Override
+    public void sanitizeAfterTransaction() throws SQLException {
+        if (closed) {
+            throw new IllegalStateException("Cannot sanitize closed session");
+        }
+        
+        log.debug("Sanitizing backend session after transaction: {}", sessionId);
+        
+        try {
+            // Get a fresh logical connection from the XAConnection
+            // According to JDBC spec, calling getConnection() on an XAConnection
+            // automatically closes the previous logical connection and returns a new one.
+            // This resets the XA state to IDLE in most XA drivers (PostgreSQL, MySQL, Oracle, etc.)
+            // We do NOT explicitly close the old connection first - the XAConnection handles that.
+            this.connection = xaConnection.getConnection();
+            
+            // The XAResource should remain the same (from the XAConnection)
+            // No need to re-obtain it - it's tied to the XAConnection, not the logical connection
+            
+            // Clear warnings on the new connection
+            try {
+                connection.clearWarnings();
+            } catch (SQLException e) {
+                log.warn("Error clearing warnings after sanitization: {}", e.getMessage());
+            }
+            
+            log.debug("Backend session sanitized successfully, fresh logical connection obtained");
+            
+        } catch (SQLException e) {
+            log.error("Failed to sanitize session: {}", e.getMessage(), e);
+            throw e;
+        }
+    }
+    
+    @Override
     public XAResource getXAResource() {
         if (xaResource == null) {
             throw new IllegalStateException("Session not opened");

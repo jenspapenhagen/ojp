@@ -96,6 +96,35 @@ public interface XABackendSession extends AutoCloseable {
     void reset() throws SQLException;
     
     /**
+     * Sanitizes the XA session after transaction completion.
+     * <p>
+     * This method prepares the session for the next transaction by refreshing
+     * the logical connection to reset XA state. It is called after commit/rollback
+     * while the session remains bound to the OJP Session (not returned to pool).
+     * </p>
+     * <p>
+     * This is different from {@link #reset()} which is called when returning
+     * the session to the pool. Sanitization happens BETWEEN transactions on the
+     * same OJP Session, while reset happens AFTER the OJP Session terminates.
+     * </p>
+     * <p>
+     * The method must:
+     * <ul>
+     *   <li>Close the current logical connection (which may be in ENDED XA state)</li>
+     *   <li>Obtain a fresh logical connection from the XAConnection</li>
+     *   <li>Reset the XA state to IDLE for the next transaction</li>
+     * </ul>
+     * </p>
+     * <p>
+     * <strong>CRITICAL:</strong> This method must ONLY be called after transaction
+     * completion (COMMITTED or ROLLEDBACK state), never while in PREPARED state.
+     * </p>
+     * 
+     * @throws SQLException if sanitization fails
+     */
+    void sanitizeAfterTransaction() throws SQLException;
+    
+    /**
      * Gets the underlying XAConnection for this session.
      * 
      * @return the XAConnection

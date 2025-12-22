@@ -1759,15 +1759,26 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         
         // Convert proto Xid to XidKey
         XidKey xidKey = XidKey.from(convertXid(request.getXid()));
+        int flags = request.getFlags();
         
-        // Get the existing XABackendSession that was allocated during connect()
-        XABackendSession backendSession = (XABackendSession) session.getBackendSession();
-        if (backendSession == null) {
-            throw new SQLException("No XABackendSession found in session");
+        // Route based on XA flags
+        if (flags == javax.transaction.xa.XAResource.TMNOFLAGS) {
+            // New transaction: use existing session from OJP Session
+            XABackendSession backendSession = (XABackendSession) session.getBackendSession();
+            if (backendSession == null) {
+                throw new SQLException("No XABackendSession found in session");
+            }
+            registry.registerExistingSession(xidKey, backendSession, flags);
+            
+        } else if (flags == javax.transaction.xa.XAResource.TMJOIN || 
+                   flags == javax.transaction.xa.XAResource.TMRESUME) {
+            // Join or resume existing transaction: delegate to xaStart
+            // This requires the context to exist (from previous TMNOFLAGS start)
+            registry.xaStart(xidKey, flags);
+            
+        } else {
+            throw new SQLException("Unsupported XA flags: " + flags);
         }
-        
-        // Register the existing XABackendSession with the XA transaction (avoids double allocation)
-        registry.registerExistingSession(xidKey, backendSession, request.getFlags());
         
         com.openjproxy.grpc.XaResponse response = com.openjproxy.grpc.XaResponse.newBuilder()
                 .setSession(session.getSessionInfo())

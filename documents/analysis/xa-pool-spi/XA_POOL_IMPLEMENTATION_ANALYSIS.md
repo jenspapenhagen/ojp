@@ -956,6 +956,77 @@ Implementing XA-aware backend session pooling is **feasible and valuable** for O
 
 ---
 
+## 11. Known Issues and Resolutions
+
+### 11.1 Spring Boot + Narayana Integration Issue (December 2025)
+
+**Issue**: XA transaction failures when integrating OJP with Spring Boot + Narayana Transaction Manager.
+
+**Symptoms**:
+- `XAException` with error code `XAER_INVAL` during `xaStart()` 
+- PostgreSQL error: "tried to call end without corresponding start call. state=ENDED"
+- "Connection has been closed" errors in subsequent transactions
+
+**Root Causes Identified**:
+
+1. **Missing XA Flag Routing**: The `handleXAStartWithPooling()` method unconditionally called `registerExistingSession()` which only accepts `TMNOFLAGS`. Transaction managers using `TMJOIN` or `TMRESUME` flags would fail.
+
+2. **Missing Session Sanitization**: After commit/rollback, the XAConnection remained in ENDED state. Without sanitizing the connection between transactions, subsequent transactions would fail because the XA state was not reset to IDLE.
+
+3. **Stale Connection References**: The OJP Session cached a connection reference that became stale after sanitization when the backend session obtained a fresh logical connection.
+
+**Solutions Implemented**:
+
+1. **Flag-Based Routing in `handleXAStartWithPooling()`**:
+   ```java
+   if (flags == XAResource.TMNOFLAGS) {
+       // New transaction: use existing session from OJP Session
+       registry.registerExistingSession(xidKey, backendSession, flags);
+   } else if (flags == XAResource.TMJOIN || flags == XAResource.TMRESUME) {
+       // Join or resume existing transaction
+       registry.xaStart(xidKey, flags);
+   }
+   ```
+
+2. **Session Sanitization via `sanitizeAfterTransaction()`**:
+   - Added new method to `XABackendSession` interface
+   - Calls `xaConnection.getConnection()` to obtain fresh logical connection
+   - Per JDBC spec, this automatically closes previous logical connection and resets XA state to IDLE
+   - Called after every `xaCommit()` and `xaRollback()` in `XATransactionRegistry`
+
+3. **Dynamic Connection Retrieval in OJP Session**:
+   - Modified `Session.getConnection()` to dynamically fetch from backend session for XA pooled sessions
+   - Ensures fresh connection reference is always used after sanitization
+   - Eliminates stale connection issues
+
+**Technical Details**:
+
+- **JDBC Spec Compliance**: Per JDBC 4.3 spec (section 12.4), calling `getConnection()` on an XAConnection must close any previous logical connection and return a new handle. This behavior is leveraged for session sanitization.
+
+- **Session Lifecycle**: Sessions remain bound to OJP Session for multiple sequential transactions (correct behavior). They only return to pool when the client closes the connection. Sanitization happens BETWEEN transactions, not AT pool return.
+
+- **XA State Reset**: The fresh logical connection from `xaConnection.getConnection()` has XA state reset to IDLE, allowing subsequent transactions to start cleanly.
+
+**Integration Tests Added**:
+- `testMultipleSequentialTransactionsWithSessionReuse()`: Validates 4 sequential transactions on same session
+- `testTwoPhaseCommitWithSessionReuse()`: Validates 2PC followed by new transaction with session reuse
+
+**Impact**: This fix enables OJP to work correctly with enterprise transaction managers like Narayana, Atomikos, and Bitronix that may use TMJOIN/TMRESUME flags for resource enlistment.
+
+### 11.2 Future Considerations
+
+**Connection Pool Behavior**: Different XA driver implementations may behave differently when `getConnection()` is called multiple times. Testing showed correct behavior with:
+- PostgreSQL JDBC Driver
+- Oracle JDBC Driver  
+- SQL Server JDBC Driver (to be confirmed)
+
+If issues arise with other drivers, consider:
+- Driver-specific sanitization strategies
+- Configuration flag to disable automatic sanitization
+- Manual XA state validation before each transaction
+
+---
+
 ## Appendix A: File Structure
 
 ```
