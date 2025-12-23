@@ -407,19 +407,41 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 // Parse URL to remove OJP-specific prefix (same as non-XA path)
                 String parsedUrl = UrlParser.parseUrl(connectionDetails.getUrl());
                 
+                // Get datasource-specific configuration from client properties (same as non-XA)
+                Properties clientProperties = ConnectionPoolConfigurer.extractClientProperties(connectionDetails);
+                DataSourceConfigurationManager.DataSourceConfiguration dsConfig = 
+                        DataSourceConfigurationManager.getConfiguration(clientProperties);
+                
+                // Get pool sizes - apply multinode coordination if needed (same as non-XA)
+                int maxPoolSize = dsConfig.getMaximumPoolSize();
+                int minIdle = dsConfig.getMinimumIdle();
+                
+                List<String> serverEndpoints = connectionDetails.getServerEndpointsList();
+                if (serverEndpoints != null && !serverEndpoints.isEmpty()) {
+                    // Multinode: calculate divided pool sizes
+                    MultinodePoolCoordinator.PoolAllocation allocation = 
+                            ConnectionPoolConfigurer.getPoolCoordinator().calculatePoolSizes(
+                                    connHash, maxPoolSize, minIdle, serverEndpoints);
+                    
+                    maxPoolSize = allocation.getCurrentMaxPoolSize();
+                    minIdle = allocation.getCurrentMinIdle();
+                    
+                    log.info("Multinode pool coordination enabled for XA {}: {} servers, divided pool sizes: max={}, min={}", 
+                            connHash, serverEndpoints.size(), maxPoolSize, minIdle);
+                }
+                
                 // Build configuration map for XA Pool Provider
-                // Use standard PoolConfig defaults (same as non-XA pools)
                 Map<String, String> xaPoolConfig = new HashMap<>();
                 xaPoolConfig.put("xa.datasource.className", getXADataSourceClassName(parsedUrl));
                 xaPoolConfig.put("xa.url", parsedUrl);
                 xaPoolConfig.put("xa.username", connectionDetails.getUser());
                 xaPoolConfig.put("xa.password", connectionDetails.getPassword());
-                // Standard defaults: maxPoolSize=10, minIdle=2, connectionTimeout=30s, idleTimeout=10min, maxLifetime=30min
-                xaPoolConfig.put("xa.maxPoolSize", "10");
-                xaPoolConfig.put("xa.minIdle", "2");
-                xaPoolConfig.put("xa.maxWaitMillis", "30000");
-                xaPoolConfig.put("xa.idleTimeoutMinutes", "10");
-                xaPoolConfig.put("xa.maxLifetimeMinutes", "30");
+                // Apply calculated pool sizes (with multinode coordination if applicable)
+                xaPoolConfig.put("xa.maxPoolSize", String.valueOf(maxPoolSize));
+                xaPoolConfig.put("xa.minIdle", String.valueOf(minIdle));
+                xaPoolConfig.put("xa.maxWaitMillis", String.valueOf(dsConfig.getConnectionTimeout()));
+                xaPoolConfig.put("xa.idleTimeoutMinutes", String.valueOf(dsConfig.getIdleTimeout() / 60000));
+                xaPoolConfig.put("xa.maxLifetimeMinutes", String.valueOf(dsConfig.getMaxLifetime() / 60000));
                 
                 // Create pooled XA DataSource via provider
                 Object pooledXADataSource = xaPoolProvider.createXADataSource(xaPoolConfig);
@@ -431,8 +453,8 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 // Create slow query segregation manager for XA
                 createSlowQuerySegregationManagerForDatasource(connHash, actualMaxXaTransactions, true, xaStartTimeoutMillis);
                 
-                log.info("Created XA Pool Provider registry for connHash: {} with maxPoolSize: {}", 
-                        connHash, 10);
+                log.info("Created XA Pool Provider registry for connHash: {} with maxPoolSize: {} (multinode coordinated: {})", 
+                        connHash, maxPoolSize, serverEndpoints != null && serverEndpoints.size() > 1);
                 
             } catch (Exception e) {
                 log.error("Failed to create XA Pool Provider registry for connection hash {}: {}", 
