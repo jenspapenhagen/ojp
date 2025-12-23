@@ -407,18 +407,19 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 // Parse URL to remove OJP-specific prefix (same as non-XA path)
                 String parsedUrl = UrlParser.parseUrl(connectionDetails.getUrl());
                 
-                // Get datasource-specific configuration from client properties (same as non-XA)
+                // Get datasource configuration from client properties (same as non-XA)
                 Properties clientProperties = ConnectionPoolConfigurer.extractClientProperties(connectionDetails);
                 DataSourceConfigurationManager.DataSourceConfiguration dsConfig = 
                         DataSourceConfigurationManager.getConfiguration(clientProperties);
                 
-                // Get pool sizes - apply multinode coordination if needed (same as non-XA)
+                // Get default pool sizes from configuration
                 int maxPoolSize = dsConfig.getMaximumPoolSize();
                 int minIdle = dsConfig.getMinimumIdle();
                 
+                // Apply multinode pool coordination if server endpoints provided
                 List<String> serverEndpoints = connectionDetails.getServerEndpointsList();
-                if (serverEndpoints != null && !serverEndpoints.isEmpty()) {
-                    // Multinode: calculate divided pool sizes
+                if (serverEndpoints != null && serverEndpoints.size() > 1) {
+                    // Multinode: divide pool sizes among servers
                     MultinodePoolCoordinator.PoolAllocation allocation = 
                             ConnectionPoolConfigurer.getPoolCoordinator().calculatePoolSizes(
                                     connHash, maxPoolSize, minIdle, serverEndpoints);
@@ -426,7 +427,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                     maxPoolSize = allocation.getCurrentMaxPoolSize();
                     minIdle = allocation.getCurrentMinIdle();
                     
-                    log.info("Multinode pool coordination enabled for XA {}: {} servers, divided pool sizes: max={}, min={}", 
+                    log.info("XA multinode pool coordination for {}: {} servers, divided sizes: max={}, min={}", 
                             connHash, serverEndpoints.size(), maxPoolSize, minIdle);
                 }
                 
@@ -436,7 +437,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 xaPoolConfig.put("xa.url", parsedUrl);
                 xaPoolConfig.put("xa.username", connectionDetails.getUser());
                 xaPoolConfig.put("xa.password", connectionDetails.getPassword());
-                // Apply calculated pool sizes (with multinode coordination if applicable)
+                // Use calculated pool sizes (with multinode coordination if applicable)
                 xaPoolConfig.put("xa.maxPoolSize", String.valueOf(maxPoolSize));
                 xaPoolConfig.put("xa.minIdle", String.valueOf(minIdle));
                 xaPoolConfig.put("xa.maxWaitMillis", String.valueOf(dsConfig.getConnectionTimeout()));
@@ -453,8 +454,8 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 // Create slow query segregation manager for XA
                 createSlowQuerySegregationManagerForDatasource(connHash, actualMaxXaTransactions, true, xaStartTimeoutMillis);
                 
-                log.info("Created XA Pool Provider registry for connHash: {} with maxPoolSize: {} (multinode coordinated: {})", 
-                        connHash, maxPoolSize, serverEndpoints != null && serverEndpoints.size() > 1);
+                log.info("Created XA pool for connHash {} - maxPoolSize: {}, minIdle: {}, multinode: {}", 
+                        connHash, maxPoolSize, minIdle, serverEndpoints != null && serverEndpoints.size() > 1);
                 
             } catch (Exception e) {
                 log.error("Failed to create XA Pool Provider registry for connection hash {}: {}", 
