@@ -150,6 +150,14 @@ public class MultinodeXAIntegrationTest {
                 runExactQuerySequence(threadNum, driverClass, url, user, password);
             });
         }
+        
+        // Warm-up period: Allow initial concurrent transactions to complete and connections to stabilize
+        // Without client-side pooling, initial burst creates many concurrent XAConnections
+        // Each XAConnection connects to all servers (unified mode) causing temporary spike
+        // After warm-up, connections stabilize to expected 20-25 range
+        System.out.println("Warm-up period: allowing initial transactions to complete and connections to stabilize...");
+        Thread.sleep(15000); // 15 seconds warm-up
+        
         executor.shutdown();
         while (!executor.isTerminated()) {
             Thread.sleep(1000);
