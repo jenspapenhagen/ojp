@@ -250,9 +250,8 @@ public class MultinodeConnectionManager {
             }
         }
         
-        // For non-XA mode: trigger connection redistribution when servers recover
-        // XA mode handles redistribution differently (through invalidation), so skip it
-        if (!recoveredServers.isEmpty() && xaConnectionRedistributor == null && healthCheckConfig.isRedistributionEnabled()) {
+        // Trigger connection redistribution when servers recover
+        if (!recoveredServers.isEmpty() && healthCheckConfig.isRedistributionEnabled()) {
             log.info("Triggering connection redistribution for {} recovered server(s)", 
                     recoveredServers.size());
             
@@ -261,7 +260,13 @@ public class MultinodeConnectionManager {
                     .collect(Collectors.toList());
             
             try {
-                connectionRedistributor.rebalance(recoveredServers, allHealthyServers);
+                if (xaConnectionRedistributor != null) {
+                    // XA mode: mark idle connections for rebalancing
+                    xaConnectionRedistributor.rebalance(recoveredServers, allHealthyServers);
+                } else {
+                    // Non-XA mode: directly redistribute connections
+                    connectionRedistributor.rebalance(recoveredServers, allHealthyServers);
+                }
             } catch (Exception e) {
                 log.error("Failed to redistribute connections after server recovery: {}", 
                         e.getMessage(), e);
@@ -573,13 +578,26 @@ public class MultinodeConnectionManager {
             log.debug("Session distribution across servers: {}", serverDistribution);
         }
         
-        // Session must be bound - throw exception if not found
+        // Session must be bound - if not found, try to recover
         if (sessionServer == null) {
-            log.error("Session {} has no associated server. Available sessions: {}. This indicates the session binding was lost.", 
+            log.warn("Session {} has no associated server. Available sessions: {}. This may occur after server recovery. Attempting to select a healthy server...", 
                     sessionKey, sessionToServerMap.keySet());
-            throw new SQLException("Session " + sessionKey + 
-                    " has no associated server. Session may have expired or server may be unavailable. " +
-                    "Available bound sessions: " + sessionToServerMap.keySet());
+            
+            // Session binding was lost (likely due to server failure/recovery)
+            // Try to select a healthy server to continue execution
+            ServerEndpoint fallbackServer = selectHealthyServer();
+            if (fallbackServer == null) {
+                throw new SQLException("Session " + sessionKey + 
+                        " has no associated server, and no healthy servers are available. " +
+                        "Available bound sessions: " + sessionToServerMap.keySet());
+            }
+            
+            log.info("Session {} will use fallback server {} (session binding was lost)", 
+                    sessionKey, fallbackServer.getAddress());
+            
+            // Note: The connection should be marked invalid and replaced by the pool
+            // This fallback allows queries to continue during the transition
+            return fallbackServer;
         }
         
         log.info("Session {} is bound to server {}", sessionKey, sessionServer.getAddress());
@@ -1070,18 +1088,8 @@ public class MultinodeConnectionManager {
             }
         }
         
-        // Trigger XA connection redistribution if configured
-        if (xaConnectionRedistributor != null && healthCheckConfig.isRedistributionEnabled()) {
-            List<ServerEndpoint> allHealthyServers = serverEndpoints.stream()
-                    .filter(ServerEndpoint::isHealthy)
-                    .collect(Collectors.toList());
-            
-            try {
-                xaConnectionRedistributor.rebalance(List.of(endpoint), allHealthyServers);
-            } catch (Exception e) {
-                log.error("Error during XA connection redistribution: {}", e.getMessage(), e);
-            }
-        }
+        // Note: Connection redistribution (both XA and non-XA) is handled in the main health check loop
+        // after all recovered servers have been identified, to avoid duplicate rebalancing calls
     }
     
     /**
