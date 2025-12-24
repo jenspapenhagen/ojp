@@ -419,7 +419,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 // Apply multinode pool coordination if server endpoints provided
                 List<String> serverEndpoints = connectionDetails.getServerEndpointsList();
                 
-                if (serverEndpoints != null && serverEndpoints.size() > 1) {
+                if (serverEndpoints != null && !serverEndpoints.isEmpty()) {
                     // Multinode: divide pool sizes among servers
                     MultinodePoolCoordinator.PoolAllocation allocation = 
                             ConnectionPoolConfigurer.getPoolCoordinator().calculatePoolSizes(
