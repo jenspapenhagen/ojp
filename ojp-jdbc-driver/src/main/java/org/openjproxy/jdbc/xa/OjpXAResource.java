@@ -43,8 +43,11 @@ public class OjpXAResource implements XAResource {
         
         while (attempt < maxRetries) {
             try {
+                // Update SessionInfo with current cluster health if multinode
+                SessionInfo currentSessionInfo = getSessionInfoWithClusterHealth();
+                
                 XaStartRequest request = XaStartRequest.newBuilder()
-                        .setSession(sessionInfo)
+                        .setSession(currentSessionInfo)
                         .setXid(toXidProto(xid))
                         .setFlags(flags)
                         .build();
@@ -190,8 +193,11 @@ public class OjpXAResource implements XAResource {
     public int prepare(Xid xid) throws XAException {
         log.debug("prepare: xid={}", xid);
         try {
+            // Update SessionInfo with current cluster health if multinode
+            SessionInfo currentSessionInfo = getSessionInfoWithClusterHealth();
+            
             XaPrepareRequest request = XaPrepareRequest.newBuilder()
-                    .setSession(sessionInfo)
+                    .setSession(currentSessionInfo)
                     .setXid(toXidProto(xid))
                     .build();
             XaPrepareResponse response = statementService.xaPrepare(request);
@@ -208,8 +214,11 @@ public class OjpXAResource implements XAResource {
     public void commit(Xid xid, boolean onePhase) throws XAException {
         log.debug("commit: xid={}, onePhase={}", xid, onePhase);
         try {
+            // Update SessionInfo with current cluster health if multinode
+            SessionInfo currentSessionInfo = getSessionInfoWithClusterHealth();
+            
             XaCommitRequest request = XaCommitRequest.newBuilder()
-                    .setSession(sessionInfo)
+                    .setSession(currentSessionInfo)
                     .setXid(toXidProto(xid))
                     .setOnePhase(onePhase)
                     .build();
@@ -346,6 +355,17 @@ public class OjpXAResource implements XAResource {
             xae.initCause(e);
             throw xae;
         }
+    }
+
+    /**
+     * Gets the SessionInfo with current cluster health populated if using multinode.
+     * For non-multinode connections, returns the original sessionInfo.
+     */
+    private SessionInfo getSessionInfoWithClusterHealth() {
+        if (statementService instanceof MultinodeStatementService) {
+            return ((MultinodeStatementService) statementService).withClusterHealth(sessionInfo);
+        }
+        return sessionInfo;
     }
 
     /**
