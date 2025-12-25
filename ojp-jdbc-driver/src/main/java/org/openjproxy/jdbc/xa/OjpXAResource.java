@@ -363,7 +363,12 @@ public class OjpXAResource implements XAResource {
      */
     private SessionInfo getSessionInfoWithClusterHealth() {
         if (statementService instanceof MultinodeStatementService) {
-            return ((MultinodeStatementService) statementService).withClusterHealth(sessionInfo);
+            MultinodeStatementService multinodeService = (MultinodeStatementService) statementService;
+            MultinodeConnectionManager connectionManager = multinodeService.getConnectionManager();
+            String clusterHealth = connectionManager.generateClusterHealth();
+            return SessionInfo.newBuilder(sessionInfo)
+                    .setClusterHealth(clusterHealth)
+                    .build();
         }
         return sessionInfo;
     }
