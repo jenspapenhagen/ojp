@@ -1001,7 +1001,7 @@ jobs:
   # Database: PostgreSQL (with XA prepared transactions support)
   # Execution: Only runs AFTER build-test job succeeds (needs: [build-test])
   #
-  # NOTE: Connection count checks expect 20-25 connections, same as non-XA test.
+  # NOTE: Connection count checks expect 30-35 connections (both XA and non-XA pools active).
   #
   # ===========================================================================
   multinode-xa-test:
@@ -1092,7 +1092,7 @@ jobs:
           sleep 20
 
       # Verify XA connection pooling is working
-      # Check for 20-25 connections similar to non-XA multinode test
+      # Check for 30-35 connections (both XA and non-XA pools active)
       - name: Check PostgreSQL connections during XA test
         run: |
           echo "Checking PostgreSQL connections..."
@@ -1104,24 +1104,24 @@ jobs:
             CONNECTION_COUNT=$(echo $CONNECTION_COUNT | tr -d '[:space:]')
             echo "Current connections: $CONNECTION_COUNT (elapsed: ${ELAPSED}s)"
             
-            # Check for 20-25 connections (same as non-XA multinode test)
-            if [ "$CONNECTION_COUNT" -ge 20 ] && [ "$CONNECTION_COUNT" -le 25 ]; then
-              echo "✓ Connection count is within expected range: 20 ≤ $CONNECTION_COUNT ≤ 25"
+            # Check for 30-35 connections (both XA and non-XA pools)
+            if [ "$CONNECTION_COUNT" -ge 30 ] && [ "$CONNECTION_COUNT" -le 35 ]; then
+              echo "✓ Connection count is within expected range: 30 ≤ $CONNECTION_COUNT ≤ 35"
               PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
               break
-            elif [ "$CONNECTION_COUNT" -gt 25 ]; then
-              echo "✗ ERROR: Connection count ($CONNECTION_COUNT) exceeds expected maximum of 25!"
+            elif [ "$CONNECTION_COUNT" -gt 35 ]; then
+              echo "✗ ERROR: Connection count ($CONNECTION_COUNT) exceeds expected maximum of 35!"
               PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
               exit 1
             else
-              echo "Waiting for connections to reach at least 20... (currently: $CONNECTION_COUNT)"
+              echo "Waiting for connections to reach at least 30... (currently: $CONNECTION_COUNT)"
               sleep 2
               ELAPSED=$((ELAPSED + 2))
             fi
           done
           
           if [ $ELAPSED -ge $TIMEOUT ]; then
-            echo "✗ ERROR: Timeout after ${TIMEOUT}s - connection count never reached 20 (current: $CONNECTION_COUNT)"
+            echo "✗ ERROR: Timeout after ${TIMEOUT}s - connection count never reached 30 (current: $CONNECTION_COUNT)"
             exit 1
           fi
 
@@ -1176,12 +1176,12 @@ jobs:
             CONNECTION_COUNT=$(echo $CONNECTION_COUNT | tr -d '[:space:]')
             echo "Current connections: $CONNECTION_COUNT (elapsed: ${ELAPSED}s)"
             
-            if [ "$CONNECTION_COUNT" -ge 20 ] && [ "$CONNECTION_COUNT" -lt 25 ]; then
-              echo "✓ Connection count is within expected range: 20 ≤ $CONNECTION_COUNT < 25"
+            if [ "$CONNECTION_COUNT" -ge 30 ] && [ "$CONNECTION_COUNT" -lt 35 ]; then
+              echo "✓ Connection count is within expected range: 30 ≤ $CONNECTION_COUNT < 35"
               PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
               break
-            elif [ "$CONNECTION_COUNT" -ge 25 ]; then
-              echo "✗ ERROR: Connection count ($CONNECTION_COUNT) exceeds maximum of 25!"
+            elif [ "$CONNECTION_COUNT" -ge 35 ]; then
+              echo "✗ ERROR: Connection count ($CONNECTION_COUNT) exceeds maximum of 35!"
               PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
               exit 1
             else
@@ -1236,12 +1236,12 @@ jobs:
             CONNECTION_COUNT=$(echo $CONNECTION_COUNT | tr -d '[:space:]')
             echo "Current connections: $CONNECTION_COUNT (elapsed: ${ELAPSED}s)"
             
-            if [ "$CONNECTION_COUNT" -ge 20 ] && [ "$CONNECTION_COUNT" -lt 25 ]; then
-              echo "✓ Connection count is within expected range: 20 ≤ $CONNECTION_COUNT < 25"
+            if [ "$CONNECTION_COUNT" -ge 30 ] && [ "$CONNECTION_COUNT" -lt 35 ]; then
+              echo "✓ Connection count is within expected range: 30 ≤ $CONNECTION_COUNT < 35"
               PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
               break
-            elif [ "$CONNECTION_COUNT" -ge 25 ]; then
-              echo "✗ ERROR: Connection count ($CONNECTION_COUNT) exceeds maximum of 25!"
+            elif [ "$CONNECTION_COUNT" -ge 35 ]; then
+              echo "✗ ERROR: Connection count ($CONNECTION_COUNT) exceeds maximum of 35!"
               PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
               exit 1
             else
@@ -1307,12 +1307,12 @@ jobs:
             CONNECTION_COUNT=$(echo $CONNECTION_COUNT | tr -d '[:space:]')
             echo "Current connections: $CONNECTION_COUNT (elapsed: ${ELAPSED}s)"
             
-            if [ "$CONNECTION_COUNT" -ge 20 ] && [ "$CONNECTION_COUNT" -lt 25 ]; then
-              echo "✓ Connection count is within expected range: 20 ≤ $CONNECTION_COUNT < 25"
+            if [ "$CONNECTION_COUNT" -ge 30 ] && [ "$CONNECTION_COUNT" -lt 35 ]; then
+              echo "✓ Connection count is within expected range: 30 ≤ $CONNECTION_COUNT < 35"
               PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
               break
-            elif [ "$CONNECTION_COUNT" -ge 25 ]; then
-              echo "✗ ERROR: Connection count ($CONNECTION_COUNT) exceeds maximum of 25!"
+            elif [ "$CONNECTION_COUNT" -ge 35 ]; then
+              echo "✗ ERROR: Connection count ($CONNECTION_COUNT) exceeds maximum of 35!"
               PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
               exit 1
             else
@@ -1367,12 +1367,12 @@ jobs:
             CONNECTION_COUNT=$(echo $CONNECTION_COUNT | tr -d '[:space:]')
             echo "Current connections: $CONNECTION_COUNT (elapsed: ${ELAPSED}s)"
             
-            if [ "$CONNECTION_COUNT" -ge 20 ] && [ "$CONNECTION_COUNT" -lt 25 ]; then
-              echo "✓ Connection count is within expected range: 20 ≤ $CONNECTION_COUNT < 25"
+            if [ "$CONNECTION_COUNT" -ge 30 ] && [ "$CONNECTION_COUNT" -lt 35 ]; then
+              echo "✓ Connection count is within expected range: 30 ≤ $CONNECTION_COUNT < 35"
               PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
               break
-            elif [ "$CONNECTION_COUNT" -ge 25 ]; then
-              echo "✗ ERROR: Connection count ($CONNECTION_COUNT) exceeds maximum of 25!"
+            elif [ "$CONNECTION_COUNT" -ge 35 ]; then
+              echo "✗ ERROR: Connection count ($CONNECTION_COUNT) exceeds maximum of 35!"
               PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
               exit 1
             else
