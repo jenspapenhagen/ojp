@@ -222,11 +222,17 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         String clusterHealth = sessionInfo.getClusterHealth();
         String connHash = sessionInfo.getConnHash();
         
+        log.debug("processClusterHealth called: connHash={}, clusterHealth={}, isXA={}", 
+                connHash, clusterHealth, sessionInfo.getIsXA());
+        
         if (clusterHealth != null && !clusterHealth.isEmpty() && 
             connHash != null && !connHash.isEmpty()) {
             
             // Check if cluster health has changed
             boolean healthChanged = clusterHealthTracker.hasHealthChanged(connHash, clusterHealth);
+            
+            log.debug("Cluster health check for {}: changed={}, current health={}", 
+                    connHash, healthChanged, clusterHealth);
             
             if (healthChanged) {
                 int healthyServerCount = clusterHealthTracker.countHealthyServers(clusterHealth);
