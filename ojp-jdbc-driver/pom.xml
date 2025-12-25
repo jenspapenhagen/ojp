@@ -125,6 +125,24 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- TestContainers PostgreSQL - Added for PostgreSQL integration tests -->
+        <!-- https://mvnrepository.com/artifact/org.testcontainers/postgresql -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>postgresql</artifactId>
+            <version>1.20.4</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- TestContainers JUnit Jupiter Integration -->
+        <!-- https://mvnrepository.com/artifact/org.testcontainers/junit-jupiter -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>1.20.4</version>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>
