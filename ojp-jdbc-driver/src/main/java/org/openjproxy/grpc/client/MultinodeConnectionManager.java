@@ -771,6 +771,7 @@ public class MultinodeConnectionManager {
      * - UNKNOWN: Connection-related unknown errors
      * 
      * Database-level errors (e.g., table not found, syntax errors) do not mark servers unhealthy.
+     * Pool exhaustion errors do NOT mark servers unhealthy - they indicate resource limits, not connectivity issues.
      */
     public boolean isConnectionLevelError(Exception exception) {
         if (exception instanceof io.grpc.StatusRuntimeException) {
@@ -791,6 +792,13 @@ public class MultinodeConnectionManager {
         String message = exception.getMessage();
         if (message != null) {
             String lowerMessage = message.toLowerCase();
+            
+            // CRITICAL: Pool exhaustion is NOT a server connectivity issue
+            // Don't mark server unhealthy when pool is exhausted - it's a resource limit, not a connection failure
+            if (lowerMessage.contains("pool exhausted") || lowerMessage.contains("pool is exhausted")) {
+                return false;
+            }
+            
             return lowerMessage.contains("connection") || 
                    lowerMessage.contains("timeout") ||
                    lowerMessage.contains("unavailable");
