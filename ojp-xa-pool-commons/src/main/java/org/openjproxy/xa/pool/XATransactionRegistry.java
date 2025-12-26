@@ -154,10 +154,11 @@ public class XATransactionRegistry {
      * @param xid the transaction branch identifier
      * @param session the existing XABackendSession to register
      * @param flags XA start flags (must be TMNOFLAGS for new transaction)
+     * @param ojpSessionId the OJP session ID this transaction belongs to
      * @throws XAException if flags are invalid, xid already exists, or XA start fails
      */
-    public void registerExistingSession(XidKey xid, XABackendSession session, int flags) throws XAException {
-        log.debug("registerExistingSession: xid={}, flags={}", xid, flagsToString(flags));
+    public void registerExistingSession(XidKey xid, XABackendSession session, int flags, String ojpSessionId) throws XAException {
+        log.debug("registerExistingSession: xid={}, flags={}, ojpSessionId={}", xid, flagsToString(flags), ojpSessionId);
         
         // Validate flags - only TMNOFLAGS allowed for new transaction
         if (flags != XAResource.TMNOFLAGS) {
@@ -165,7 +166,7 @@ public class XATransactionRegistry {
         }
         
         // Create context and ensure no duplicate
-        TxContext existing = contexts.putIfAbsent(xid, new TxContext(xid));
+        TxContext existing = contexts.putIfAbsent(xid, new TxContext(xid, ojpSessionId));
         if (existing != null) {
             throw new XAException(XAException.XAER_DUPID);
         }
@@ -182,7 +183,7 @@ public class XATransactionRegistry {
             // Call XAResource.start on backend with the stored Xid
             session.getXAResource().start(actualXid, flags);
             
-            log.info("XA transaction registered with existing session: xid={}", xid);
+            log.info("XA transaction registered with existing session: xid={}, ojpSessionId={}", xid, ojpSessionId);
         } catch (XAException e) {
             contexts.remove(xid);
             throw e;
@@ -202,10 +203,11 @@ public class XATransactionRegistry {
      *
      * @param xid the transaction branch identifier
      * @param flags XA start flags (TMNOFLAGS, TMJOIN, TMRESUME)
+     * @param ojpSessionId the OJP session ID this transaction belongs to (only used for TMNOFLAGS)
      * @throws XAException if state transition is invalid or session cannot be borrowed
      */
-    public void xaStart(XidKey xid, int flags) throws XAException {
-        log.debug("xaStart: xid={}, flags={}", xid, flagsToString(flags));
+    public void xaStart(XidKey xid, int flags, String ojpSessionId) throws XAException {
+        log.debug("xaStart: xid={}, flags={}, ojpSessionId={}", xid, flagsToString(flags), ojpSessionId);
         
         boolean isTmNoFlags = (flags == XAResource.TMNOFLAGS);
         boolean isTmJoin = (flags == XAResource.TMJOIN);
@@ -213,7 +215,7 @@ public class XATransactionRegistry {
         
         if (isTmNoFlags) {
             // New transaction branch - create context and borrow session
-            TxContext existing = contexts.putIfAbsent(xid, new TxContext(xid));
+            TxContext existing = contexts.putIfAbsent(xid, new TxContext(xid, ojpSessionId));
             if (existing != null) {
                 throw new XAException(XAException.XAER_DUPID);
             }
@@ -230,7 +232,7 @@ public class XATransactionRegistry {
                 // Call XAResource.start on backend with the stored Xid
                 session.getXAResource().start(actualXid, flags);
                 
-                log.info("XA transaction started: xid={}", xid);
+                log.info("XA transaction started: xid={}, ojpSessionId={}", xid, ojpSessionId);
             } catch (Exception e) {
                 contexts.remove(xid);
                 throw new XAException(XAException.XAER_RMERR);
@@ -638,10 +640,11 @@ public class XATransactionRegistry {
         int returnedCount = 0;
         List<XidKey> toRemove = new ArrayList<>();
         
-        // Find all completed transactions and return their sessions
+        // Find all completed transactions belonging to the specified OJP session and return their sessions
         for (Map.Entry<XidKey, TxContext> entry : contexts.entrySet()) {
             TxContext ctx = entry.getValue();
-            if (ctx.isTransactionComplete()) {
+            // IMPORTANT: Only return sessions that belong to the specified OJP session AND are complete
+            if (ctx.isTransactionComplete() && ojpSessionId.equals(ctx.getOjpSessionId())) {
                 toRemove.add(entry.getKey());
                 
                 // Return session to pool
@@ -650,7 +653,7 @@ public class XATransactionRegistry {
                     try {
                         poolProvider.returnSession(poolDataSource, session);
                         returnedCount++;
-                        log.debug("Returned backend session to pool for completed transaction xid={}", entry.getKey());
+                        log.debug("Returned backend session to pool for completed transaction xid={}, ojpSessionId={}", entry.getKey(), ojpSessionId);
                     } catch (Exception e) {
                         log.error("Failed to return session to pool for xid={}: {}", entry.getKey(), e.getMessage());
                         // Best effort: try to invalidate
@@ -667,7 +670,7 @@ public class XATransactionRegistry {
         // Remove completed transactions from registry
         for (XidKey xid : toRemove) {
             contexts.remove(xid);
-            log.debug("Removed completed transaction from registry: xid={}", xid);
+            log.debug("Removed completed transaction from registry: xid={}, ojpSessionId={}", xid, ojpSessionId);
         }
         
         if (returnedCount > 0) {
