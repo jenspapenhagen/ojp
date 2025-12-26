@@ -674,6 +674,33 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             log.info("Created XA session (pooled, eager allocation) with client UUID: {} for connHash: {}", 
                     connectionDetails.getClientUUID(), connHash);
             
+            // CRITICAL FIX: Call processClusterHealth() during XA connection establishment
+            // This ensures pool rebalancing happens even when server 1 fails before any XA operations execute
+            // Without this, pool exhaustion prevents cluster health propagation and pool never expands
+            if (connectionDetails.getServerEndpointsList() != null && !connectionDetails.getServerEndpointsList().isEmpty()) {
+                // Generate synthetic cluster health string from server endpoints
+                // Assume all servers are UP initially - actual health will be updated on first XA operation
+                StringBuilder clusterHealthBuilder = new StringBuilder();
+                for (int i = 0; i < connectionDetails.getServerEndpointsList().size(); i++) {
+                    if (i > 0) {
+                        clusterHealthBuilder.append(";");
+                    }
+                    clusterHealthBuilder.append(connectionDetails.getServerEndpointsList().get(i)).append("(UP)");
+                }
+                String initialClusterHealth = clusterHealthBuilder.toString();
+                
+                // Create SessionInfo with cluster health for processing
+                SessionInfo sessionInfoWithHealth = SessionInfo.newBuilder(sessionInfo)
+                        .setClusterHealth(initialClusterHealth)
+                        .build();
+                
+                log.info("[XA-CONNECT-REBALANCE] Calling processClusterHealth during XA connect for connHash={}, clusterHealth={}", 
+                        connHash, initialClusterHealth);
+                
+                // Process cluster health to trigger pool rebalancing if needed
+                processClusterHealth(sessionInfoWithHealth);
+            }
+            
             responseObserver.onNext(sessionInfo);
             this.dbNameMap.put(connHash, DatabaseUtils.resolveDbName(connectionDetails.getUrl()));
             responseObserver.onCompleted();
