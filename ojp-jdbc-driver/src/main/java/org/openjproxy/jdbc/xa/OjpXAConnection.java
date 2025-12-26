@@ -96,6 +96,16 @@ public class OjpXAConnection implements XAConnection, ServerHealthListener {
             if (serverEndpoints != null && !serverEndpoints.isEmpty()) {
                 connBuilder.addAllServerEndpoints(serverEndpoints);
                 log.info("Adding {} server endpoints to ConnectionDetails for multinode coordination", serverEndpoints.size());
+                
+                // CRITICAL FIX: Add actual cluster health for XA pool rebalancing during connect()
+                // The server needs the CURRENT cluster health (not synthetic) to properly size the XA backend pool
+                // when server 1 fails before any XA operations execute
+                if (statementService instanceof MultinodeStatementService) {
+                    MultinodeConnectionManager connectionManager = ((MultinodeStatementService) statementService).getConnectionManager();
+                    String clusterHealth = connectionManager.generateClusterHealth();
+                    connBuilder.setClusterHealth(clusterHealth);
+                    log.info("[XA-CONNECT-HEALTH] Adding cluster health to ConnectionDetails: {}", clusterHealth);
+                }
             }
 
             if (properties != null && !properties.isEmpty()) {

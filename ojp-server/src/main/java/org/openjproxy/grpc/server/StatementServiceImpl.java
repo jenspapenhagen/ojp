@@ -677,28 +677,24 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             // CRITICAL FIX: Call processClusterHealth() during XA connection establishment
             // This ensures pool rebalancing happens even when server 1 fails before any XA operations execute
             // Without this, pool exhaustion prevents cluster health propagation and pool never expands
-            if (connectionDetails.getServerEndpointsList() != null && !connectionDetails.getServerEndpointsList().isEmpty()) {
-                // Generate synthetic cluster health string from server endpoints
-                // Assume all servers are UP initially - actual health will be updated on first XA operation
-                StringBuilder clusterHealthBuilder = new StringBuilder();
-                for (int i = 0; i < connectionDetails.getServerEndpointsList().size(); i++) {
-                    if (i > 0) {
-                        clusterHealthBuilder.append(";");
-                    }
-                    clusterHealthBuilder.append(connectionDetails.getServerEndpointsList().get(i)).append("(UP)");
-                }
-                String initialClusterHealth = clusterHealthBuilder.toString();
+            if (connectionDetails.getClusterHealth() != null && !connectionDetails.getClusterHealth().isEmpty()) {
+                // Use the ACTUAL cluster health from the client (not synthetic)
+                // The client sends the current health status of all servers
+                String actualClusterHealth = connectionDetails.getClusterHealth();
                 
                 // Create SessionInfo with cluster health for processing
                 SessionInfo sessionInfoWithHealth = SessionInfo.newBuilder(sessionInfo)
-                        .setClusterHealth(initialClusterHealth)
+                        .setClusterHealth(actualClusterHealth)
                         .build();
                 
                 log.info("[XA-CONNECT-REBALANCE] Calling processClusterHealth during XA connect for connHash={}, clusterHealth={}", 
-                        connHash, initialClusterHealth);
+                        connHash, actualClusterHealth);
                 
                 // Process cluster health to trigger pool rebalancing if needed
                 processClusterHealth(sessionInfoWithHealth);
+            } else {
+                log.warn("[XA-CONNECT-REBALANCE] No cluster health provided in ConnectionDetails for connHash={}, pool rebalancing may be delayed", 
+                        connHash);
             }
             
             responseObserver.onNext(sessionInfo);
