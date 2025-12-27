@@ -248,16 +248,14 @@ public class Session {
                 if (backendSession instanceof org.openjproxy.xa.pool.XABackendSession) {
                     org.openjproxy.xa.pool.XABackendSession pooledSession = 
                         (org.openjproxy.xa.pool.XABackendSession) backendSession;
-                    pooledSession.close(); // Returns to pool
+                    pooledSession.close(); // Returns to pool - this also closes the XAConnection
                 }
             } catch (Exception e) {
                 log.error("Error returning XABackendSession to pool", e);
             }
-        }
-
-        // For XA connections, close the XA connection (which also closes the logical connection)
-        // Do NOT close the regular connection as it would trigger auto-commit changes
-        if (isXA && xaConnection != null) {
+        } else if (isXA && xaConnection != null) {
+            // For XA connections WITHOUT pooling (pass-through mode), close the XA connection
+            // Do NOT close the regular connection as it would trigger auto-commit changes
             try {
                 xaConnection.close();
             } catch (SQLException e) {
