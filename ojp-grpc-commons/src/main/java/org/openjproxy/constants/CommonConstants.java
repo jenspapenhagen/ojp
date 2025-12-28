@@ -49,6 +49,11 @@ public class CommonConstants {
     public static final String XA_CONNECTION_TIMEOUT_PROPERTY = "ojp.xa.connection.pool.connectionTimeout";
     public static final String XA_POOL_ENABLED_PROPERTY = "ojp.xa.connection.pool.enabled";
     
+    // XA pool evictor configuration property keys (Apache Commons Pool 2)
+    public static final String XA_TIME_BETWEEN_EVICTION_RUNS_PROPERTY = "ojp.xa.connection.pool.timeBetweenEvictionRuns";
+    public static final String XA_NUM_TESTS_PER_EVICTION_RUN_PROPERTY = "ojp.xa.connection.pool.numTestsPerEvictionRun";
+    public static final String XA_SOFT_MIN_EVICTABLE_IDLE_TIME_PROPERTY = "ojp.xa.connection.pool.softMinEvictableIdleTime";
+    
     // Multinode configuration property keys
     public static final String MULTINODE_RETRY_ATTEMPTS_PROPERTY = "ojp.multinode.retryAttempts";
     public static final String MULTINODE_RETRY_DELAY_PROPERTY = "ojp.multinode.retryDelayMs";
@@ -68,4 +73,9 @@ public class CommonConstants {
     // Multinode configuration defaults - addressing PR #39 review comment #1
     public static final int DEFAULT_MULTINODE_RETRY_ATTEMPTS = -1;  // -1 = retry indefinitely
     public static final long DEFAULT_MULTINODE_RETRY_DELAY_MS = 5000;  // 5 seconds between retries
+    
+    // XA pool evictor defaults (Apache Commons Pool 2)
+    public static final long DEFAULT_XA_TIME_BETWEEN_EVICTION_RUNS_MS = 30000;  // 30 seconds
+    public static final int DEFAULT_XA_NUM_TESTS_PER_EVICTION_RUN = 10;  // Check 10 idle connections per run
+    public static final long DEFAULT_XA_SOFT_MIN_EVICTABLE_IDLE_TIME_MS = 60000;  // 1 minute - respects minIdle
 }

@@ -29,6 +29,9 @@ import java.util.Map;
  *   <li>{@code xa.connectionTimeoutMs} - Borrow timeout in ms (default: 30000)</li>
  *   <li>{@code xa.idleTimeoutMs} - Idle eviction timeout in ms (default: 600000)</li>
  *   <li>{@code xa.maxLifetimeMs} - Maximum session lifetime in ms (default: 1800000)</li>
+ *   <li>{@code xa.timeBetweenEvictionRunsMs} - Evictor run interval in ms (default: 30000)</li>
+ *   <li>{@code xa.numTestsPerEvictionRun} - Number of idle connections to check per run (default: 10)</li>
+ *   <li>{@code xa.softMinEvictableIdleTimeMs} - Soft min evictable idle time in ms, respects minIdle (default: 60000)</li>
  * </ul>
  * 
  * <h3>Pool Behavior:</h3>
@@ -36,8 +39,9 @@ import java.util.Map;
  *   <li>Blocks when pool exhausted (up to connectionTimeoutMs)</li>
  *   <li>Validates sessions on borrow (testOnBorrow=true)</li>
  *   <li>Validates idle sessions periodically (testWhileIdle=true)</li>
- *   <li>Evicts idle sessions after idleTimeoutMs</li>
- *   <li>Limits session lifetime to maxLifetimeMs</li>
+ *   <li>Evicts excess idle sessions above minIdle after softMinEvictableIdleTimeMs</li>
+ *   <li>Evictor runs every timeBetweenEvictionRunsMs to clean up excess connections</li>
+ *   <li>Hard eviction disabled (minEvictableIdleDuration=-1) to prevent premature eviction</li>
  * </ul>
  * 
  * <p><strong>Note:</strong> This wrapper implements XADataSource for compatibility but
@@ -463,11 +467,19 @@ public class CommonsPool2XADataSource implements XADataSource {
         poolConfig.setTestOnReturn(false);
         poolConfig.setTestWhileIdle(true);
         
-        // Eviction
-        poolConfig.setTimeBetweenEvictionRuns(Duration.ofSeconds(30));
-        long idleTimeoutMs = getLongConfig(config, "xa.idleTimeoutMs", 600000L);
-        poolConfig.setMinEvictableIdleDuration(Duration.ofMillis(idleTimeoutMs));
-        poolConfig.setSoftMinEvictableIdleDuration(Duration.ofMillis(idleTimeoutMs / 2));
+        // Eviction configuration
+        long timeBetweenEvictionRunsMs = getLongConfig(config, "xa.timeBetweenEvictionRunsMs", 30000L);
+        poolConfig.setTimeBetweenEvictionRuns(Duration.ofMillis(timeBetweenEvictionRunsMs));
+        
+        // Note: minEvictableIdleDuration is NOT configurable (hard eviction is forbidden)
+        // We use -1 to disable hard eviction and rely on softMinEvictableIdleDuration instead
+        poolConfig.setMinEvictableIdleDuration(Duration.ofMillis(-1));
+        
+        long softMinEvictableIdleTimeMs = getLongConfig(config, "xa.softMinEvictableIdleTimeMs", 60000L);
+        poolConfig.setSoftMinEvictableIdleDuration(Duration.ofMillis(softMinEvictableIdleTimeMs));
+        
+        int numTestsPerEvictionRun = getIntConfig(config, "xa.numTestsPerEvictionRun", 10);
+        poolConfig.setNumTestsPerEvictionRun(numTestsPerEvictionRun);
         
         // Lifetime enforcement via eviction
         // Note: Commons Pool 2 doesn't have a direct "maxLifetime" setting.

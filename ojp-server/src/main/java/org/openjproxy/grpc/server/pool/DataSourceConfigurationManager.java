@@ -68,6 +68,9 @@ public class DataSourceConfigurationManager {
         private final long maxLifetime;
         private final long connectionTimeout;
         private final boolean poolEnabled;
+        private final long timeBetweenEvictionRuns;
+        private final int numTestsPerEvictionRun;
+        private final long softMinEvictableIdleTime;
         
         public XADataSourceConfiguration(String dataSourceName, Properties properties) {
             this.dataSourceName = dataSourceName;
@@ -83,6 +86,14 @@ public class DataSourceConfigurationManager {
             this.connectionTimeout = getLongProperty(properties, CommonConstants.XA_CONNECTION_TIMEOUT_PROPERTY,
                     getLongProperty(properties, CommonConstants.CONNECTION_TIMEOUT_PROPERTY, CommonConstants.DEFAULT_CONNECTION_TIMEOUT));
             this.poolEnabled = getBooleanProperty(properties, CommonConstants.XA_POOL_ENABLED_PROPERTY, true);
+            
+            // Evictor configuration (XA-specific only, no fallback to non-XA)
+            this.timeBetweenEvictionRuns = getLongProperty(properties, CommonConstants.XA_TIME_BETWEEN_EVICTION_RUNS_PROPERTY, 
+                    CommonConstants.DEFAULT_XA_TIME_BETWEEN_EVICTION_RUNS_MS);
+            this.numTestsPerEvictionRun = getIntProperty(properties, CommonConstants.XA_NUM_TESTS_PER_EVICTION_RUN_PROPERTY,
+                    CommonConstants.DEFAULT_XA_NUM_TESTS_PER_EVICTION_RUN);
+            this.softMinEvictableIdleTime = getLongProperty(properties, CommonConstants.XA_SOFT_MIN_EVICTABLE_IDLE_TIME_PROPERTY,
+                    CommonConstants.DEFAULT_XA_SOFT_MIN_EVICTABLE_IDLE_TIME_MS);
         }
         
         // Getters
@@ -93,11 +104,15 @@ public class DataSourceConfigurationManager {
         public long getMaxLifetime() { return maxLifetime; }
         public long getConnectionTimeout() { return connectionTimeout; }
         public boolean isPoolEnabled() { return poolEnabled; }
+        public long getTimeBetweenEvictionRuns() { return timeBetweenEvictionRuns; }
+        public int getNumTestsPerEvictionRun() { return numTestsPerEvictionRun; }
+        public long getSoftMinEvictableIdleTime() { return softMinEvictableIdleTime; }
         
         @Override
         public String toString() {
-            return String.format("XADataSourceConfiguration[%s: maxPool=%d, minIdle=%d, timeout=%d, poolEnabled=%b]", 
-                    dataSourceName, maximumPoolSize, minimumIdle, connectionTimeout, poolEnabled);
+            return String.format("XADataSourceConfiguration[%s: maxPool=%d, minIdle=%d, timeout=%d, poolEnabled=%b, evictionRuns=%d, testsPerRun=%d, softMinEvictable=%d]", 
+                    dataSourceName, maximumPoolSize, minimumIdle, connectionTimeout, poolEnabled, 
+                    timeBetweenEvictionRuns, numTestsPerEvictionRun, softMinEvictableIdleTime);
         }
     }
     
@@ -168,6 +183,9 @@ public class DataSourceConfigurationManager {
                     CommonConstants.XA_MAX_LIFETIME_PROPERTY,
                     CommonConstants.XA_CONNECTION_TIMEOUT_PROPERTY,
                     CommonConstants.XA_POOL_ENABLED_PROPERTY,
+                    CommonConstants.XA_TIME_BETWEEN_EVICTION_RUNS_PROPERTY,
+                    CommonConstants.XA_NUM_TESTS_PER_EVICTION_RUN_PROPERTY,
+                    CommonConstants.XA_SOFT_MIN_EVICTABLE_IDLE_TIME_PROPERTY,
                     // Include fallback properties in hash too
                     CommonConstants.MAXIMUM_POOL_SIZE_PROPERTY,
                     CommonConstants.MINIMUM_IDLE_PROPERTY,
