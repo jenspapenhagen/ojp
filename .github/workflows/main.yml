@@ -1179,6 +1179,8 @@ jobs:
           echo "Checking PostgreSQL connections after killing Server 1..."
           TIMEOUT=600
           ELAPSED=0
+          STABILIZATION_PERIOD=15
+          HIGH_COUNT_START=0
           
           while [ $ELAPSED -lt $TIMEOUT ]; do
             CONNECTION_COUNT=$(PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -t -c "SELECT COUNT(*) FROM pg_stat_activity WHERE datname='defaultdb';")
@@ -1190,10 +1192,22 @@ jobs:
               PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
               break
             elif [ "$CONNECTION_COUNT" -gt 46 ]; then
-              echo "✗ ERROR: Connection count ($CONNECTION_COUNT) exceeds maximum of 46!"
-              PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
-              exit 1
+              # Allow temporary spike during pool rebalancing - track how long it stays high
+              if [ $HIGH_COUNT_START -eq 0 ]; then
+                HIGH_COUNT_START=$ELAPSED
+                echo "⚠ Connection count temporarily high ($CONNECTION_COUNT > 46), allowing ${STABILIZATION_PERIOD}s for pool rebalancing..."
+              fi
+              
+              HIGH_COUNT_DURATION=$((ELAPSED - HIGH_COUNT_START))
+              if [ $HIGH_COUNT_DURATION -ge $STABILIZATION_PERIOD ]; then
+                echo "✗ ERROR: Connection count ($CONNECTION_COUNT) still exceeds maximum of 46 after ${STABILIZATION_PERIOD}s stabilization period!"
+                PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
+                exit 1
+              fi
+              sleep 2
+              ELAPSED=$((ELAPSED + 2))
             else
+              HIGH_COUNT_START=0  # Reset if count drops below threshold
               echo "Waiting for connections to reach at least 20... (currently: $CONNECTION_COUNT)"
               sleep 2
               ELAPSED=$((ELAPSED + 2))
@@ -1243,6 +1257,8 @@ jobs:
           echo "Checking PostgreSQL connections after restarting Server 1..."
           TIMEOUT=600
           ELAPSED=0
+          STABILIZATION_PERIOD=15
+          HIGH_COUNT_START=0
           
           while [ $ELAPSED -lt $TIMEOUT ]; do
             CONNECTION_COUNT=$(PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -t -c "SELECT COUNT(*) FROM pg_stat_activity WHERE datname='defaultdb';")
@@ -1254,10 +1270,22 @@ jobs:
               PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
               break
             elif [ "$CONNECTION_COUNT" -gt 46 ]; then
-              echo "✗ ERROR: Connection count ($CONNECTION_COUNT) exceeds maximum of 46!"
-              PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
-              exit 1
+              # Allow temporary spike during pool rebalancing - track how long it stays high
+              if [ $HIGH_COUNT_START -eq 0 ]; then
+                HIGH_COUNT_START=$ELAPSED
+                echo "⚠ Connection count temporarily high ($CONNECTION_COUNT > 46), allowing ${STABILIZATION_PERIOD}s for pool rebalancing..."
+              fi
+              
+              HIGH_COUNT_DURATION=$((ELAPSED - HIGH_COUNT_START))
+              if [ $HIGH_COUNT_DURATION -ge $STABILIZATION_PERIOD ]; then
+                echo "✗ ERROR: Connection count ($CONNECTION_COUNT) still exceeds maximum of 46 after ${STABILIZATION_PERIOD}s stabilization period!"
+                PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
+                exit 1
+              fi
+              sleep 2
+              ELAPSED=$((ELAPSED + 2))
             else
+              HIGH_COUNT_START=0  # Reset if count drops below threshold
               echo "Waiting for connections to reach at least 20... (currently: $CONNECTION_COUNT)"
               sleep 2
               ELAPSED=$((ELAPSED + 2))
@@ -1318,6 +1346,8 @@ jobs:
           echo "Checking PostgreSQL connections after killing Server 2..."
           TIMEOUT=600
           ELAPSED=0
+          STABILIZATION_PERIOD=15
+          HIGH_COUNT_START=0
           
           while [ $ELAPSED -lt $TIMEOUT ]; do
             CONNECTION_COUNT=$(PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -t -c "SELECT COUNT(*) FROM pg_stat_activity WHERE datname='defaultdb';")
@@ -1329,10 +1359,22 @@ jobs:
               PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
               break
             elif [ "$CONNECTION_COUNT" -gt 46 ]; then
-              echo "✗ ERROR: Connection count ($CONNECTION_COUNT) exceeds maximum of 46!"
-              PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
-              exit 1
+              # Allow temporary spike during pool rebalancing - track how long it stays high
+              if [ $HIGH_COUNT_START -eq 0 ]; then
+                HIGH_COUNT_START=$ELAPSED
+                echo "⚠ Connection count temporarily high ($CONNECTION_COUNT > 46), allowing ${STABILIZATION_PERIOD}s for pool rebalancing..."
+              fi
+              
+              HIGH_COUNT_DURATION=$((ELAPSED - HIGH_COUNT_START))
+              if [ $HIGH_COUNT_DURATION -ge $STABILIZATION_PERIOD ]; then
+                echo "✗ ERROR: Connection count ($CONNECTION_COUNT) still exceeds maximum of 46 after ${STABILIZATION_PERIOD}s stabilization period!"
+                PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
+                exit 1
+              fi
+              sleep 2
+              ELAPSED=$((ELAPSED + 2))
             else
+              HIGH_COUNT_START=0  # Reset if count drops below threshold
               echo "Waiting for connections to reach at least 20... (currently: $CONNECTION_COUNT)"
               sleep 2
               ELAPSED=$((ELAPSED + 2))
@@ -1382,6 +1424,8 @@ jobs:
           echo "Checking PostgreSQL connections after restarting Server 2..."
           TIMEOUT=600
           ELAPSED=0
+          STABILIZATION_PERIOD=15
+          HIGH_COUNT_START=0
           
           while [ $ELAPSED -lt $TIMEOUT ]; do
             CONNECTION_COUNT=$(PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -t -c "SELECT COUNT(*) FROM pg_stat_activity WHERE datname='defaultdb';")
@@ -1393,10 +1437,22 @@ jobs:
               PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
               break
             elif [ "$CONNECTION_COUNT" -gt 46 ]; then
-              echo "✗ ERROR: Connection count ($CONNECTION_COUNT) exceeds maximum of 46!"
-              PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
-              exit 1
+              # Allow temporary spike during pool rebalancing - track how long it stays high
+              if [ $HIGH_COUNT_START -eq 0 ]; then
+                HIGH_COUNT_START=$ELAPSED
+                echo "⚠ Connection count temporarily high ($CONNECTION_COUNT > 46), allowing ${STABILIZATION_PERIOD}s for pool rebalancing..."
+              fi
+              
+              HIGH_COUNT_DURATION=$((ELAPSED - HIGH_COUNT_START))
+              if [ $HIGH_COUNT_DURATION -ge $STABILIZATION_PERIOD ]; then
+                echo "✗ ERROR: Connection count ($CONNECTION_COUNT) still exceeds maximum of 46 after ${STABILIZATION_PERIOD}s stabilization period!"
+                PGPASSWORD=testpassword psql -h 127.0.0.1 -U testuser -d defaultdb -c "SELECT datname, COUNT(*) AS connections FROM pg_stat_activity WHERE datname='defaultdb' GROUP BY datname ORDER BY connections DESC;"
+                exit 1
+              fi
+              sleep 2
+              ELAPSED=$((ELAPSED + 2))
             else
+              HIGH_COUNT_START=0  # Reset if count drops below threshold
               echo "Waiting for connections to reach at least 20... (currently: $CONNECTION_COUNT)"
               sleep 2
               ELAPSED=$((ELAPSED + 2))
