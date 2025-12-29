@@ -154,6 +154,8 @@ When using XA (distributed transaction) connections via `OjpXADataSource`, OJP u
 
 #### XA Configuration Examples
 
+> **Note:** These are configuration examples only, not recommendations. Adjust pool sizes based on your application's actual workload characteristics and resource constraints.
+
 ```properties
 # Default XA backend session pool
 ojp.xa.connection.pool.maxTotal=20

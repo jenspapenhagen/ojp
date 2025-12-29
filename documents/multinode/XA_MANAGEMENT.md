@@ -673,7 +673,7 @@ sessionTracker.getSessionCount(server)  // Should match pool.getNumActive()
 
 ### From Pass-Through XA (Old)
 
-**Old Configuration** (deprecated):
+**Old Configuration** (deprecated, no longer supported):
 ```properties
 ojp.xa.maxTransactions=50
 ojp.xa.startTimeoutMillis=60000
@@ -688,8 +688,8 @@ ojp.xa.connection.pool.connectionTimeout=20000
 ```
 
 **Changes**:
-- ❌ Removed: `ojp.xa.maxTransactions` (concurrency semaphore)
-- ❌ Removed: `ojp.xa.startTimeoutMillis` (XA start timeout)
+- ❌ Removed: `ojp.xa.maxTransactions` (replaced by pool-based concurrency control)
+- ❌ Removed: `ojp.xa.startTimeoutMillis` (no longer needed)
 - ✅ Added: Full pool configuration for XA backend sessions
 - ✅ Added: Dual-condition session lifecycle
 - ✅ Added: Dynamic pool rebalancing

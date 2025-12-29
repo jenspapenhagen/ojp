@@ -33,14 +33,6 @@ public class CommonConstants {
     public static final String CONNECTION_TIMEOUT_PROPERTY = "ojp.connection.pool.connectionTimeout";
     public static final String POOL_ENABLED_PROPERTY = "ojp.connection.pool.enabled";
     
-    // Deprecated properties from old pass-through XA model (no longer used)
-    /** @deprecated No longer used with backend session pooling model. Was used for XA concurrency semaphore. */
-    @Deprecated
-    public static final String MAX_XA_TRANSACTIONS_PROPERTY = "ojp.xa.maxTransactions";
-    /** @deprecated No longer used with backend session pooling model. Was used for XA start timeout. */
-    @Deprecated
-    public static final String XA_START_TIMEOUT_PROPERTY = "ojp.xa.startTimeoutMillis";
-    
     // XA-specific pool configuration property keys
     public static final String XA_MAXIMUM_POOL_SIZE_PROPERTY = "ojp.xa.connection.pool.maximumPoolSize";
     public static final String XA_MINIMUM_IDLE_PROPERTY = "ojp.xa.connection.pool.minimumIdle";

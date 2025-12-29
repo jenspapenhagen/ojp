@@ -18,7 +18,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class LoadAwareServerSelectionTest {
 
     private List<ServerEndpoint> endpoints;
-    private SessionTracker sessionTracker; // Changed from ConnectionTracker
+    private SessionTracker sessionTracker;
     private HealthCheckConfig loadAwareConfig;
     private HealthCheckConfig roundRobinConfig;
 
@@ -30,7 +30,7 @@ class LoadAwareServerSelectionTest {
             new ServerEndpoint("server3", 1059)
         );
         
-        sessionTracker = new SessionTracker(); // Changed to SessionTracker
+        sessionTracker = new SessionTracker();
         
         // Create config with load-aware selection enabled
         loadAwareConfig = HealthCheckConfig.createDefault();
@@ -55,7 +55,7 @@ class LoadAwareServerSelectionTest {
     void testLoadAwareSelectionPicksLeastLoadedServer() throws SQLException {
         // Create manager with load-aware selection enabled
         MultinodeConnectionManager manager = new MultinodeConnectionManager(
-            endpoints, 3, 1000, loadAwareConfig, null // ConnectionTracker not needed for unified mode
+            endpoints, 3, 1000, loadAwareConfig, null
         );
         
         // Get the manager's SessionTracker
@@ -299,14 +299,7 @@ class LoadAwareServerSelectionTest {
         }
     }
 
-    /**
-     * Helper method to simulate a single connection on a server (legacy).
-     * @deprecated Use simulateSession instead
-     */
-    @Deprecated
-    private void simulateConnection(ConnectionTracker tracker, ServerEndpoint server) {
-        simulateConnections(tracker, server, 1);
-    }
+
     
     /**
      * Simple wrapper class for mock connections.
