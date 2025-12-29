@@ -130,6 +130,17 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     // Cluster health tracker for monitoring health changes
     private final ClusterHealthTracker clusterHealthTracker = new ClusterHealthTracker();
     
+    // Unpooled connection details (for passthrough mode when pooling is disabled)
+    @Builder
+    @Getter
+    private static class UnpooledConnectionDetails {
+        private final String url;
+        private final String username;
+        private final String password;
+        private final long connectionTimeout;
+    }
+    private final Map<String, UnpooledConnectionDetails> unpooledConnectionDetailsMap = new ConcurrentHashMap<>();
+    
     private static final List<String> INPUT_STREAM_TYPES = Arrays.asList("RAW", "BINARY VARYING", "BYTEA");
     private final Map<String, DbName> dbNameMap = new ConcurrentHashMap<>();
 
@@ -205,21 +216,71 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
      */
     private void processClusterHealth(SessionInfo sessionInfo) {
         if (sessionInfo == null) {
+            log.debug("[XA-REBALANCE-DEBUG] processClusterHealth: sessionInfo is null");
             return;
         }
         
         String clusterHealth = sessionInfo.getClusterHealth();
         String connHash = sessionInfo.getConnHash();
         
+        log.debug("[XA-REBALANCE] processClusterHealth called: connHash={}, clusterHealth='{}', isXA={}, hasXARegistry={}", 
+                connHash, clusterHealth, sessionInfo.getIsXA(), xaRegistries.containsKey(connHash));
+        
         if (clusterHealth != null && !clusterHealth.isEmpty() && 
             connHash != null && !connHash.isEmpty()) {
             
-            // Get the DataSource for this connection hash to enable dynamic resizing
-            // Cast to HikariDataSource for backward compatibility with HikariCP-specific resizing
-            DataSource ds = datasourceMap.get(connHash);
-            HikariDataSource hikariDataSource = (ds instanceof HikariDataSource) ? (HikariDataSource) ds : null;
+            // Check if cluster health has changed
+            boolean healthChanged = clusterHealthTracker.hasHealthChanged(connHash, clusterHealth);
             
-            ConnectionPoolConfigurer.processClusterHealth(connHash, clusterHealth, clusterHealthTracker, hikariDataSource);
+            log.debug("[XA-REBALANCE] Cluster health check for {}: changed={}, current health='{}', isXA={}", 
+                    connHash, healthChanged, clusterHealth, sessionInfo.getIsXA());
+            
+            if (healthChanged) {
+                int healthyServerCount = clusterHealthTracker.countHealthyServers(clusterHealth);
+                log.info("[XA-REBALANCE] Cluster health changed for {}, healthy servers: {}, triggering pool rebalancing, isXA={}", 
+                        connHash, healthyServerCount, sessionInfo.getIsXA());
+                
+                // Update the pool coordinator with new healthy server count
+                ConnectionPoolConfigurer.getPoolCoordinator().updateHealthyServers(connHash, healthyServerCount);
+                
+                // Apply pool size changes to non-XA HikariDataSource if present
+                DataSource ds = datasourceMap.get(connHash);
+                if (ds instanceof HikariDataSource) {
+                    log.info("[XA-REBALANCE-DEBUG] Applying size changes to HikariDataSource for {}", connHash);
+                    ConnectionPoolConfigurer.applyPoolSizeChanges(connHash, (HikariDataSource) ds);
+                } else {
+                    log.info("[XA-REBALANCE-DEBUG] No HikariDataSource found for {}", connHash);
+                }
+                
+                // Apply pool size changes to XA registry if present
+                XATransactionRegistry xaRegistry = xaRegistries.get(connHash);
+                if (xaRegistry != null) {
+                    log.info("[XA-REBALANCE-DEBUG] Found XA registry for {}, resizing", connHash);
+                    MultinodePoolCoordinator.PoolAllocation allocation = 
+                            ConnectionPoolConfigurer.getPoolCoordinator().getPoolAllocation(connHash);
+                    
+                    if (allocation != null) {
+                        int newMaxPoolSize = allocation.getCurrentMaxPoolSize();
+                        int newMinIdle = allocation.getCurrentMinIdle();
+                        
+                        log.info("[XA-REBALANCE-DEBUG] Resizing XA backend pool for {}: maxPoolSize={}, minIdle={}", 
+                                connHash, newMaxPoolSize, newMinIdle);
+                        
+                        xaRegistry.resizeBackendPool(newMaxPoolSize, newMinIdle);
+                    } else {
+                        log.warn("[XA-REBALANCE-DEBUG] No pool allocation found for {}", connHash);
+                    }
+                } else if (sessionInfo.getIsXA()) {
+                    // Only log missing XA registry for actual XA connections
+                    log.info("[XA-REBALANCE-DEBUG] No XA registry found for XA connection {}", connHash);
+                }
+            } else {
+                log.debug("[XA-REBALANCE-DEBUG] Cluster health unchanged for {}", connHash);
+            }
+        } else {
+            log.info("[XA-REBALANCE-DEBUG] Skipping cluster health processing: clusterHealth={}, connHash={}", 
+                    clusterHealth != null && !clusterHealth.isEmpty() ? "present" : "empty", 
+                    connHash != null && !connHash.isEmpty() ? "present" : "empty");
         }
     }
 
@@ -236,45 +297,9 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
 
         String connHash = ConnectionHashGenerator.hashConnectionDetails(connectionDetails);
 
-        // Extract maxXaTransactions from properties
+        // Use default XA configuration values (deprecated pass-through properties no longer supported)
         int maxXaTransactions = org.openjproxy.constants.CommonConstants.DEFAULT_MAX_XA_TRANSACTIONS;
         long xaStartTimeoutMillis = org.openjproxy.constants.CommonConstants.DEFAULT_XA_START_TIMEOUT_MILLIS;
-        
-        if (!connectionDetails.getPropertiesList().isEmpty()) {
-            try {
-                Map<String, Object> clientPropertiesMap = ProtoConverter.propertiesFromProto(connectionDetails.getPropertiesList());
-                
-                // Convert to Properties object for compatibility
-                Properties clientProperties = new Properties();
-                clientProperties.putAll(clientPropertiesMap);
-                
-                // Extract maxXaTransactions if configured
-                String maxXaTransactionsStr = clientProperties.getProperty(
-                        org.openjproxy.constants.CommonConstants.MAX_XA_TRANSACTIONS_PROPERTY);
-                if (maxXaTransactionsStr != null) {
-                    try {
-                        maxXaTransactions = Integer.parseInt(maxXaTransactionsStr);
-                        log.debug("Using configured maxXaTransactions: {}", maxXaTransactions);
-                    } catch (NumberFormatException e) {
-                        log.warn("Invalid maxXaTransactions value '{}', using default: {}", maxXaTransactionsStr, maxXaTransactions);
-                    }
-                }
-                
-                // Extract xaStartTimeoutMillis if configured
-                String xaStartTimeoutStr = clientProperties.getProperty(
-                        org.openjproxy.constants.CommonConstants.XA_START_TIMEOUT_PROPERTY);
-                if (xaStartTimeoutStr != null) {
-                    try {
-                        xaStartTimeoutMillis = Long.parseLong(xaStartTimeoutStr);
-                        log.debug("Using configured xaStartTimeoutMillis: {}", xaStartTimeoutMillis);
-                    } catch (NumberFormatException e) {
-                        log.warn("Invalid xaStartTimeoutMillis value '{}', using default: {}", xaStartTimeoutStr, xaStartTimeoutMillis);
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed to deserialize client properties for XA config, using defaults: {}", e.getMessage());
-            }
-        }
         
         log.info("connect connHash = {}, isXA = {}, maxXaTransactions = {}, xaStartTimeout = {}ms", 
                 connHash, connectionDetails.getIsXA(), maxXaTransactions, xaStartTimeoutMillis);
@@ -310,57 +335,75 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             return;
         }
         
-        // Handle non-XA connection - use Connection Pool SPI (HikariCP by default)
+        // Handle non-XA connection - check if pooling is enabled
         DataSource ds = this.datasourceMap.get(connHash);
-        if (ds == null) {
+        UnpooledConnectionDetails unpooledDetails = this.unpooledConnectionDetailsMap.get(connHash);
+        
+        if (ds == null && unpooledDetails == null) {
             try {
                 // Get datasource-specific configuration from client properties
                 Properties clientProperties = ConnectionPoolConfigurer.extractClientProperties(connectionDetails);
                 DataSourceConfigurationManager.DataSourceConfiguration dsConfig = 
                         DataSourceConfigurationManager.getConfiguration(clientProperties);
                 
-                // Get pool sizes - apply multinode coordination if needed
-                int maxPoolSize = dsConfig.getMaximumPoolSize();
-                int minIdle = dsConfig.getMinimumIdle();
-                
-                List<String> serverEndpoints = connectionDetails.getServerEndpointsList();
-                if (serverEndpoints != null && !serverEndpoints.isEmpty()) {
-                    // Multinode: calculate divided pool sizes
-                    MultinodePoolCoordinator.PoolAllocation allocation = 
-                            ConnectionPoolConfigurer.getPoolCoordinator().calculatePoolSizes(
-                                    connHash, maxPoolSize, minIdle, serverEndpoints);
+                // Check if pooling is enabled
+                if (!dsConfig.isPoolEnabled()) {
+                    // Unpooled mode: store connection details for direct connection creation
+                    unpooledDetails = UnpooledConnectionDetails.builder()
+                            .url(UrlParser.parseUrl(connectionDetails.getUrl()))
+                            .username(connectionDetails.getUser())
+                            .password(connectionDetails.getPassword())
+                            .connectionTimeout(dsConfig.getConnectionTimeout())
+                            .build();
+                    this.unpooledConnectionDetailsMap.put(connHash, unpooledDetails);
                     
-                    maxPoolSize = allocation.getCurrentMaxPoolSize();
-                    minIdle = allocation.getCurrentMinIdle();
+                    log.info("Unpooled (passthrough) mode enabled for dataSource '{}' with connHash: {}", 
+                            dsConfig.getDataSourceName(), connHash);
+                } else {
+                    // Pooled mode: create datasource with Connection Pool SPI (HikariCP by default)
+                    // Get pool sizes - apply multinode coordination if needed
+                    int maxPoolSize = dsConfig.getMaximumPoolSize();
+                    int minIdle = dsConfig.getMinimumIdle();
                     
-                    log.info("Multinode pool coordination enabled for {}: {} servers, divided pool sizes: max={}, min={}", 
-                            connHash, serverEndpoints.size(), maxPoolSize, minIdle);
+                    List<String> serverEndpoints = connectionDetails.getServerEndpointsList();
+                    if (serverEndpoints != null && !serverEndpoints.isEmpty()) {
+                        // Multinode: calculate divided pool sizes
+                        MultinodePoolCoordinator.PoolAllocation allocation = 
+                                ConnectionPoolConfigurer.getPoolCoordinator().calculatePoolSizes(
+                                        connHash, maxPoolSize, minIdle, serverEndpoints);
+                        
+                        maxPoolSize = allocation.getCurrentMaxPoolSize();
+                        minIdle = allocation.getCurrentMinIdle();
+                        
+                        log.info("Multinode pool coordination enabled for {}: {} servers, divided pool sizes: max={}, min={}", 
+                                connHash, serverEndpoints.size(), maxPoolSize, minIdle);
+                    }
+                    
+                    // Build PoolConfig from connection details and configuration
+                    PoolConfig poolConfig = PoolConfig.builder()
+                            .url(UrlParser.parseUrl(connectionDetails.getUrl()))
+                            .username(connectionDetails.getUser())
+                            .password(connectionDetails.getPassword())
+                            .maxPoolSize(maxPoolSize)
+                            .minIdle(minIdle)
+                            .connectionTimeoutMs(dsConfig.getConnectionTimeout())
+                            .idleTimeoutMs(dsConfig.getIdleTimeout())
+                            .maxLifetimeMs(dsConfig.getMaxLifetime())
+                            .metricsPrefix("OJP-Pool-" + dsConfig.getDataSourceName())
+                            .build();
+                    
+                    // Create DataSource using the SPI (HikariCP by default)
+                    ds = ConnectionPoolProviderRegistry.createDataSource(poolConfig);
+                    this.datasourceMap.put(connHash, ds);
+                    
+                    // Create a slow query segregation manager for this datasource
+                    createSlowQuerySegregationManagerForDatasource(connHash, maxPoolSize);
+                    
+                    log.info("Created new DataSource for dataSource '{}' with connHash: {} using provider: {}, maxPoolSize={}, minIdle={}", 
+                            dsConfig.getDataSourceName(), connHash, 
+                            ConnectionPoolProviderRegistry.getDefaultProvider().map(p -> p.id()).orElse("unknown"),
+                            maxPoolSize, minIdle);
                 }
-                
-                // Build PoolConfig from connection details and configuration
-                PoolConfig poolConfig = PoolConfig.builder()
-                        .url(UrlParser.parseUrl(connectionDetails.getUrl()))
-                        .username(connectionDetails.getUser())
-                        .password(connectionDetails.getPassword())
-                        .maxPoolSize(maxPoolSize)
-                        .minIdle(minIdle)
-                        .connectionTimeoutMs(dsConfig.getConnectionTimeout())
-                        .idleTimeoutMs(dsConfig.getIdleTimeout())
-                        .maxLifetimeMs(dsConfig.getMaxLifetime())
-                        .metricsPrefix("OJP-Pool-" + dsConfig.getDataSourceName())
-                        .build();
-                
-                // Create DataSource using the SPI (HikariCP by default)
-                ds = ConnectionPoolProviderRegistry.createDataSource(poolConfig);
-                this.datasourceMap.put(connHash, ds);
-                
-                // Create a slow query segregation manager for this datasource
-                createSlowQuerySegregationManagerForDatasource(connHash, maxPoolSize);
-                
-                log.info("Created new DataSource for dataSource '{}' with connHash: {} using provider: {}, maxPoolSize={}, minIdle={}", 
-                        dsConfig.getDataSourceName(), connHash, 
-                        ConnectionPoolProviderRegistry.getDefaultProvider().map(p -> p.id()).orElse("unknown"),
-                        maxPoolSize, minIdle);
                 
             } catch (Exception e) {
                 log.error("Failed to create datasource for connection hash {}: {}", connHash, e.getMessage(), e);
@@ -400,56 +443,217 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                                                StreamObserver<SessionInfo> responseObserver) {
         log.info("Using XA Pool Provider SPI for connHash: {}", connHash);
         
+        // Get current serverEndpoints configuration
+        List<String> currentServerEndpoints = connectionDetails.getServerEndpointsList();
+        String currentEndpointsHash = (currentServerEndpoints == null || currentServerEndpoints.isEmpty()) 
+                ? "NONE" 
+                : String.join(",", currentServerEndpoints);
+        
         // Check if we already have an XA registry for this connection hash
         XATransactionRegistry registry = xaRegistries.get(connHash);
+        log.info("XA registry cache lookup for {}: exists={}, current serverEndpoints hash: {}", 
+                connHash, registry != null, currentEndpointsHash);
+        
+        // Calculate what the pool sizes SHOULD be based on current configuration
+        int expectedMaxPoolSize;
+        int expectedMinIdle;
+        boolean poolEnabled;
+        try {
+            Properties clientProperties = ConnectionPoolConfigurer.extractClientProperties(connectionDetails);
+            DataSourceConfigurationManager.XADataSourceConfiguration xaConfig = 
+                    DataSourceConfigurationManager.getXAConfiguration(clientProperties);
+            expectedMaxPoolSize = xaConfig.getMaximumPoolSize();
+            expectedMinIdle = xaConfig.getMinimumIdle();
+            poolEnabled = xaConfig.isPoolEnabled();
+            
+            // Apply multinode coordination to get expected divided sizes
+            if (currentServerEndpoints != null && !currentServerEndpoints.isEmpty()) {
+                MultinodePoolCoordinator.PoolAllocation allocation = 
+                        ConnectionPoolConfigurer.getPoolCoordinator().calculatePoolSizes(
+                                connHash, expectedMaxPoolSize, expectedMinIdle, currentServerEndpoints);
+                expectedMaxPoolSize = allocation.getCurrentMaxPoolSize();
+                expectedMinIdle = allocation.getCurrentMinIdle();
+            }
+        } catch (Exception e) {
+            log.warn("Failed to calculate expected pool sizes, will skip validation: {}", e.getMessage());
+            expectedMaxPoolSize = -1;
+            expectedMinIdle = -1;
+            poolEnabled = true; // Default to pooled mode if config fails
+        }
+        
+        // Check if registry exists and needs recreation due to configuration mismatch
+        boolean needsRecreation = false;
+        if (registry != null) {
+            String registryEndpointsHash = registry.getServerEndpointsHash();
+            int registryMaxPool = registry.getMaxPoolSize();
+            int registryMinIdle = registry.getMinIdle();
+            
+            // Check if serverEndpoints changed
+            if (registryEndpointsHash == null || !registryEndpointsHash.equals(currentEndpointsHash)) {
+                log.warn("XA registry for {} has serverEndpoints mismatch: registry='{}' vs current='{}'. Will recreate.", 
+                        connHash, registryEndpointsHash, currentEndpointsHash);
+                needsRecreation = true;
+            }
+            // Check if pool sizes don't match expected values (indicates wrong coordination on first creation)
+            else if (expectedMaxPoolSize > 0 && registryMaxPool != expectedMaxPoolSize) {
+                log.warn("XA registry for {} has maxPoolSize mismatch: registry={} vs expected={}. Will recreate with correct multinode coordination.",
+                        connHash, registryMaxPool, expectedMaxPoolSize);
+                needsRecreation = true;
+            }
+            else if (expectedMinIdle > 0 && registryMinIdle != expectedMinIdle) {
+                log.warn("XA registry for {} has minIdle mismatch: registry={} vs expected={}. Will recreate with correct multinode coordination.",
+                        connHash, registryMinIdle, expectedMinIdle);
+                needsRecreation = true;
+            }
+            
+            if (needsRecreation) {
+                // Close and remove old registry
+                try {
+                    registry.close();
+                } catch (Exception e) {
+                    log.warn("Failed to close old XA registry during recreation: {}", e.getMessage());
+                }
+                xaRegistries.remove(connHash);
+                registry = null;
+            }
+        }
+        
         if (registry == null) {
+            log.info("Creating NEW XA registry for connHash: {} with serverEndpoints: {}", connHash, currentEndpointsHash);
+            
+            // Check if XA pooling is enabled
+            if (!poolEnabled) {
+                // TODO: Implement unpooled XA mode if needed
+                // For now, log a warning and fall back to pooled mode
+                log.warn("XA unpooled mode requested but not yet implemented for connHash: {}. Falling back to pooled mode.", connHash);
+            }
+            
             try {
                 // Parse URL to remove OJP-specific prefix (same as non-XA path)
                 String parsedUrl = UrlParser.parseUrl(connectionDetails.getUrl());
                 
+                // Get XA datasource configuration from client properties (uses XA-specific properties)
+                Properties clientProperties = ConnectionPoolConfigurer.extractClientProperties(connectionDetails);
+                DataSourceConfigurationManager.XADataSourceConfiguration xaConfig = 
+                        DataSourceConfigurationManager.getXAConfiguration(clientProperties);
+                
+                // Get default pool sizes from XA configuration
+                int maxPoolSize = xaConfig.getMaximumPoolSize();
+                int minIdle = xaConfig.getMinimumIdle();
+                
+                log.info("XA pool BEFORE multinode coordination for {}: requested max={}, min={}", 
+                        connHash, maxPoolSize, minIdle);
+                
+                // Apply multinode pool coordination if server endpoints provided
+                List<String> serverEndpoints = connectionDetails.getServerEndpointsList();
+                log.info("XA serverEndpoints list: null={}, size={}, endpoints={}", 
+                        serverEndpoints == null, 
+                        serverEndpoints == null ? 0 : serverEndpoints.size(),
+                        serverEndpoints);
+                
+                if (serverEndpoints != null && !serverEndpoints.isEmpty()) {
+                    // Multinode: divide pool sizes among servers
+                    MultinodePoolCoordinator.PoolAllocation allocation = 
+                            ConnectionPoolConfigurer.getPoolCoordinator().calculatePoolSizes(
+                                    connHash, maxPoolSize, minIdle, serverEndpoints);
+                    
+                    maxPoolSize = allocation.getCurrentMaxPoolSize();
+                    minIdle = allocation.getCurrentMinIdle();
+                    
+                    log.info("XA multinode pool coordination for {}: {} servers, divided sizes: max={}, min={}", 
+                            connHash, serverEndpoints.size(), maxPoolSize, minIdle);
+                } else {
+                    log.info("XA multinode coordination SKIPPED for {}: serverEndpoints null or empty", connHash);
+                }
+                
+                log.info("XA pool AFTER multinode coordination for {}: final max={}, min={}", 
+                        connHash, maxPoolSize, minIdle);
+
+                
                 // Build configuration map for XA Pool Provider
-                // Use standard PoolConfig defaults (same as non-XA pools)
                 Map<String, String> xaPoolConfig = new HashMap<>();
                 xaPoolConfig.put("xa.datasource.className", getXADataSourceClassName(parsedUrl));
                 xaPoolConfig.put("xa.url", parsedUrl);
                 xaPoolConfig.put("xa.username", connectionDetails.getUser());
                 xaPoolConfig.put("xa.password", connectionDetails.getPassword());
-                // Standard defaults: maxPoolSize=10, minIdle=2, connectionTimeout=30s, idleTimeout=10min, maxLifetime=30min
-                xaPoolConfig.put("xa.maxPoolSize", "10");
-                xaPoolConfig.put("xa.minIdle", "2");
-                xaPoolConfig.put("xa.maxWaitMillis", "30000");
-                xaPoolConfig.put("xa.idleTimeoutMinutes", "10");
-                xaPoolConfig.put("xa.maxLifetimeMinutes", "30");
+                // Use calculated pool sizes (with multinode coordination if applicable)
+                xaPoolConfig.put("xa.maxPoolSize", String.valueOf(maxPoolSize));
+                xaPoolConfig.put("xa.minIdle", String.valueOf(minIdle));
+                xaPoolConfig.put("xa.connectionTimeoutMs", String.valueOf(xaConfig.getConnectionTimeout()));
+                xaPoolConfig.put("xa.idleTimeoutMs", String.valueOf(xaConfig.getIdleTimeout()));
+                xaPoolConfig.put("xa.maxLifetimeMs", String.valueOf(xaConfig.getMaxLifetime()));
+                // Evictor configuration
+                xaPoolConfig.put("xa.timeBetweenEvictionRunsMs", String.valueOf(xaConfig.getTimeBetweenEvictionRuns()));
+                xaPoolConfig.put("xa.numTestsPerEvictionRun", String.valueOf(xaConfig.getNumTestsPerEvictionRun()));
+                xaPoolConfig.put("xa.softMinEvictableIdleTimeMs", String.valueOf(xaConfig.getSoftMinEvictableIdleTime()));
                 
                 // Create pooled XA DataSource via provider
+                log.info("[XA-POOL-CREATE] Creating XA pool for connHash={}, serverEndpointsHash={}, config=(max={}, min={})",
+                        connHash, currentEndpointsHash, maxPoolSize, minIdle);
                 Object pooledXADataSource = xaPoolProvider.createXADataSource(xaPoolConfig);
                 
-                // Create XA Transaction Registry
-                registry = new XATransactionRegistry(xaPoolProvider, pooledXADataSource);
+                // Create XA Transaction Registry with serverEndpoints hash and pool sizes for validation
+                registry = new XATransactionRegistry(xaPoolProvider, pooledXADataSource, currentEndpointsHash, maxPoolSize, minIdle);
                 xaRegistries.put(connHash, registry);
+                
+                // Initialize pool with minIdle connections immediately after creation
+                // Without this, the pool starts empty and only creates connections on demand
+                log.info("[XA-POOL-INIT] Initializing XA pool with minIdle={} connections for connHash={}", minIdle, connHash);
+                registry.resizeBackendPool(maxPoolSize, minIdle);
                 
                 // Create slow query segregation manager for XA
                 createSlowQuerySegregationManagerForDatasource(connHash, actualMaxXaTransactions, true, xaStartTimeoutMillis);
                 
-                log.info("Created XA Pool Provider registry for connHash: {} with maxPoolSize: {}", 
-                        connHash, 10);
+                log.info("[XA-POOL-CREATE] Successfully created XA pool for connHash={} - maxPoolSize={}, minIdle={}, multinode={}, poolObject={}", 
+                        connHash, maxPoolSize, minIdle, serverEndpoints != null && !serverEndpoints.isEmpty(), 
+                        pooledXADataSource.getClass().getSimpleName());
                 
             } catch (Exception e) {
-                log.error("Failed to create XA Pool Provider registry for connection hash {}: {}", 
-                        connHash, e.getMessage(), e);
+                log.error("[XA-POOL-CREATE] FAILED to create XA Pool Provider registry for connHash={}, serverEndpointsHash={}: {}", 
+                        connHash, currentEndpointsHash, e.getMessage(), e);
                 SQLException sqlException = new SQLException("Failed to create XA pool: " + e.getMessage(), e);
                 sendSQLExceptionMetadata(sqlException, responseObserver);
                 return;
             }
+        } else {
+            log.info("[XA-POOL-REUSE] Reusing EXISTING XA registry for connHash={} (pool already created, cached sizes: max={}, min={})",
+                    connHash, registry.getMaxPoolSize(), registry.getMinIdle());
         }
         
         this.sessionManager.registerClientUUID(connHash, connectionDetails.getClientUUID());
         
+        // CRITICAL FIX: Call processClusterHealth() BEFORE borrowing session
+        // This ensures pool rebalancing happens even when server 1 fails before any XA operations execute
+        // Without this, pool exhaustion prevents cluster health propagation and pool never expands
+        if (connectionDetails.getClusterHealth() != null && !connectionDetails.getClusterHealth().isEmpty()) {
+            // Use the ACTUAL cluster health from the client (not synthetic)
+            // The client sends the current health status of all servers
+            String actualClusterHealth = connectionDetails.getClusterHealth();
+            
+            // Create a temporary SessionInfo with cluster health for processing
+            // We don't have the actual sessionInfo yet since we haven't borrowed from the pool
+            SessionInfo tempSessionInfo = SessionInfo.newBuilder()
+                    .setSessionUUID("temp-for-health-check")
+                    .setConnHash(connHash)
+                    .setClusterHealth(actualClusterHealth)
+                    .build();
+            
+            log.info("[XA-CONNECT-REBALANCE] Calling processClusterHealth BEFORE borrow for connHash={}, clusterHealth={}", 
+                    connHash, actualClusterHealth);
+            
+            // Process cluster health to trigger pool rebalancing if needed
+            processClusterHealth(tempSessionInfo);
+        } else {
+            log.warn("[XA-CONNECT-REBALANCE] No cluster health provided in ConnectionDetails for connHash={}, pool rebalancing may be delayed", 
+                    connHash);
+        }
+        
         // Borrow a XABackendSession from the pool for immediate use
         // Note: Unlike the original "deferred" approach, we allocate eagerly because
         // XA applications expect getConnection() to work immediately, before xaStart()
+        org.openjproxy.xa.pool.XABackendSession backendSession = null;
         try {
-            org.openjproxy.xa.pool.XABackendSession backendSession = 
+            backendSession = 
                     (org.openjproxy.xa.pool.XABackendSession) xaPoolProvider.borrowSession(registry.getPooledXADataSource());
             
             XAConnection xaConnection = backendSession.getXAConnection();
@@ -468,6 +672,9 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             log.info("Created XA session (pooled, eager allocation) with client UUID: {} for connHash: {}", 
                     connectionDetails.getClientUUID(), connHash);
             
+            // Note: processClusterHealth() already called BEFORE borrowing session (see above)
+            // This ensures pool is resized before we try to borrow, preventing exhaustion
+            
             responseObserver.onNext(sessionInfo);
             this.dbNameMap.put(connHash, DatabaseUtils.resolveDbName(connectionDetails.getUrl()));
             responseObserver.onCompleted();
@@ -475,6 +682,25 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         } catch (Exception e) {
             log.error("Failed to borrow XABackendSession from pool for connection hash {}: {}", 
                     connHash, e.getMessage(), e);
+            
+            // CRITICAL FIX: Return the borrowed session back to pool on failure to prevent session leaks
+            // This was causing PostgreSQL "too many clients" errors as leaked sessions bypassed pool limits
+            if (backendSession != null) {
+                try {
+                    xaPoolProvider.returnSession(registry.getPooledXADataSource(), backendSession);
+                    log.debug("Returned leaked session to pool after connect() failure for connHash: {}", connHash);
+                } catch (Exception e2) {
+                    log.error("Failed to return session after connect() failure for connHash: {}", connHash, e2);
+                    // Try to invalidate instead to prevent corrupted session reuse
+                    try {
+                        xaPoolProvider.invalidateSession(registry.getPooledXADataSource(), backendSession);
+                        log.warn("Invalidated session after failed return for connHash: {}", connHash);
+                    } catch (Exception e3) {
+                        log.error("Failed to invalidate session after connect() failure for connHash: {}", connHash, e3);
+                    }
+                }
+            }
+            
             SQLException sqlException = new SQLException("Failed to allocate XA session from pool: " + e.getMessage(), e);
             sendSQLExceptionMetadata(sqlException, responseObserver);
             return;
@@ -1207,6 +1433,29 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     public void terminateSession(SessionInfo sessionInfo, StreamObserver<SessionTerminationStatus> responseObserver) {
         try {
             log.info("Terminating session");
+            
+            // Before terminating, return any completed XA backend sessions to pool
+            // This implements the dual-condition lifecycle: sessions are returned when
+            // both transaction is complete AND XAConnection is closed
+            log.info("[XA-TERMINATE] terminateSession called for sessionUUID={}, isXA={}, connHash={}", 
+                    sessionInfo.getSessionUUID(), sessionInfo.getIsXA(), sessionInfo.getConnHash());
+            if (sessionInfo.getIsXA()) {
+                String connHash = sessionInfo.getConnHash();
+                XATransactionRegistry registry = xaRegistries.get(connHash);
+                log.info("[XA-TERMINATE] Looking up XA registry for connHash={}, found={}", connHash, registry != null);
+                if (registry != null) {
+                    log.info("[XA-TERMINATE] Calling returnCompletedSessions for ojpSessionId={}", sessionInfo.getSessionUUID());
+                    int returnedCount = registry.returnCompletedSessions(sessionInfo.getSessionUUID());
+                    log.info("[XA-TERMINATE] returnCompletedSessions returned count={}", returnedCount);
+                    if (returnedCount > 0) {
+                        log.info("Returned {} completed XA backend sessions to pool on session termination", returnedCount);
+                    }
+                } else {
+                    log.warn("[XA-TERMINATE] No XA registry found for connHash={}", connHash);
+                }
+            }
+            
+            log.info("[XA-TERMINATE] Calling sessionManager.terminateSession for sessionUUID={}", sessionInfo.getSessionUUID());
             this.sessionManager.terminateSession(sessionInfo);
             responseObserver.onNext(SessionTerminationStatus.newBuilder().setTerminated(true).build());
             responseObserver.onCompleted();
@@ -1542,22 +1791,41 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 // This shouldn't happen as XA sessions are created eagerly
                 throw new SQLException("XA session should already exist. Session UUID is missing.");
             } else {
-                // Regular connection - acquire from datasource (HikariCP by default)
-                DataSource dataSource = this.datasourceMap.get(connHash);
-                if (dataSource == null) {
-                    throw new SQLException("No datasource found for connection hash: " + connHash);
-                }
+                // Regular connection - check if pooled or unpooled mode
+                UnpooledConnectionDetails unpooledDetails = this.unpooledConnectionDetailsMap.get(connHash);
                 
-                try {
-                    // Use enhanced connection acquisition with timeout protection
-                    conn = ConnectionAcquisitionManager.acquireConnection(dataSource, connHash);
-                    log.debug("Successfully acquired connection from pool for hash: {}", connHash);
-                } catch (SQLException e) {
-                    log.error("Failed to acquire connection from pool for hash: {}. Error: {}",
-                        connHash, e.getMessage());
+                if (unpooledDetails != null) {
+                    // Unpooled mode: create direct connection without pooling
+                    try {
+                        log.debug("Creating unpooled (passthrough) connection for hash: {}", connHash);
+                        conn = java.sql.DriverManager.getConnection(
+                                unpooledDetails.getUrl(),
+                                unpooledDetails.getUsername(),
+                                unpooledDetails.getPassword());
+                        log.debug("Successfully created unpooled connection for hash: {}", connHash);
+                    } catch (SQLException e) {
+                        log.error("Failed to create unpooled connection for hash: {}. Error: {}",
+                                connHash, e.getMessage());
+                        throw e;
+                    }
+                } else {
+                    // Pooled mode: acquire from datasource (HikariCP by default)
+                    DataSource dataSource = this.datasourceMap.get(connHash);
+                    if (dataSource == null) {
+                        throw new SQLException("No datasource found for connection hash: " + connHash);
+                    }
                     
-                    // Re-throw the enhanced exception from ConnectionAcquisitionManager
-                    throw e;
+                    try {
+                        // Use enhanced connection acquisition with timeout protection
+                        conn = ConnectionAcquisitionManager.acquireConnection(dataSource, connHash);
+                        log.debug("Successfully acquired connection from pool for hash: {}", connHash);
+                    } catch (SQLException e) {
+                        log.error("Failed to acquire connection from pool for hash: {}. Error: {}",
+                                connHash, e.getMessage());
+                        
+                        // Re-throw the enhanced exception from ConnectionAcquisitionManager
+                        throw e;
+                    }
                 }
                 
                 if (startSessionIfNone) {
@@ -1708,6 +1976,9 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         log.debug("xaStart: session={}, xid={}, flags={}", 
                 request.getSession().getSessionUUID(), request.getXid(), request.getFlags());
         
+        // Process cluster health changes before XA operation
+        processClusterHealth(request.getSession());
+        
         Session session = null;
         
         try {
@@ -1760,6 +2031,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         // Convert proto Xid to XidKey
         XidKey xidKey = XidKey.from(convertXid(request.getXid()));
         int flags = request.getFlags();
+        String ojpSessionId = session.getSessionInfo().getSessionUUID();
         
         // Route based on XA flags
         if (flags == javax.transaction.xa.XAResource.TMNOFLAGS) {
@@ -1768,13 +2040,14 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
             if (backendSession == null) {
                 throw new SQLException("No XABackendSession found in session");
             }
-            registry.registerExistingSession(xidKey, backendSession, flags);
+            registry.registerExistingSession(xidKey, backendSession, flags, ojpSessionId);
             
         } else if (flags == javax.transaction.xa.XAResource.TMJOIN || 
                    flags == javax.transaction.xa.XAResource.TMRESUME) {
             // Join or resume existing transaction: delegate to xaStart
             // This requires the context to exist (from previous TMNOFLAGS start)
-            registry.xaStart(xidKey, flags);
+            // Note: ojpSessionId is only used for TMNOFLAGS, but we pass it anyway for consistency
+            registry.xaStart(xidKey, flags, ojpSessionId);
             
         } else {
             throw new SQLException("Unsupported XA flags: " + flags);
@@ -1858,6 +2131,9 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
         log.debug("xaPrepare: session={}, xid={}", 
                 request.getSession().getSessionUUID(), request.getXid());
         
+        // Process cluster health changes before XA operation
+        processClusterHealth(request.getSession());
+        
         try {
             Session session = sessionManager.getSession(request.getSession());
             if (session == null || !session.isXA()) {
@@ -1904,6 +2180,9 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     public void xaCommit(com.openjproxy.grpc.XaCommitRequest request, StreamObserver<com.openjproxy.grpc.XaResponse> responseObserver) {
         log.debug("xaCommit: session={}, xid={}, onePhase={}", 
                 request.getSession().getSessionUUID(), request.getXid(), request.getOnePhase());
+        
+        // Process cluster health changes before XA operation
+        processClusterHealth(request.getSession());
         
         try {
             Session session = sessionManager.getSession(request.getSession());

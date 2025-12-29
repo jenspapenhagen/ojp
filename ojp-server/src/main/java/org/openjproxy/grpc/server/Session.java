@@ -241,23 +241,16 @@ public class Session {
             return;
         }
 
-        // For XA connections with pooled XABackendSession, return session to pool first
+        // For XA connections with pooled XABackendSession, DO NOT close anything here
+        // The XATransactionRegistry handles returning sessions to the pool via returnCompletedSessions()
+        // which is called when the OJP XAConnection is closed (dual-condition lifecycle)
         if (isXA && backendSession != null) {
-            try {
-                log.debug("Returning XABackendSession to pool for session {}", sessionUUID);
-                if (backendSession instanceof org.openjproxy.xa.pool.XABackendSession) {
-                    org.openjproxy.xa.pool.XABackendSession pooledSession = 
-                        (org.openjproxy.xa.pool.XABackendSession) backendSession;
-                    pooledSession.close(); // Returns to pool
-                }
-            } catch (Exception e) {
-                log.error("Error returning XABackendSession to pool", e);
-            }
-        }
-
-        // For XA connections, close the XA connection (which also closes the logical connection)
-        // Do NOT close the regular connection as it would trigger auto-commit changes
-        if (isXA && xaConnection != null) {
+            // Pooled XA backend session - managed by XATransactionRegistry
+            // Do nothing here - registry will return session to pool when appropriate
+            log.debug("Skipping close for pooled XABackendSession {} - managed by XATransactionRegistry", sessionUUID);
+        } else if (isXA && xaConnection != null) {
+            // For XA connections WITHOUT pooling (pass-through mode), close the XA connection
+            // Do NOT close the regular connection as it would trigger auto-commit changes
             try {
                 xaConnection.close();
             } catch (SQLException e) {

@@ -67,26 +67,22 @@ ojp.multinode.retryDelayMs=5000       # milliseconds between retry attempts
 ojp.loadaware.selection.enabled=true  # Enable load-aware selection (default: true)
                                        # When enabled, new connections go to the server with fewest active connections
                                        # When disabled, uses legacy round-robin distribution
-
-# XA (distributed transaction) configuration
-ojp.xa.maxTransactions=50              # Maximum concurrent XA transactions (divided among servers)
-ojp.xa.startTimeout=30000              # XA transaction start timeout in milliseconds
 ```
 
 ### Server-Side Configuration
 
-Each OJP server in a multinode setup should be configured identically with the same database connection settings. The servers will automatically coordinate both connection pool sizes and XA transaction limits based on the number of active servers in the cluster.
+Each OJP server in a multinode setup should be configured identically with the same database connection settings. The servers will automatically coordinate connection pool sizes based on the number of active servers in the cluster.
 
 **Regular Connection Pools**: Pool sizes (`maximumPoolSize`, `minimumIdle`) are divided among healthy servers. When a server fails, remaining servers increase their pool sizes to maintain total capacity.
 
-**XA Transaction Limits**: Similarly, the maximum number of concurrent XA transactions (`ojp.xa.maxTransactions`) is divided among healthy servers. This ensures that the global transaction limit is respected while enabling high availability.
+**XA Backend Session Pools**: XA backend session pool sizes (`ojp.xa.connection.pool.maxTotal`, `ojp.xa.connection.pool.minIdle`) are also divided among healthy servers, with dynamic rebalancing on server failure or recovery.
 
 #### XA Multinode Example
 
-With 3 OJP servers and `ojp.xa.maxTransactions=30`:
-- **Normal operation**: Each server allows max 10 concurrent XA transactions
-- **One server fails**: Remaining 2 servers increase to max 15 XA transactions each
-- **Server recovers**: All 3 servers rebalance back to max 10 XA transactions each
+With 3 OJP servers and `ojp.xa.connection.pool.maxTotal=30`:
+- **Normal operation**: Each server's XA backend pool allows max 10 concurrent sessions
+- **One server fails**: Remaining 2 servers increase to max 15 XA backend sessions each
+- **Server recovers**: All 3 servers rebalance back to max 10 XA backend sessions each
 
 This automatic coordination prevents exceeding database connection or transaction limits while maintaining fault tolerance.
 

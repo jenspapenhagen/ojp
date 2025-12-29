@@ -8,6 +8,7 @@ import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -47,16 +48,53 @@ public class XATransactionRegistry {
     private final ConcurrentMap<XidKey, TxContext> contexts = new ConcurrentHashMap<>();
     private final XAConnectionPoolProvider poolProvider;
     private final Object poolDataSource; // XADataSource instance from provider
+    private final String serverEndpointsHash; // Hash of serverEndpoints used to create this registry
+    private final int maxPoolSize; // Max pool size used to create backend pool
+    private final int minIdle; // Min idle connections used to create backend pool
     
     /**
      * Creates a new XA transaction registry.
      *
      * @param poolProvider the XA connection pool provider
      * @param poolDataSource the XADataSource instance from the provider
+     * @param serverEndpointsHash hash of serverEndpoints configuration used to create backend pools
+     * @param maxPoolSize the maximum pool size used to create the backend pool
+     * @param minIdle the minimum idle connections used to create the backend pool
      */
-    public XATransactionRegistry(XAConnectionPoolProvider poolProvider, Object poolDataSource) {
+    public XATransactionRegistry(XAConnectionPoolProvider poolProvider, Object poolDataSource, String serverEndpointsHash, int maxPoolSize, int minIdle) {
         this.poolProvider = poolProvider;
         this.poolDataSource = poolDataSource;
+        this.serverEndpointsHash = serverEndpointsHash;
+        this.maxPoolSize = maxPoolSize;
+        this.minIdle = minIdle;
+    }
+    
+    /**
+     * Gets the serverEndpoints hash that was used to create this registry.
+     * This allows detection of configuration changes that require registry recreation.
+     *
+     * @return the serverEndpoints hash, or null if created with old code
+     */
+    public String getServerEndpointsHash() {
+        return serverEndpointsHash;
+    }
+    
+    /**
+     * Gets the maximum pool size used to create the backend pool.
+     *
+     * @return the max pool size
+     */
+    public int getMaxPoolSize() {
+        return maxPoolSize;
+    }
+    
+    /**
+     * Gets the minimum idle connections used to create the backend pool.
+     *
+     * @return the min idle connections
+     */
+    public int getMinIdle() {
+        return minIdle;
     }
     
     /**
@@ -69,6 +107,58 @@ public class XATransactionRegistry {
     }
     
     /**
+     * Resizes the backend connection pool to the specified sizes.
+     * <p>
+     * This method is called during cluster rebalancing when the number of healthy
+     * servers changes. The XA backend pool needs to expand or contract to maintain
+     * proper load distribution across the cluster.
+     * </p>
+     *
+     * @param newMaxPoolSize the new maximum pool size
+     * @param newMinIdle the new minimum idle connections
+     */
+    public void resizeBackendPool(int newMaxPoolSize, int newMinIdle) {
+        if (poolDataSource instanceof org.openjproxy.xa.pool.commons.CommonsPool2XADataSource) {
+            org.openjproxy.xa.pool.commons.CommonsPool2XADataSource commonsPool = 
+                    (org.openjproxy.xa.pool.commons.CommonsPool2XADataSource) poolDataSource;
+            
+            int currentMaxTotal = commonsPool.getMaxTotal();
+            int currentMinIdle = commonsPool.getMinIdle();
+            
+            log.info("[XA-POOL-RESIZE] resizeBackendPool called: old=(max={}, min={}), new=(max={}, min={}), " +
+                    "currentPoolState=(active={}, idle={})",
+                    currentMaxTotal, currentMinIdle, newMaxPoolSize, newMinIdle,
+                    commonsPool.getNumActive(), commonsPool.getNumIdle());
+            
+            // Log diagnostics BEFORE resize
+            commonsPool.logPoolDiagnostics("BEFORE resize");
+            
+            // Determine resize direction
+            boolean isDecreasing = (newMaxPoolSize < currentMaxTotal) || (newMinIdle < currentMinIdle);
+            
+            if (isDecreasing) {
+                // When decreasing: set minIdle first, then maxTotal to avoid validation errors
+                commonsPool.setMinIdle(newMinIdle);
+                commonsPool.setMaxTotal(newMaxPoolSize);
+                log.info("[XA-POOL-RESIZE] XA backend pool resized (DECREASED): maxTotal={}, minIdle={}", 
+                        newMaxPoolSize, newMinIdle);
+            } else {
+                // When increasing: set maxTotal first, then minIdle
+                commonsPool.setMaxTotal(newMaxPoolSize);
+                commonsPool.setMinIdle(newMinIdle);
+                log.info("[XA-POOL-RESIZE] XA backend pool resized (INCREASED): maxTotal={}, minIdle={}", 
+                        newMaxPoolSize, newMinIdle);
+            }
+            
+            // Log diagnostics AFTER resize
+            commonsPool.logPoolDiagnostics("AFTER resize");
+            
+        } else {
+            log.warn("Cannot resize XA backend pool: poolDataSource is not CommonsPool2XADataSource");
+        }
+    }
+    
+    /**
      * Registers an existing XABackendSession with a new XA transaction.
      * <p>
      * Used when XABackendSession is allocated eagerly (during connect) rather than 
@@ -78,10 +168,11 @@ public class XATransactionRegistry {
      * @param xid the transaction branch identifier
      * @param session the existing XABackendSession to register
      * @param flags XA start flags (must be TMNOFLAGS for new transaction)
+     * @param ojpSessionId the OJP session ID this transaction belongs to
      * @throws XAException if flags are invalid, xid already exists, or XA start fails
      */
-    public void registerExistingSession(XidKey xid, XABackendSession session, int flags) throws XAException {
-        log.debug("registerExistingSession: xid={}, flags={}", xid, flagsToString(flags));
+    public void registerExistingSession(XidKey xid, XABackendSession session, int flags, String ojpSessionId) throws XAException {
+        log.debug("registerExistingSession: xid={}, flags={}, ojpSessionId={}", xid, flagsToString(flags), ojpSessionId);
         
         // Validate flags - only TMNOFLAGS allowed for new transaction
         if (flags != XAResource.TMNOFLAGS) {
@@ -89,7 +180,7 @@ public class XATransactionRegistry {
         }
         
         // Create context and ensure no duplicate
-        TxContext existing = contexts.putIfAbsent(xid, new TxContext(xid));
+        TxContext existing = contexts.putIfAbsent(xid, new TxContext(xid, ojpSessionId));
         if (existing != null) {
             throw new XAException(XAException.XAER_DUPID);
         }
@@ -106,7 +197,7 @@ public class XATransactionRegistry {
             // Call XAResource.start on backend with the stored Xid
             session.getXAResource().start(actualXid, flags);
             
-            log.info("XA transaction registered with existing session: xid={}", xid);
+            log.info("XA transaction registered with existing session: xid={}, ojpSessionId={}", xid, ojpSessionId);
         } catch (XAException e) {
             contexts.remove(xid);
             throw e;
@@ -126,10 +217,11 @@ public class XATransactionRegistry {
      *
      * @param xid the transaction branch identifier
      * @param flags XA start flags (TMNOFLAGS, TMJOIN, TMRESUME)
+     * @param ojpSessionId the OJP session ID this transaction belongs to (only used for TMNOFLAGS)
      * @throws XAException if state transition is invalid or session cannot be borrowed
      */
-    public void xaStart(XidKey xid, int flags) throws XAException {
-        log.debug("xaStart: xid={}, flags={}", xid, flagsToString(flags));
+    public void xaStart(XidKey xid, int flags, String ojpSessionId) throws XAException {
+        log.debug("xaStart: xid={}, flags={}, ojpSessionId={}", xid, flagsToString(flags), ojpSessionId);
         
         boolean isTmNoFlags = (flags == XAResource.TMNOFLAGS);
         boolean isTmJoin = (flags == XAResource.TMJOIN);
@@ -137,7 +229,7 @@ public class XATransactionRegistry {
         
         if (isTmNoFlags) {
             // New transaction branch - create context and borrow session
-            TxContext existing = contexts.putIfAbsent(xid, new TxContext(xid));
+            TxContext existing = contexts.putIfAbsent(xid, new TxContext(xid, ojpSessionId));
             if (existing != null) {
                 throw new XAException(XAException.XAER_DUPID);
             }
@@ -154,7 +246,7 @@ public class XATransactionRegistry {
                 // Call XAResource.start on backend with the stored Xid
                 session.getXAResource().start(actualXid, flags);
                 
-                log.info("XA transaction started: xid={}", xid);
+                log.info("XA transaction started: xid={}, ojpSessionId={}", xid, ojpSessionId);
             } catch (Exception e) {
                 contexts.remove(xid);
                 throw new XAException(XAException.XAER_RMERR);
@@ -323,6 +415,10 @@ public class XATransactionRegistry {
             
             ctx.transitionToCommitted();
             
+            // Mark transaction as complete but keep in contexts
+            // Backend session will be returned to pool when XAConnection.close() is called
+            ctx.markTransactionComplete();
+            
             // IMPORTANT: Sanitize the session to reset XA state for next transaction
             // The session stays bound to OJP Session (doesn't return to pool)
             // but needs XA state reset between transactions
@@ -335,25 +431,30 @@ public class XATransactionRegistry {
                 // If sanitization fails, next transaction may have issues, but commit succeeded
             }
             
-            // NOTE: Do NOT return session to pool here - session stays bound to OJP Session
-            // for multiple transactions. Pool return happens when OJP Session terminates.
-            contexts.remove(xid);
+            // DO NOT remove from contexts here - keep it until XAConnection.close()
+            // DO NOT return to pool here - session stays bound until XAConnection.close()
             
             log.info("XA transaction committed: xid={}, onePhase={}", xid, onePhase);
         } catch (XAException e) {
             log.error("XA error during commit for xid=" + xid, e);
-            // Best effort: still clean up context
-            // NOTE: Do NOT return session to pool - it stays with OJP Session
-            contexts.remove(xid);
+            // Mark as complete even on error to allow cleanup
+            if (ctx != null) {
+                ctx.markTransactionComplete();
+            }
+            // DO NOT remove from contexts - keep it until XAConnection.close()
+            // DO NOT return session to pool - it stays with OJP Session
             throw e;  // Rethrow original XAException to preserve error code
         } catch (IllegalStateException e) {
             log.error("Invalid state transition during commit for xid=" + xid, e);
             throw new XAException(XAException.XAER_PROTO);
         } catch (Exception e) {
             log.error("Unexpected error during commit for xid=" + xid, e);
-            // Best effort: still clean up context
-            // NOTE: Do NOT return session to pool - it stays with OJP Session
-            contexts.remove(xid);
+            // Mark as complete even on error to allow cleanup
+            if (ctx != null) {
+                ctx.markTransactionComplete();
+            }
+            // DO NOT remove from contexts - keep it until XAConnection.close()
+            // DO NOT return session to pool - it stays with OJP Session
             XAException xae = new XAException(XAException.XAER_RMERR);
             xae.initCause(e);  // Preserve original exception
             throw xae;
@@ -396,6 +497,10 @@ public class XATransactionRegistry {
             
             ctx.transitionToRolledBack();
             
+            // Mark transaction as complete but keep in contexts
+            // Backend session will be returned to pool when XAConnection.close() is called
+            ctx.markTransactionComplete();
+            
             // IMPORTANT: Sanitize the session to reset XA state for next transaction
             // The session stays bound to OJP Session (doesn't return to pool)
             // but needs XA state reset between transactions
@@ -407,22 +512,27 @@ public class XATransactionRegistry {
                 // Don't throw - rollback was successful, sanitization is best-effort
             }
             
-            // NOTE: Do NOT return session to pool here - session stays bound to OJP Session
-            // for multiple transactions. Pool return happens when OJP Session terminates.
-            contexts.remove(xid);
+            // DO NOT remove from contexts here - keep it until XAConnection.close()
+            // DO NOT return to pool here - session stays bound until XAConnection.close()
             
             log.info("XA transaction rolled back: xid={}", xid);
         } catch (XAException e) {
             log.error("XA error during rollback for xid=" + xid, e);
-            // Best effort: still clean up context
-            // NOTE: Do NOT return session to pool - it stays with OJP Session
-            contexts.remove(xid);
+            // Mark as complete even on error to allow cleanup
+            if (ctx != null) {
+                ctx.markTransactionComplete();
+            }
+            // DO NOT remove from contexts - keep it until XAConnection.close()
+            // DO NOT return session to pool - it stays with OJP Session
             throw e;  // Rethrow original XAException to preserve error code
         } catch (Exception e) {
             log.error("Unexpected error during rollback for xid=" + xid, e);
-            // Best effort: still clean up context
-            // NOTE: Do NOT return session to pool - it stays with OJP Session
-            contexts.remove(xid);
+            // Mark as complete even on error to allow cleanup
+            if (ctx != null) {
+                ctx.markTransactionComplete();
+            }
+            // DO NOT remove from contexts - keep it until XAConnection.close()
+            // DO NOT return session to pool - it stays with OJP Session
             XAException xae = new XAException(XAException.XAER_RMERR);
             xae.initCause(e);  // Preserve original exception
             throw xae;
@@ -524,19 +634,104 @@ public class XATransactionRegistry {
     }
     
     /**
+     * Returns all completed transaction sessions for a given OJP session to the pool.
+     * <p>
+     * This method is called when XAConnection.close() is invoked. It identifies all
+     * transactions that have completed (committed or rolled back) and returns their
+     * backend sessions to the pool for reuse.
+     * </p>
+     * <p>
+     * This implements the dual-condition lifecycle: backend sessions are returned only
+     * when BOTH conditions are met:
+     * 1. Transaction is complete (commit/rollback called)
+     * 2. XAConnection is closed (OJP session terminating)
+     * </p>
+     *
+     * @param ojpSessionId the OJP session identifier (from SessionInfo)
+     * @return the number of sessions returned to pool
+     */
+    public int returnCompletedSessions(String ojpSessionId) {
+        log.info("[XA-RETURN-SESSIONS] returnCompletedSessions called for ojpSessionId={}, total contexts={}", 
+                ojpSessionId, contexts.size());
+        int returnedCount = 0;
+        List<XidKey> toRemove = new ArrayList<>();
+        
+        // Find all completed transactions belonging to the specified OJP session and return their sessions
+        for (Map.Entry<XidKey, TxContext> entry : contexts.entrySet()) {
+            TxContext ctx = entry.getValue();
+            XidKey xidKey = entry.getKey();
+            log.debug("[XA-RETURN-SESSIONS] Evaluating xid={}, isComplete={}, ctxOjpSessionId={}, targetOjpSessionId={}, match={}", 
+                    xidKey, ctx.isTransactionComplete(), ctx.getOjpSessionId(), ojpSessionId, 
+                    ctx.isTransactionComplete() && ojpSessionId.equals(ctx.getOjpSessionId()));
+            
+            // IMPORTANT: Only return sessions that belong to the specified OJP session AND are complete
+            if (ctx.isTransactionComplete() && ojpSessionId.equals(ctx.getOjpSessionId())) {
+                toRemove.add(xidKey);
+                
+                // Return session to pool
+                XABackendSession session = ctx.getSession();
+                if (session != null) {
+                    try {
+                        log.info("[XA-POOL-RETURN] BEFORE return: Returning backend session for xid={}, ojpSessionId={}", xidKey, ojpSessionId);
+                        poolProvider.returnSession(poolDataSource, session);
+                        returnedCount++;
+                        log.info("[XA-POOL-RETURN] AFTER return: Successfully returned backend session for xid={}, ojpSessionId={}", xidKey, ojpSessionId);
+                    } catch (Exception e) {
+                        log.error("[XA-POOL-RETURN] Failed to return session to pool for xid={}: {}", xidKey, e.getMessage(), e);
+                        // Best effort: try to invalidate
+                        try {
+                            poolProvider.invalidateSession(poolDataSource, session);
+                        } catch (Exception e2) {
+                            log.error("Failed to invalidate session for xid={}", xidKey, e2);
+                        }
+                    }
+                } else {
+                    log.warn("[XA-RETURN-SESSIONS] Session is null for completed transaction xid={}", xidKey);
+                }
+            }
+        }
+        
+        // Remove completed transactions from registry
+        for (XidKey xid : toRemove) {
+            contexts.remove(xid);
+            log.debug("Removed completed transaction from registry: xid={}, ojpSessionId={}", xid, ojpSessionId);
+        }
+        
+        log.info("[XA-RETURN-SESSIONS] returnCompletedSessions complete: returned={}, removed={} contexts for ojpSessionId={}", 
+                returnedCount, toRemove.size(), ojpSessionId);
+        
+        return returnedCount;
+    }
+    
+    /**
      * Closes the registry and releases all resources.
      * <p>
-     * Should be called during proxy shutdown. Logs warnings for any active transactions.
+     * Should be called during proxy shutdown or when registry needs to be recreated.
+     * Returns all active sessions to the pool and clears transaction contexts.
      * </p>
      */
     public void close() {
-        if (!contexts.isEmpty()) {
-            log.warn("Closing XATransactionRegistry with {} active transactions", contexts.size());
-            for (XidKey xid : contexts.keySet()) {
-                log.warn("Active transaction at shutdown: xid={}", xid);
+        try {
+            if (!contexts.isEmpty()) {
+                log.warn("Closing XATransactionRegistry with {} active transactions", contexts.size());
             }
+            
+            // Return all active sessions to pool
+            for (TxContext ctx : contexts.values()) {
+                try {
+                    if (ctx != null && ctx.getSession() != null) {
+                        poolProvider.returnSession(poolDataSource, ctx.getSession());
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to return session during registry close: {}", e.getMessage());
+                }
+            }
+            contexts.clear();
+            
+            log.info("XA registry closed successfully");
+        } catch (Exception e) {
+            log.error("Error during XA registry close: {}", e.getMessage(), e);
         }
-        contexts.clear();
     }
     
     // Private helper methods

@@ -15,6 +15,7 @@ message ConnectionDetails {
     repeated PropertyEntry properties = 6;
     bool isXA = 7;  // Flag to indicate XA connection
     repeated string serverEndpoints = 8;  // List of server endpoints in the cluster for coordination
+    string clusterHealth = 9;  // Cluster health status (e.g., "localhost:10591(UP);localhost:10592(DOWN)")
 }
 
 // Enum representing parameter types for JDBC

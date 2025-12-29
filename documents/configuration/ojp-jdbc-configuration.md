@@ -125,78 +125,77 @@ Connection backgroundConn = DriverManager.getConnection(
 | `ojp.connection.pool.idleTimeout`     | long | 600000  | Maximum time (ms) a connection can sit idle (10 minutes) |
 | `ojp.connection.pool.maxLifetime`     | long | 1800000 | Maximum lifetime (ms) of a connection (30 minutes)       |
 | `ojp.connection.pool.connectionTimeout` | long | 10000   | Maximum time (ms) to wait for a connection (10 seconds)  |
-| `ojp.xa.maxTransactions`              | int  | 50      | Maximum concurrent XA transactions (XA connections only) |
-| `ojp.xa.startTimeoutMillis`           | long | 60000   | Timeout (ms) for acquiring an XA transaction slot (XA connections only) |
 
 **Note**: These properties can be used with or without a datasource name prefix. For example:
 - `ojp.connection.pool.maximumPoolSize=20` (default datasource)
 - `myApp.ojp.connection.pool.maximumPoolSize=50` (myApp datasource)
-- `ojp.xa.maxTransactions=100` (default datasource XA limit)
-- `myApp.ojp.xa.maxTransactions=200` (myApp datasource XA limit)
-- `ojp.xa.startTimeoutMillis=30000` (default datasource XA start timeout: 30 seconds)
-- `myApp.ojp.xa.startTimeoutMillis=120000` (myApp datasource XA start timeout: 2 minutes)
 
-**Important - XA Connection Pooling**: When using XA (distributed transaction) connections via `OjpXADataSource`, the connection pooling properties listed above are **NOT applied**. XA connections are managed directly by the native database XADataSource without HikariCP pooling. This is because XA connections must be handled differently to support the two-phase commit protocol. For XA connections, the server acts as a pass-through proxy, delegating XA operations directly to the database's XAResource.
+### XA Backend Session Pool Configuration
 
-### XA Transaction Configuration
+When using XA (distributed transaction) connections via `OjpXADataSource`, OJP uses **server-side backend session pooling** with Apache Commons Pool 2. This is separate from the HikariCP pooling used for non-XA connections.
 
-For XA (distributed transaction) connections, OJP provides concurrency control through XA-specific properties:
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `ojp.xa.connection.pool.maxTotal` | int | 20 | Maximum XA backend sessions per server |
+| `ojp.xa.connection.pool.minIdle` | int | 5 | Minimum idle XA sessions (pre-warmed) |
+| `ojp.xa.connection.pool.connectionTimeout` | long | 20000 | Max wait time (ms) to borrow session (20 seconds) |
+| `ojp.xa.connection.pool.idleTimeout` | long | 600000 | Max idle time (ms) before eviction (10 minutes) |
+| `ojp.xa.connection.pool.maxLifetime` | long | 1800000 | Max lifetime (ms) of XA session (30 minutes) |
+| `ojp.xa.connection.pool.timeBetweenEvictionRuns` | long | 30000 | How often evictor runs (ms) to clean up excess idle connections (30 seconds) |
+| `ojp.xa.connection.pool.numTestsPerEvictionRun` | int | 10 | Number of idle connections checked per eviction run |
+| `ojp.xa.connection.pool.softMinEvictableIdleTime` | long | 60000 | Min idle time (ms) before soft eviction respecting minIdle (60 seconds) |
 
-| Property                   | Type | Default | Description                                                    |
-|----------------------------|------|---------|----------------------------------------------------------------|
-| `ojp.xa.maxTransactions`   | int  | 50      | Maximum number of concurrent XA transactions allowed per datasource |
-| `ojp.xa.startTimeoutMillis`| long | 60000   | Timeout in milliseconds for acquiring an XA transaction slot (1 minute) |
+#### XA Pool Architecture
 
-#### XA Transaction Limit Behavior
-
-When the XA transaction limit is reached:
-- New `XAResource.start()` calls will block for up to the configured timeout (default: 60 seconds)
-- If a slot becomes available within the timeout, the transaction starts
-- If no slot is available after timeout, an SQLException with state `XA001` is thrown
-- Transactions are released when `XAResource.commit()` or `XAResource.rollback()` is called
-
-The timeout can be configured to suit your application's needs:
-- Lower timeouts (e.g., 10-30 seconds) for fail-fast behavior
-- Higher timeouts (e.g., 2-5 minutes) for applications that can tolerate waiting
+- **Client Side**: No connection pooling - connections created and closed after use
+- **Server Side**: Apache Commons Pool 2 pools PostgreSQL XA backend sessions
+- **Connection Reuse**: Physical XAConnection stays open across multiple transactions
+- **Dual-Condition Lifecycle**: Sessions returned to pool only when BOTH transaction complete AND client XAConnection closed
 
 #### XA Configuration Examples
 
+> **Note:** These are configuration examples only, not recommendations. Adjust pool sizes based on your application's actual workload characteristics and resource constraints.
+
 ```properties
-# Default XA configuration
-ojp.xa.maxTransactions=50
-ojp.xa.startTimeoutMillis=60000
+# Default XA backend session pool
+ojp.xa.connection.pool.maxTotal=20
+ojp.xa.connection.pool.minIdle=5
+ojp.xa.connection.pool.connectionTimeout=20000
 
-# Named datasource with XA limit and custom timeout
-# High-volume application with many concurrent distributed transactions
-mainApp.ojp.xa.maxTransactions=100
-mainApp.ojp.xa.startTimeoutMillis=120000  # 2 minutes
+# High-volume application with more XA concurrency
+mainApp.ojp.xa.connection.pool.maxTotal=100
+mainApp.ojp.xa.connection.pool.minIdle=10
+mainApp.ojp.xa.connection.pool.connectionTimeout=30000
 
-# Analytics datasource with lower XA concurrency and short timeout
-analytics.ojp.xa.maxTransactions=20
-analytics.ojp.xa.startTimeoutMillis=30000  # 30 seconds
-
-# Batch processing with medium XA concurrency and long timeout
-batch.ojp.xa.maxTransactions=30
-batch.ojp.xa.startTimeoutMillis=300000  # 5 minutes
+# Analytics with lower XA concurrency
+analytics.ojp.xa.connection.pool.maxTotal=25
+analytics.ojp.xa.connection.pool.minIdle=3
+analytics.ojp.xa.connection.pool.connectionTimeout=15000
 ```
 
-#### Monitoring XA Transaction Limits
+#### Multinode XA Pool Division
 
-The server logs XA transaction activity at DEBUG level:
+For N servers with maxTotal=M:
+- Each server gets: M / N sessions
+- Example: 2 servers, maxTotal=22 → 11 per server
+- Automatic rebalancing on server failures/recoveries
+
+#### Monitoring XA Pools
+
+Enable DEBUG logging for pool diagnostics:
+```properties
+-Dorg.slf4j.simpleLogger.log.org.openjproxy=DEBUG
 ```
-XaTransactionLimiter initialized with maxTransactions=50, startTimeout=60000ms
-XA transaction permit acquired. Active: 15/50
-XA transaction limit reached. Max: 50, Active: 50, Timeout after 60000ms
-Released XA transaction permit after commit for session abc-123
+
+Log output includes:
+```
+XA pool initialized: server=localhost:5432, maxTotal=11, minIdle=10
+Session borrowed successfully: poolState=[active=2, idle=8, maxTotal=11]
+Session returned to pool: poolState=[active=1, idle=9, maxTotal=11]
+Pool resized due to cluster health change: maxTotal=11→22, minIdle=10→20
 ```
 
-#### Integration with Slow Query Segregation
-
-XA transactions are integrated with the slow query segregation feature:
-- The slow query segregation manager uses `maxXaTransactions` as its pool size for XA datasources
-- XA statements can be segregated based on their execution time
-- Slow XA queries are isolated from fast ones to prevent starvation
-- Slots are reused after XA transactions complete
+For comprehensive XA management documentation, see **[XA Management Guide](../multinode/XA_MANAGEMENT.md)**
 
 ### Example ojp.properties File
 
@@ -209,29 +208,40 @@ ojp.connection.pool.minimumIdle=5
 ojp.connection.pool.idleTimeout=300000
 ojp.connection.pool.maxLifetime=900000
 ojp.connection.pool.connectionTimeout=15000
-ojp.xa.maxTransactions=50
-ojp.xa.startTimeoutMillis=60000
+
+# XA backend session pool (server-side)
+ojp.xa.connection.pool.maxTotal=20
+ojp.xa.connection.pool.minIdle=5
+ojp.xa.connection.pool.connectionTimeout=20000
+ojp.xa.connection.pool.idleTimeout=600000
+ojp.xa.connection.pool.maxLifetime=1800000
+ojp.xa.connection.pool.timeBetweenEvictionRuns=30000
+ojp.xa.connection.pool.numTestsPerEvictionRun=10
+ojp.xa.connection.pool.softMinEvictableIdleTime=60000
 
 # High-performance application datasource
 webapp.ojp.connection.pool.maximumPoolSize=50
 webapp.ojp.connection.pool.minimumIdle=10
 webapp.ojp.connection.pool.connectionTimeout=5000
-webapp.ojp.xa.maxTransactions=100
-webapp.ojp.xa.startTimeoutMillis=120000
+webapp.ojp.xa.connection.pool.maxTotal=100
+webapp.ojp.xa.connection.pool.minIdle=10
+webapp.ojp.xa.connection.pool.connectionTimeout=30000
 
 # Batch processing datasource
 batch.ojp.connection.pool.maximumPoolSize=20
 batch.ojp.connection.pool.minimumIdle=2
 batch.ojp.connection.pool.maxLifetime=3600000
-batch.ojp.xa.maxTransactions=30
-batch.ojp.xa.startTimeoutMillis=300000
+batch.ojp.xa.connection.pool.maxTotal=22
+batch.ojp.xa.connection.pool.minIdle=15
+batch.ojp.xa.connection.pool.connectionTimeout=25000
 
 # Read-only analytics datasource
 analytics.ojp.connection.pool.maximumPoolSize=8
 analytics.ojp.connection.pool.minimumIdle=1
 analytics.ojp.connection.pool.idleTimeout=900000
-analytics.ojp.xa.maxTransactions=15
-analytics.ojp.xa.startTimeoutMillis=30000
+analytics.ojp.xa.connection.pool.maxTotal=11
+analytics.ojp.xa.connection.pool.minIdle=5
+analytics.ojp.xa.connection.pool.connectionTimeout=15000
 ```
 
 ### Connection Pool Fallback Behavior
@@ -314,11 +324,13 @@ When using OJP with regular (non-XA) connections, **disable any existing connect
 
 **Important**: OJP will not work properly if another connection pool is enabled on the application side for regular connections. Make sure to disable all application-level connection pooling before using OJP.
 
-**Exception - XA Connections**: When using `OjpXADataSource` for distributed transactions (XA mode), OJP does NOT apply HikariCP connection pooling. XA connections bypass pooling entirely and are managed directly by the native database XADataSource to support proper XA protocol semantics. Therefore:
-- Connection pool configuration properties (`maximumPoolSize`, `minimumIdle`, etc.) have **no effect** in XA mode
-- The server acts as a transparent pass-through proxy for XA operations
-- XA connections are created directly from the database driver's XADataSource
-- Client-side JTA transaction managers (like Atomikos or Narayana) control the distributed transaction lifecycle
+**XA Connections**: When using `OjpXADataSource` for distributed transactions (XA mode), by default OJP uses server-side backend session pooling with Apache Commons Pool 2 if no other OJP XA SPI implementation is provided. The server manages PostgreSQL XAConnection pooling to ensure:
+- Physical XAConnection reuse across multiple transactions
+- Dual-condition session lifecycle (returned only when transaction complete AND client XAConnection closed)
+- Dynamic pool rebalancing during server failures/recoveries
+- Proper XA spec compliance (connection properties persist across transactions)
+
+See **[XA Management Guide](../multinode/XA_MANAGEMENT.md)** for comprehensive XA pooling documentation.
 
 #### DataSource Isolation
 

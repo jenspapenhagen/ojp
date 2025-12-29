@@ -28,11 +28,14 @@ public class DatasourcePropertiesLoader {
         Properties dataSourceProperties = new Properties();
         
         // Look for dataSource-prefixed properties first: {dataSourceName}.ojp.connection.pool.*
-        String prefix = dataSourceName + ".ojp.connection.pool.";
+        // Also look for XA-specific properties: {dataSourceName}.ojp.xa.connection.pool.*
+        String poolPrefix = dataSourceName + ".ojp.connection.pool.";
+        String xaPoolPrefix = dataSourceName + ".ojp.xa.connection.pool.";
+        String xaPrefix = dataSourceName + ".ojp.xa.";
         boolean foundDataSourceSpecific = false;
         
         for (String key : allProperties.stringPropertyNames()) {
-            if (key.startsWith(prefix)) {
+            if (key.startsWith(poolPrefix) || key.startsWith(xaPoolPrefix) || key.startsWith(xaPrefix)) {
                 // Remove the dataSource prefix and keep the standard property name
                 String standardKey = key.substring(dataSourceName.length() + 1); // Remove "{dataSourceName}."
                 dataSourceProperties.setProperty(standardKey, allProperties.getProperty(key));
@@ -41,10 +44,12 @@ public class DatasourcePropertiesLoader {
         }
         
         // If no dataSource-specific properties found, and this is the "default" dataSource,
-        // look for unprefixed properties: ojp.connection.pool.*
+        // look for unprefixed properties: ojp.connection.pool.*, ojp.xa.connection.pool.*, ojp.xa.*
         if (!foundDataSourceSpecific && "default".equals(dataSourceName)) {
             for (String key : allProperties.stringPropertyNames()) {
-                if (key.startsWith("ojp.connection.pool.")) {
+                if (key.startsWith("ojp.connection.pool.") || 
+                    key.startsWith("ojp.xa.connection.pool.") || 
+                    key.startsWith("ojp.xa.")) {
                     dataSourceProperties.setProperty(key, allProperties.getProperty(key));
                 }
             }

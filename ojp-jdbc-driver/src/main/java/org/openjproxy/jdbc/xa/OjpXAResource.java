@@ -43,6 +43,7 @@ public class OjpXAResource implements XAResource {
         
         while (attempt < maxRetries) {
             try {
+                // MultinodeStatementService will automatically add cluster health via withClusterHealth()
                 XaStartRequest request = XaStartRequest.newBuilder()
                         .setSession(sessionInfo)
                         .setXid(toXidProto(xid))
@@ -190,6 +191,7 @@ public class OjpXAResource implements XAResource {
     public int prepare(Xid xid) throws XAException {
         log.debug("prepare: xid={}", xid);
         try {
+            // MultinodeStatementService will automatically add cluster health via withClusterHealth()
             XaPrepareRequest request = XaPrepareRequest.newBuilder()
                     .setSession(sessionInfo)
                     .setXid(toXidProto(xid))
@@ -208,6 +210,7 @@ public class OjpXAResource implements XAResource {
     public void commit(Xid xid, boolean onePhase) throws XAException {
         log.debug("commit: xid={}, onePhase={}", xid, onePhase);
         try {
+            // MultinodeStatementService will automatically add cluster health via withClusterHealth()
             XaCommitRequest request = XaCommitRequest.newBuilder()
                     .setSession(sessionInfo)
                     .setXid(toXidProto(xid))

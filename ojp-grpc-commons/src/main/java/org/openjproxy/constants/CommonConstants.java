@@ -31,8 +31,20 @@ public class CommonConstants {
     public static final String IDLE_TIMEOUT_PROPERTY = "ojp.connection.pool.idleTimeout";
     public static final String MAX_LIFETIME_PROPERTY = "ojp.connection.pool.maxLifetime";
     public static final String CONNECTION_TIMEOUT_PROPERTY = "ojp.connection.pool.connectionTimeout";
-    public static final String MAX_XA_TRANSACTIONS_PROPERTY = "ojp.xa.maxTransactions";
-    public static final String XA_START_TIMEOUT_PROPERTY = "ojp.xa.startTimeoutMillis";
+    public static final String POOL_ENABLED_PROPERTY = "ojp.connection.pool.enabled";
+    
+    // XA-specific pool configuration property keys
+    public static final String XA_MAXIMUM_POOL_SIZE_PROPERTY = "ojp.xa.connection.pool.maximumPoolSize";
+    public static final String XA_MINIMUM_IDLE_PROPERTY = "ojp.xa.connection.pool.minimumIdle";
+    public static final String XA_IDLE_TIMEOUT_PROPERTY = "ojp.xa.connection.pool.idleTimeout";
+    public static final String XA_MAX_LIFETIME_PROPERTY = "ojp.xa.connection.pool.maxLifetime";
+    public static final String XA_CONNECTION_TIMEOUT_PROPERTY = "ojp.xa.connection.pool.connectionTimeout";
+    public static final String XA_POOL_ENABLED_PROPERTY = "ojp.xa.connection.pool.enabled";
+    
+    // XA pool evictor configuration property keys (Apache Commons Pool 2)
+    public static final String XA_TIME_BETWEEN_EVICTION_RUNS_PROPERTY = "ojp.xa.connection.pool.timeBetweenEvictionRuns";
+    public static final String XA_NUM_TESTS_PER_EVICTION_RUN_PROPERTY = "ojp.xa.connection.pool.numTestsPerEvictionRun";
+    public static final String XA_SOFT_MIN_EVICTABLE_IDLE_TIME_PROPERTY = "ojp.xa.connection.pool.softMinEvictableIdleTime";
     
     // Multinode configuration property keys
     public static final String MULTINODE_RETRY_ATTEMPTS_PROPERTY = "ojp.multinode.retryAttempts";
@@ -46,6 +58,10 @@ public class CommonConstants {
     public static final long DEFAULT_MAX_LIFETIME = 1800000; // 30 minutes  
     public static final long DEFAULT_CONNECTION_TIMEOUT = 10000; // Reduced from 30s to 10s for faster failure
     
+    // XA pool defaults - matching non-XA connection pool defaults for consistency
+    public static final int DEFAULT_XA_MAXIMUM_POOL_SIZE = 20;  // Same as non-XA for consistency
+    public static final int DEFAULT_XA_MINIMUM_IDLE = 5;        // Same as non-XA for consistency
+    
     // XA Transaction settings
     public static final int DEFAULT_MAX_XA_TRANSACTIONS = 50;  // Maximum concurrent XA transactions
     public static final long DEFAULT_XA_START_TIMEOUT_MILLIS = 60000;  // 60 seconds timeout for acquiring XA slot
@@ -53,4 +69,9 @@ public class CommonConstants {
     // Multinode configuration defaults - addressing PR #39 review comment #1
     public static final int DEFAULT_MULTINODE_RETRY_ATTEMPTS = -1;  // -1 = retry indefinitely
     public static final long DEFAULT_MULTINODE_RETRY_DELAY_MS = 5000;  // 5 seconds between retries
+    
+    // XA pool evictor defaults (Apache Commons Pool 2)
+    public static final long DEFAULT_XA_TIME_BETWEEN_EVICTION_RUNS_MS = 30000;  // 30 seconds
+    public static final int DEFAULT_XA_NUM_TESTS_PER_EVICTION_RUN = 10;  // Check 10 idle connections per run
+    public static final long DEFAULT_XA_SOFT_MIN_EVICTABLE_IDLE_TIME_MS = 60000;  // 1 minute - respects minIdle
 }

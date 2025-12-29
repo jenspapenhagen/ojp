@@ -96,6 +96,16 @@ public class OjpXAConnection implements XAConnection, ServerHealthListener {
             if (serverEndpoints != null && !serverEndpoints.isEmpty()) {
                 connBuilder.addAllServerEndpoints(serverEndpoints);
                 log.info("Adding {} server endpoints to ConnectionDetails for multinode coordination", serverEndpoints.size());
+                
+                // CRITICAL FIX: Add actual cluster health for XA pool rebalancing during connect()
+                // The server needs the CURRENT cluster health (not synthetic) to properly size the XA backend pool
+                // when server 1 fails before any XA operations execute
+                if (statementService instanceof MultinodeStatementService) {
+                    MultinodeConnectionManager connectionManager = ((MultinodeStatementService) statementService).getConnectionManager();
+                    String clusterHealth = connectionManager.generateClusterHealth();
+                    connBuilder.setClusterHealth(clusterHealth);
+                    log.info("[XA-CONNECT-HEALTH] Adding cluster health to ConnectionDetails: {}", clusterHealth);
+                }
             }
 
             if (properties != null && !properties.isEmpty()) {
@@ -182,21 +192,8 @@ public class OjpXAConnection implements XAConnection, ServerHealthListener {
         log.debug("Creating logical connection for session: {}", session.getSessionUUID());
         
         // Create a new logical connection that uses the same XA session on the server
-        logicalConnection = new OjpXALogicalConnection(this, session, url);
-        
-        // Register with ConnectionTracker if using multinode
-        if (statementService instanceof MultinodeStatementService) {
-            MultinodeStatementService multinodeService = (MultinodeStatementService) statementService;
-            MultinodeConnectionManager connectionManager = multinodeService.getConnectionManager();
-            if (connectionManager != null && boundServerAddress != null) {
-                // Find the ServerEndpoint for the bound server
-                ServerEndpoint boundEndpoint = findServerEndpoint(connectionManager, boundServerAddress);
-                if (boundEndpoint != null) {
-                    connectionManager.getConnectionTracker().register(logicalConnection, boundEndpoint);
-                    log.debug("Registered connection with tracker for server: {}", boundServerAddress);
-                }
-            }
-        }
+        // The logical connection will register itself with ConnectionTracker in its constructor
+        logicalConnection = new OjpXALogicalConnection(this, session, url, boundServerAddress);
         
         return logicalConnection;
     }
@@ -227,52 +224,63 @@ public class OjpXAConnection implements XAConnection, ServerHealthListener {
 
     @Override
     public void close() throws SQLException {
-        log.debug("close called");
-        if (closed) {
-            return;
-        }
-        
-        closed = true;
-        
-        // Deregister from health listener
-        if (statementService instanceof MultinodeStatementService) {
-            MultinodeStatementService ms = (MultinodeStatementService) statementService;
-            MultinodeConnectionManager cm = ms.getConnectionManager();
-            if (cm != null) {
-                cm.removeHealthListener(this);
-                log.debug("Deregistered XA connection from health listener");
+        try {
+            log.info("[XA-CONN-CLOSE] OjpXAConnection.close() called, closed={}, sessionInfo={}", 
+                    closed, sessionInfo != null ? sessionInfo.getSessionUUID() : "null");
+            if (closed) {
+                log.debug("[XA-CONN-CLOSE] Already closed, returning");
+                return;
             }
-        }
-        
-        // Unregister from ConnectionTracker if registered
-        if (logicalConnection != null && statementService instanceof MultinodeStatementService) {
-            MultinodeStatementService multinodeService = (MultinodeStatementService) statementService;
-            MultinodeConnectionManager connectionManager = multinodeService.getConnectionManager();
-            if (connectionManager != null) {
-                connectionManager.getConnectionTracker().unregister(logicalConnection);
-                log.debug("Unregistered connection from tracker");
+            
+            closed = true;
+            
+            // Deregister from health listener
+            if (statementService instanceof MultinodeStatementService) {
+                MultinodeStatementService ms = (MultinodeStatementService) statementService;
+                MultinodeConnectionManager cm = ms.getConnectionManager();
+                if (cm != null) {
+                    cm.removeHealthListener(this);
+                    log.debug("Deregistered XA connection from health listener");
+                }
             }
-        }
-        
-        // Close logical connection if open
-        if (logicalConnection != null && !logicalConnection.isClosed()) {
-            logicalConnection.close();
-        }
-        
-        // Notify listeners
-        ConnectionEvent event = new ConnectionEvent(this);
-        for (ConnectionEventListener listener : listeners) {
-            listener.connectionClosed(event);
-        }
-        
-        // Close XA session on server (only if it was created)
-        if (sessionInfo != null) {
-            try {
-                statementService.terminateSession(sessionInfo);
-            } catch (Exception e) {
-                log.error("Error closing XA session", e);
-                throw new SQLException("Error closing XA session", e);
+            
+            // Unregister from ConnectionTracker if registered
+            if (logicalConnection != null && statementService instanceof MultinodeStatementService) {
+                MultinodeStatementService multinodeService = (MultinodeStatementService) statementService;
+                MultinodeConnectionManager connectionManager = multinodeService.getConnectionManager();
+                if (connectionManager != null) {
+                    connectionManager.getConnectionTracker().unregister(logicalConnection);
+                    log.debug("Unregistered connection from tracker");
+                }
             }
+            
+            // Close logical connection if open
+            if (logicalConnection != null && !logicalConnection.isClosed()) {
+                logicalConnection.close();
+            }
+            
+            // Notify listeners
+            ConnectionEvent event = new ConnectionEvent(this);
+            for (ConnectionEventListener listener : listeners) {
+                listener.connectionClosed(event);
+            }
+            
+            // Close XA session on server (only if it was created)
+            if (sessionInfo != null) {
+                try {
+                    log.info("[XA-CONN-CLOSE] Calling terminateSession for sessionUUID={}", sessionInfo.getSessionUUID());
+                    statementService.terminateSession(sessionInfo);
+                    log.info("[XA-CONN-CLOSE] terminateSession completed successfully for sessionUUID={}", sessionInfo.getSessionUUID());
+                } catch (Exception e) {
+                    log.error("[XA-CONN-CLOSE] Error calling terminateSession for sessionUUID={}", sessionInfo.getSessionUUID(), e);
+                    throw new SQLException("Error closing XA session", e);
+                }
+            } else {
+                log.warn("[XA-CONN-CLOSE] sessionInfo is null, terminateSession NOT called");
+            }
+        } catch (Throwable t) {
+            log.error("[XA-CONN-CLOSE] CRITICAL EXCEPTION in close() - this causes session leak!", t);
+            throw new SQLException("XAConnection close failed: " + t.getMessage(), t);
         }
     }
 
