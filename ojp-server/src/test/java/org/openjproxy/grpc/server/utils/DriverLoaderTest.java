@@ -115,7 +115,7 @@ class DriverLoaderTest {
             // Add a dummy entry to make it a valid JAR
             ZipEntry entry = new ZipEntry("META-INF/MANIFEST.MF");
             jos.putNextEntry(entry);
-            jos.write("Manifest-Version: 1.0\n".getBytes());
+            jos.write("Manifest-Version: 1.0\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
             jos.closeEntry();
         }
     }

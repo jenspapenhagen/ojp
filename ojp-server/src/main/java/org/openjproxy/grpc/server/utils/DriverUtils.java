@@ -76,11 +76,32 @@ public class DriverUtils {
     }
     
     /**
-     * Register all JDBC drivers supported.
-     * @deprecated Use {@link #registerDrivers(String)} instead
+     * Register all JDBC drivers supported without path information.
+     * @deprecated Use {@link #registerDrivers(String)} instead to provide better error messages
      */
     @Deprecated
     public void registerDrivers() {
-        registerDrivers(null);
+        // Just call the open source driver registration
+        // Proprietary drivers are registered in StatementServiceImpl static block
+        try {
+            Class.forName(H2_DRIVER_CLASS);
+        } catch (ClassNotFoundException e) {
+            log.error("Failed to register H2 JDBC driver.", e);
+        }
+        try {
+            Class.forName(POSTGRES_DRIVER_CLASS);
+        } catch (ClassNotFoundException e) {
+            log.error("Failed to register PostgreSQL JDBC driver.", e);
+        }
+        try {
+            Class.forName(MYSQL_DRIVER_CLASS);
+        } catch (ClassNotFoundException e) {
+            log.error("Failed to register MySQL JDBC driver.", e);
+        }
+        try {
+            Class.forName(MARIADB_DRIVER_CLASS);
+        } catch (ClassNotFoundException e) {
+            log.error("Failed to register MariaDB JDBC driver.", e);
+        }
     }
 }
