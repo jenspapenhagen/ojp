@@ -34,6 +34,7 @@ public class ServerConfiguration {
     private static final String SLOW_QUERY_SLOW_SLOT_TIMEOUT_KEY = "ojp.server.slowQuerySegregation.slowSlotTimeout";
     private static final String SLOW_QUERY_FAST_SLOT_TIMEOUT_KEY = "ojp.server.slowQuerySegregation.fastSlotTimeout";
     private static final String SLOW_QUERY_UPDATE_GLOBAL_AVG_INTERVAL_KEY = "ojp.server.slowQuerySegregation.updateGlobalAvgInterval";
+    private static final String DRIVERS_PATH_KEY = "ojp.drivers.path";
     
 
     // Default values
@@ -56,6 +57,7 @@ public class ServerConfiguration {
     public static final long DEFAULT_SLOW_QUERY_SLOW_SLOT_TIMEOUT = 120000; // 120 seconds slow slot timeout
     public static final long DEFAULT_SLOW_QUERY_FAST_SLOT_TIMEOUT = 60000; // 60 seconds fast slot timeout
     public static final long DEFAULT_SLOW_QUERY_UPDATE_GLOBAL_AVG_INTERVAL = 300; // 300 seconds (5 minutes) global average update interval
+    public static final String DEFAULT_DRIVERS_PATH = "./drivers"; // Default drivers directory path
     
     // XA pooling default values
     public static final boolean DEFAULT_XA_POOLING_ENABLED = true; // Enable XA pooling by default
@@ -84,6 +86,7 @@ public class ServerConfiguration {
     private final long slowQuerySlowSlotTimeout;
     private final long slowQueryFastSlotTimeout;
     private final long slowQueryUpdateGlobalAvgInterval;
+    private final String driversPath;
     
 
     public ServerConfiguration() {
@@ -105,6 +108,7 @@ public class ServerConfiguration {
         this.slowQuerySlowSlotTimeout = getLongProperty(SLOW_QUERY_SLOW_SLOT_TIMEOUT_KEY, DEFAULT_SLOW_QUERY_SLOW_SLOT_TIMEOUT);
         this.slowQueryFastSlotTimeout = getLongProperty(SLOW_QUERY_FAST_SLOT_TIMEOUT_KEY, DEFAULT_SLOW_QUERY_FAST_SLOT_TIMEOUT);
         this.slowQueryUpdateGlobalAvgInterval = getLongProperty(SLOW_QUERY_UPDATE_GLOBAL_AVG_INTERVAL_KEY, DEFAULT_SLOW_QUERY_UPDATE_GLOBAL_AVG_INTERVAL);
+        this.driversPath = getStringProperty(DRIVERS_PATH_KEY, DEFAULT_DRIVERS_PATH);
         
 
         logConfigurationSummary();
@@ -204,6 +208,7 @@ public class ServerConfiguration {
         logger.info("  Slow Query Slow Slot Timeout: {} ms", slowQuerySlowSlotTimeout);
         logger.info("  Slow Query Fast Slot Timeout: {} ms", slowQueryFastSlotTimeout);
         logger.info("  Slow Query Update Global Avg Interval: {} seconds", slowQueryUpdateGlobalAvgInterval);
+        logger.info("  Drivers Path: {}", driversPath);
     }
 
     // Getters
@@ -277,6 +282,10 @@ public class ServerConfiguration {
 
     public long getSlowQueryUpdateGlobalAvgInterval() {
         return slowQueryUpdateGlobalAvgInterval;
+    }
+
+    public String getDriversPath() {
+        return driversPath;
     }
     
 }

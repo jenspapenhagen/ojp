@@ -14,10 +14,16 @@ import static org.openjproxy.grpc.server.Constants.DB2_DRIVER_CLASS;
 @Slf4j
 @UtilityClass
 public class DriverUtils {
+    
     /**
      * Register all JDBC drivers supported.
+     * @param driversPath Optional path to drivers directory for user guidance in error messages
      */
-    public void registerDrivers() {
+    public void registerDrivers(String driversPath) {
+        String driverPathMessage = (driversPath != null && !driversPath.trim().isEmpty()) 
+            ? driversPath 
+            : "./drivers";
+            
         //Register open source drivers
         try {
             Class.forName(H2_DRIVER_CLASS);
@@ -42,18 +48,39 @@ public class DriverUtils {
         //Register proprietary drivers (if present)
         try {
             Class.forName(ORACLE_DRIVER_CLASS);
+            log.info("Oracle JDBC driver loaded successfully");
         } catch (ClassNotFoundException e) {
-            log.info("No Oracle JDBC driver found...");
+            log.info("Oracle JDBC driver not found. To use Oracle databases:");
+            log.info("  1. Download ojdbc*.jar from Oracle (https://www.oracle.com/database/technologies/jdbc-downloads.html)");
+            log.info("  2. Place it in: {}", driverPathMessage);
+            log.info("  3. Restart OJP Server");
         }
         try {
             Class.forName(SQLSERVER_DRIVER_CLASS);
+            log.info("SQL Server JDBC driver loaded successfully");
         } catch (ClassNotFoundException e) {
-            log.info("No SQL Server JDBC driver found...");
+            log.info("SQL Server JDBC driver not found. To use SQL Server databases:");
+            log.info("  1. Download mssql-jdbc-*.jar from Microsoft (https://learn.microsoft.com/en-us/sql/connect/jdbc/download-microsoft-jdbc-driver-for-sql-server)");
+            log.info("  2. Place it in: {}", driverPathMessage);
+            log.info("  3. Restart OJP Server");
         }
         try {
             Class.forName(DB2_DRIVER_CLASS);
+            log.info("DB2 JDBC driver loaded successfully");
         } catch (ClassNotFoundException e) {
-            log.info("No DB2 JDBC driver found...");
+            log.info("DB2 JDBC driver not found. To use DB2 databases:");
+            log.info("  1. Download db2jcc*.jar from IBM");
+            log.info("  2. Place it in: {}", driverPathMessage);
+            log.info("  3. Restart OJP Server");
         }
+    }
+    
+    /**
+     * Register all JDBC drivers supported.
+     * @deprecated Use {@link #registerDrivers(String)} instead
+     */
+    @Deprecated
+    public void registerDrivers() {
+        registerDrivers(null);
     }
 }
