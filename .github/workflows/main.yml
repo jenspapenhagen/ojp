@@ -613,7 +613,7 @@ jobs:
 
       - name: Test and Run (ojp-server) with DB2 driver from ojp-libs
         run: |
-          nohup java -Dojp.libs.path=ojp-server/ojp-libs -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar > /tmp/ojp-server.log 2>&1 &
+          nohup java -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar > /tmp/ojp-server.log 2>&1 &
           echo $! > /tmp/ojp-server.pid
 
       - name: Wait for ojp-server to start
@@ -1660,7 +1660,7 @@ jobs:
 
       - name: Test and Run (ojp-server) with Oracle driver from ojp-libs
         run: |
-          nohup java -Dojp.libs.path=ojp-server/ojp-libs -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar > /tmp/ojp-server.log 2>&1 &
+          nohup java -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar > /tmp/ojp-server.log 2>&1 &
           echo $! > /tmp/ojp-server.pid
 
       - name: Wait for ojp-server to start
@@ -1758,7 +1758,7 @@ jobs:
 
       - name: Test and Run (ojp-server) with SQL Server driver from ojp-libs
         run: |
-          nohup java -Dojp.libs.path=ojp-server/ojp-libs -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar > /tmp/ojp-server.log 2>&1 &
+          nohup java -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar > /tmp/ojp-server.log 2>&1 &
           echo $! > /tmp/ojp-server.pid
 
       - name: Wait for ojp-server to start
