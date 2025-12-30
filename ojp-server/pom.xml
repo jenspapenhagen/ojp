@@ -270,6 +270,7 @@
                         </ports>
                         <jvmFlags>
                             <jvmFlag>-Dorg.slf4j.simpleLogger.defaultLogLevel=error</jvmFlag>
+                            <jvmFlag>-Dojp.libs.path=/opt/ojp/ojp-libs</jvmFlag>
                         </jvmFlags>
                     </container>
                 </configuration>

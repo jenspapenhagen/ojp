@@ -6,6 +6,8 @@ import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.netty.NettyServerBuilder;
 import io.opentelemetry.instrumentation.grpc.v1_6.GrpcTelemetry;
 import org.openjproxy.constants.CommonConstants;
+import org.openjproxy.grpc.server.utils.DriverLoader;
+import org.openjproxy.grpc.server.utils.DriverUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,6 +24,17 @@ public class GrpcServer {
 
         // Load configuration
         ServerConfiguration config = new ServerConfiguration();
+        
+        // Load external JDBC drivers from configured directory
+        logger.info("Loading external JDBC drivers...");
+        boolean driversLoaded = DriverLoader.loadDriversFromPath(config.getDriversPath());
+        if (!driversLoaded) {
+            logger.warn("Failed to load external libraries from path: {}", config.getDriversPath());
+            logger.warn("Server will continue, but proprietary drivers may not be available");
+        }
+        
+        // Register JDBC drivers (both built-in and externally loaded)
+        DriverUtils.registerDrivers(config.getDriversPath());
         
         // Validate IP whitelist for server
         if (!IpWhitelistValidator.validateWhitelistRules(config.getAllowedIps())) {
