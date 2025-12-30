@@ -542,9 +542,9 @@ public class OracleUCPXAProvider implements XAConnectionPoolProvider {
 When multiple providers are available, OJP selects based on:
 
 1. **Availability**: The provider's `isAvailable()` must return `true`
-2. **Priority**: Higher priority wins (range typically 0-100)
+2. **Priority**: Higher priority wins (any positive integer value)
 
-**Note**: Both ConnectionPoolProvider and XAConnectionPoolProvider use the same selection mechanism - **higher priority values take precedence**.
+**Note**: Both ConnectionPoolProvider and XAConnectionPoolProvider use the same selection mechanism - **higher priority values take precedence**. Built-in providers typically use 0-100, but custom providers can use any value to ensure selection.
 
 ### Selection Examples
 
