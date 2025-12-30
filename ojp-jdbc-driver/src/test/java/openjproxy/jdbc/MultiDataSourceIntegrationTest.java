@@ -1,6 +1,7 @@
 package openjproxy.jdbc;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.openjproxy.jdbc.Driver;
@@ -19,17 +20,43 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Integration tests for multi-datasource functionality using H2 database.
  * Tests the complete flow from client to server with different datasource configurations.
  * 
  * Note: These tests require the OJP server to be running on localhost:1059.
+ * These tests are skipped when running database-specific tests (Oracle, DB2, SQL Server, etc.)
+ * to avoid failures when H2 drivers are not available or to keep test runs focused.
  */
 public class MultiDataSourceIntegrationTest {
 
     private static final String H2_URL_BASE = "jdbc:h2:mem:test_";
     private static final String OJP_URL_BASE = "jdbc:ojp[localhost:1059]_h2:mem:test_";
+    
+    private static boolean shouldRunH2Tests;
+    
+    @BeforeAll
+    public static void checkTestConfiguration() {
+        // Only run these H2-based multi-datasource tests when:
+        // 1. H2 tests are explicitly enabled, OR
+        // 2. No database-specific tests are enabled (default test run)
+        boolean isH2Enabled = Boolean.parseBoolean(System.getProperty("enableH2Tests", "false"));
+        boolean isOracleEnabled = Boolean.parseBoolean(System.getProperty("enableOracleTests", "false"));
+        boolean isDb2Enabled = Boolean.parseBoolean(System.getProperty("enableDb2Tests", "false"));
+        boolean isSqlServerEnabled = Boolean.parseBoolean(System.getProperty("enableSqlServerTests", "false"));
+        boolean isPostgresEnabled = Boolean.parseBoolean(System.getProperty("enablePostgresTests", "false"));
+        boolean isMySqlEnabled = Boolean.parseBoolean(System.getProperty("enableMySqlTests", "false"));
+        boolean isMariaDbEnabled = Boolean.parseBoolean(System.getProperty("enableMariaDbTests", "false"));
+        boolean isCockroachEnabled = Boolean.parseBoolean(System.getProperty("enableCockroachTests", "false"));
+        
+        // Run H2 tests if explicitly enabled OR if no other database tests are enabled
+        boolean anyOtherDbEnabled = isOracleEnabled || isDb2Enabled || isSqlServerEnabled || 
+                                     isPostgresEnabled || isMySqlEnabled || isMariaDbEnabled || isCockroachEnabled;
+        
+        shouldRunH2Tests = isH2Enabled || !anyOtherDbEnabled;
+    }
     
     /**
      * Helper method to build OJP URLs with optional datasource name
@@ -55,6 +82,8 @@ public class MultiDataSourceIntegrationTest {
 
     @Test
     public void testMultipleDataSourcesForSingleDatabaseSingleUser() throws Exception {
+        assumeTrue(shouldRunH2Tests, "H2 multi-datasource tests are disabled when running database-specific tests");
+        
         // Create test properties with multiple datasources for same database
         String testPropertiesContent = 
             "# Default datasource\n" +
@@ -104,6 +133,8 @@ public class MultiDataSourceIntegrationTest {
 
     @Test
     public void testMultipleDataSourcesForDifferentDatabases() throws Exception {
+        assumeTrue(shouldRunH2Tests, "H2 multi-datasource tests are disabled when running database-specific tests");
+        
         String testPropertiesContent = 
             "# Database A datasources\n" +
             "dbA_primary.ojp.connection.pool.maximumPoolSize=20\n" +
@@ -157,6 +188,8 @@ public class MultiDataSourceIntegrationTest {
 
     @Test
     public void testFailFastForMissingDataSource() throws Exception {
+        assumeTrue(shouldRunH2Tests, "H2 multi-datasource tests are disabled when running database-specific tests");
+        
         String testPropertiesContent = 
             "# Only configure one datasource\n" +
             "configuredDS.ojp.connection.pool.maximumPoolSize=10\n";
@@ -180,6 +213,8 @@ public class MultiDataSourceIntegrationTest {
 
     @Test
     public void testBackwardCompatibilityWithDefaultDataSource() throws Exception {
+        assumeTrue(shouldRunH2Tests, "H2 multi-datasource tests are disabled when running database-specific tests");
+        
         String testPropertiesContent = 
             "# Traditional configuration without datasource prefix\n" +
             "ojp.connection.pool.maximumPoolSize=25\n" +
@@ -203,6 +238,8 @@ public class MultiDataSourceIntegrationTest {
 
     @Test
     public void testCrossDatabaseTableAccessThrowsException() throws Exception {
+        assumeTrue(shouldRunH2Tests, "H2 multi-datasource tests are disabled when running database-specific tests");
+        
         // Test that trying to access a table from one database using a datasource 
         // configured for a different database throws appropriate exception
         String testPropertiesContent = 
