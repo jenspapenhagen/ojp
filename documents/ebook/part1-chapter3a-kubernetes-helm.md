@@ -1199,13 +1199,36 @@ gantt
 4. **Monitor client connections** during updates to verify failover behavior
 5. **Test updates in staging** with production-like traffic patterns
 
-#### Achieving Graceful Shutdowns with Connection Draining
+#### Understanding gRPC Connection Behavior During Pod Termination
 
-To minimize failed requests during rolling updates, implement connection draining strategies:
+**Critical architectural consideration**: With gRPC's long-lived HTTP/2 connections, Kubernetes cannot prevent clients from sending new requests over existing connections. When a pod enters termination:
 
-**Approach 1: PreStop Hook with Delay**
+- **Kubernetes removes the pod from endpoints** - new connections won't be established
+- **Existing gRPC connections remain open** - clients continue sending requests through the persistent HTTP/2 pipe
+- **PreStop hooks cannot stop traffic** - the client still has an open connection and will keep using it
+- **Requests fail when pod terminates** - once SIGTERM is sent, the server stops processing and connections close abruptly
 
-Give active connections time to complete before termination:
+**The Reality**: There is no way to gracefully drain gRPC connections from the Kubernetes side alone. The persistent nature of HTTP/2 means:
+
+1. **Client controls the connection** - not Kubernetes or the pod
+2. **New requests will arrive** - even after pod enters termination phase
+3. **Operations will fail** - when SIGTERM finally terminates the process
+
+#### Minimizing Disruption During Rolling Updates
+
+Given these constraints, here are realistic approaches to reduce (but not eliminate) disruptions:
+
+**Approach 1: Client-Side Awareness** (Recommended)
+
+The JDBC driver's multinode failover handles this best:
+- When a pod terminates, connections fail immediately
+- The driver detects the failure and fails over to healthy pods
+- Retry logic in the application handles the brief disruption
+- Failed transactions must be retried at the application level
+
+**Approach 2: Longer Termination Grace Period**
+
+Give more time for in-flight operations to complete naturally:
 
 ```yaml
 apiVersion: apps/v1
@@ -1215,38 +1238,43 @@ metadata:
 spec:
   template:
     spec:
+      terminationGracePeriodSeconds: 60  # Longer grace period
       containers:
       - name: ojp-server
         lifecycle:
           preStop:
             exec:
-              command:
-              - /bin/sh
-              - -c
-              - |
-                # Stop accepting new connections
-                echo "Draining connections..."
-                # Wait for active connections to complete (30 seconds)
-                sleep 30
-        # Allow 40 seconds total for graceful shutdown
-      terminationGracePeriodSeconds: 40
+              command: ["/bin/sh", "-c", "sleep 15"]  # Small delay before SIGTERM
 ```
 
-**How it works**:
-- Kubernetes stops sending new requests to the pod (removes from endpoints)
-- PreStop hook delays actual SIGTERM for 30 seconds
-- Active connections have time to complete naturally
-- Remaining connections are forcefully closed after grace period
+This gives active queries more time but doesn't prevent new requests - it only delays the inevitable connection termination.
 
-**Approach 2: Application-Level Coordination** (Future Enhancement)
+**Approach 3: Coordinated Maintenance Windows**
 
-For true zero-downtime, OJP would need:
-- Health check endpoint that can signal "draining" state
-- Readiness probe that fails when draining starts
-- Application logic to reject new connections while finishing existing ones
-- This requires implementing a graceful shutdown mode in OJP server
+For critical updates requiring minimal disruption:
+- Schedule during low-traffic periods
+- Temporarily scale up replicas (e.g., 3 → 5)
+- Perform rolling update with extra capacity
+- Scale back down after update completes
 
-**Current Recommendation**: Use Approach 1 (preStop hook) for best-effort graceful shutdowns. Accept that some in-flight operations may still fail during pod termination.
+**Approach 4: Application-Level Retry Logic** (Essential)
+
+The most effective approach is defensive programming:
+- **Implement retry logic** - catch connection failures and retry operations
+- **Make operations idempotent** - ensure retries don't cause duplicate actions
+- **Use transaction boundaries carefully** - keep transactions short
+- **Monitor and alert** - track failure rates during deployments
+
+**Current Limitations and Future Enhancements**:
+
+True zero-downtime rolling updates would require:
+1. **OJP server "draining mode"** - server signals to clients it's shutting down
+2. **Client-side connection migration** - JDBC driver proactively moves connections before termination
+3. **Graceful connection closure** - server finishes in-flight requests before accepting SIGTERM
+
+These would need to be implemented in OJP itself and are potential future enhancements.
+
+**Recommendation**: Accept that rolling updates will cause brief disruptions to in-flight operations. Design your application with retry logic and idempotent operations to handle these failures gracefully. The JDBC driver's automatic failover minimizes the impact, but cannot completely eliminate it.
 
 **Pod Disruption Budget Example**:
 
