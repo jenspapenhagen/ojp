@@ -59,14 +59,7 @@ Professional enterprise architecture diagram with icons and labels
 
 The **ojp-server** is the heart of the OJP system. It's a standalone gRPC server that manages database connections and executes SQL operations on behalf of client applications.
 
-**Key Responsibilities**:
-
-1. **gRPC Service**: Listens for client requests over gRPC (default port: 1059)
-2. **Connection Pool Management**: Maintains HikariCP pools for each configured database
-3. **SQL Execution**: Executes queries and updates against real database connections
-4. **Session Management**: Tracks client sessions and their transactional state
-5. **Telemetry**: Exports metrics via Prometheus (default port: 9159)
-6. **Security**: Enforces IP whitelisting and access controls
+At its core, the server listens for client requests over gRPC on port 1059 by default. When requests arrive, the server maintains HikariCP connection pools for each configured database, ensuring efficient resource utilization. The server then executes queries and updates against real database connections, managing the entire lifecycle of SQL operations. Throughout this process, it tracks client sessions and their transactional state, ensuring data consistency across distributed applications. For observability, the server exports comprehensive metrics via Prometheus on port 9159, and enforces security through IP whitelisting and access controls.
 
 **Architecture Layers**:
 
@@ -115,10 +108,7 @@ graph TD
     style POOL fill:#ff8a65
 ```
 
-**Deployment Options**:
-- **Docker Container**: Pre-built images with open-source drivers included
-- **Runnable JAR**: Standalone executable with external driver support
-- **Kubernetes**: Helm charts for cloud-native deployment
+The server offers flexible deployment options to fit various infrastructure needs. You can run it as a Docker container with pre-built images that include open-source drivers, as a runnable JAR for standalone execution with external driver support, or deploy it to Kubernetes using Helm charts for cloud-native environments.
 
 **Configuration**: Server behavior is controlled through environment variables or JVM system properties:
 
@@ -149,14 +139,7 @@ Professional technical diagram style
 
 The **ojp-jdbc-driver** is a complete JDBC 4.2 specification implementation that applications use as a drop-in replacement for traditional JDBC drivers.
 
-**Key Responsibilities**:
-
-1. **JDBC Compliance**: Implements all required JDBC interfaces
-2. **Virtual Connections**: Provides lightweight connection objects
-3. **gRPC Client**: Communicates with ojp-server over gRPC
-4. **Result Streaming**: Handles result set streaming efficiently
-5. **Transaction Management**: Manages transaction state across the network
-6. **Multi-node Support**: Connects to multiple OJP servers for high availability
+The driver implements all required JDBC interfaces to ensure full compliance with the standard. Rather than maintaining actual database connections, it provides lightweight virtual connection objects that delegate to the server. Under the hood, it acts as a gRPC client, communicating with ojp-server to execute all database operations. The driver handles result set streaming efficiently to minimize memory overhead, and manages transaction state across the network boundary. For high availability scenarios, it supports connecting to multiple OJP servers simultaneously, automatically failing over when needed.
 
 **JDBC Implementation Mapping**:
 
@@ -264,12 +247,7 @@ Use professional technical documentation style
 
 The **ojp-grpc-commons** module contains the gRPC service definitions and Protocol Buffer message schemas shared between the driver and server.
 
-**Key Components**:
-
-1. **Service Definitions**: gRPC service interfaces (`.proto` files)
-2. **Message Schemas**: Request and response message structures
-3. **Generated Code**: Java classes auto-generated from proto definitions
-4. **Version Compatibility**: Ensures driver and server speak the same protocol
+This module serves as the contract between client and server. It defines the gRPC service interfaces in `.proto` files, specifying exactly how client and server communicate. These files describe all request and response message structures with precise field types and semantics. From these proto files, Java classes are auto-generated at build time, ensuring both sides work with identical data structures. This approach guarantees version compatibility—when driver and server are compiled against the same proto definitions, protocol mismatches become impossible.
 
 **Protocol Buffer Example**:
 
@@ -317,25 +295,9 @@ From the Architectural Decision Record (ADR-002):
 
 > "gRPC's HTTP/2 transport enables multiplexed streams and low-latency communication, aligning perfectly with the project's scalability goals."
 
-**Key Advantages**:
+gRPC brings several compelling advantages to OJP's architecture. Its HTTP/2 multiplexing allows multiple requests to travel over a single TCP connection, dramatically reducing connection overhead. The binary protocol using Protocol Buffers results in much smaller payload sizes compared to JSON—typically 60-80% smaller. This isn't just about bandwidth; smaller payloads mean faster serialization and deserialization. gRPC provides native support for bi-directional streaming, perfect for handling large result sets efficiently. Protocol Buffers also bring compile-time type safety, catching errors during development rather than at runtime. The protocol is language-agnostic, making it straightforward to implement clients in languages beyond Java. Overall, gRPC delivers significantly better performance than traditional REST/JSON approaches, which is critical when database operations are involved.
 
-1. **HTTP/2 Multiplexing**: Multiple requests over a single TCP connection
-2. **Binary Protocol**: Smaller payload sizes than JSON
-3. **Streaming Support**: Bi-directional streaming for large result sets
-4. **Type Safety**: Protocol Buffers provide compile-time type checking
-5. **Language Agnostic**: Easy to implement clients in other languages
-6. **Performance**: Significantly faster than REST/JSON
-
-**Protocol Comparison**:
-
-| Feature | REST/JSON | gRPC/Protobuf |
-|---------|-----------|---------------|
-| Transport | HTTP/1.1 | HTTP/2 |
-| Encoding | Text (JSON) | Binary |
-| Payload Size | Large | Small (60-80% reduction) |
-| Streaming | Workarounds | Native support |
-| Type Safety | Runtime | Compile-time |
-| Performance | Good | Excellent |
+When comparing REST/JSON to gRPC/Protobuf, the differences are striking. REST typically uses HTTP/1.1 with text-based JSON encoding, leading to larger payloads and limited streaming capabilities. Type checking happens at runtime, and performance is merely good. gRPC, on the other hand, uses HTTP/2 with binary encoding, achieving 60-80% payload size reduction, native streaming support, compile-time type safety, and excellent performance.
 
 ### Request-Response Flow
 
@@ -428,12 +390,7 @@ stateDiagram-v2
     end note
 ```
 
-**Session Features**:
-- **Unique Session ID**: Each connection gets a UUID
-- **Transaction State**: Tracks commit/rollback status
-- **Prepared Statements**: Cached at server side for reuse
-- **Isolation Level**: Maintains JDBC isolation level settings
-- **Connection Affinity**: In multi-node deployments, sessions stick to their server
+Each OJP session has several important characteristics that make the system work smoothly. Every connection gets a unique UUID as its session identifier, ensuring that requests are properly tracked across the distributed system. The session tracks transaction state meticulously, knowing whether a transaction is in progress and what operations have been committed or rolled back. Prepared statements are cached at the server side for reuse, avoiding repeated parsing overhead. The system maintains JDBC isolation level settings across the network boundary, preserving transactional semantics. In multi-node deployments, sessions exhibit connection affinity—once a session starts on a particular server, it sticks to that server for consistency.
 
 ### Connection Multiplexing
 
@@ -479,11 +436,7 @@ graph LR
     style CH fill:#4caf50
 ```
 
-**Benefits**:
-- **Reduced Overhead**: One TCP connection instead of many
-- **Better Performance**: Less connection establishment overhead
-- **Resource Efficiency**: Fewer sockets and file descriptors
-- **Concurrent Operations**: Multiple queries in flight simultaneously
+This multiplexing delivers several concrete benefits. The reduced overhead from maintaining one TCP connection instead of many translates to better performance and resource utilization. Server resources are conserved—fewer sockets and file descriptors mean more capacity for actual work. Most importantly, the system can handle concurrent operations gracefully, with multiple queries in flight simultaneously without the connection management overhead of traditional approaches.
 
 ---
 
@@ -504,21 +457,9 @@ From the Architectural Decision Record (ADR-003):
 
 > "HikariCP is the fastest JDBC connection pool, with extensive configuration options and a proven track record in high-performance systems."
 
-**HikariCP Advantages**:
-- **Speed**: 2-10x faster than alternatives in benchmarks
-- **Reliability**: Extensively tested in production environments
-- **Low Overhead**: Minimal memory and CPU footprint
-- **Smart Defaults**: Works great out-of-the-box
-- **Active Development**: Well-maintained and supported
+HikariCP brings multiple advantages that make it the ideal choice for OJP. Benchmark results consistently show it's 2-10x faster than alternatives like C3P0, DBCP2, or Tomcat's pool. This speed isn't theoretical—HikariCP has been extensively tested in production environments across thousands of deployments. It maintains minimal memory and CPU footprint, leaving more resources for your actual application logic. The pool works great out-of-the-box with smart defaults, though it offers extensive tuning options when needed. Finally, it's actively developed and well-maintained, with responsive support for issues and continuous improvements.
 
-**Performance Metrics** (from HikariCP benchmarks):
-
-| Pool | Operations/sec | Avg Latency |
-|------|----------------|-------------|
-| HikariCP | 45,000 | 0.9ms |
-| Tomcat | 23,000 | 1.8ms |
-| C3P0 | 18,000 | 2.3ms |
-| DBCP2 | 20,000 | 2.1ms |
+Performance benchmarks tell the story clearly. HikariCP achieves approximately 45,000 operations per second with 0.9ms average latency. Compare this to Tomcat's pool at 23,000 ops/sec with 1.8ms latency, C3P0 at 18,000 ops/sec with 2.3ms latency, or DBCP2 at 20,000 ops/sec with 2.1ms latency. HikariCP essentially doubles the throughput while halving the latency.
 
 ### Pool Sizing and Configuration
 
@@ -674,19 +615,9 @@ classDiagram
     ConnectionPoolProviderRegistry --> ConnectionPoolProvider : discovers via ServiceLoader
 ```
 
-**Benefits of Abstraction**:
-- **Flexibility**: Switch connection pool implementations without code changes
-- **Extensibility**: Add custom pool providers via SPI
-- **Testing**: Easy to mock for unit tests
-- **Future-Proofing**: Adapt to new pool technologies as they emerge
+The abstraction layer brings several important benefits. It provides flexibility—you can switch connection pool implementations without changing any code. The system is extensible through the SPI, allowing organizations to add custom pool providers. This abstraction makes testing easier, as you can mock the pool provider for unit tests. Most importantly, it future-proofs the architecture, making it simple to adapt to new pool technologies as they emerge.
 
-**Available Providers**:
-
-| Provider | ID | Priority | Use Case |
-|----------|----|---------:|----------|
-| HikariCP | `hikari` | 100 | Default, high-performance |
-| Apache DBCP2 | `dbcp` | 10 | Alternative, feature-rich |
-| Custom | user-defined | varies | Specialized requirements |
+OJP ships with multiple providers out of the box. HikariCP is the default provider with ID "hikari" and priority 100, recommended for its high performance. Apache DBCP2 is available as an alternative with ID "dbcp" and priority 10, offering a feature-rich implementation. Organizations can also create custom providers with user-defined IDs and priorities for specialized requirements. The provider with the highest priority is used by default, though you can explicitly specify which provider to use when creating a data source.
 
 The provider with the highest priority is used by default, but you can explicitly specify a provider:
 
