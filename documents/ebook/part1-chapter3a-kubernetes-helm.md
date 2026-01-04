@@ -245,27 +245,46 @@ graph TD
     subgraph "Kubernetes Resources"
     NS[Namespace: ojp]
     CM[ConfigMap<br/>ojp-server-config]
-    SVC[Service<br/>ojp-server]
-    DEPLOY[Deployment<br/>ojp-server]
-    POD[Pod<br/>ojp-server-xxx]
+    SVC[Service<br/>ojp-server-headless]
+    SVC0[Service<br/>ojp-server-0]
+    SVC1[Service<br/>ojp-server-1]
+    SVC2[Service<br/>ojp-server-2]
+    STS[StatefulSet<br/>ojp-server]
+    POD0[Pod<br/>ojp-server-0]
+    POD1[Pod<br/>ojp-server-1]
+    POD2[Pod<br/>ojp-server-2]
     end
     
     HELM --> NS
     HELM --> CM
     HELM --> SVC
-    HELM --> DEPLOY
-    DEPLOY --> POD
-    SVC --> POD
-    POD -.reads.-> CM
+    HELM --> SVC0
+    HELM --> SVC1
+    HELM --> SVC2
+    HELM --> STS
+    STS --> POD0
+    STS --> POD1
+    STS --> POD2
+    SVC --> POD0
+    SVC --> POD1
+    SVC --> POD2
+    SVC0 --> POD0
+    SVC1 --> POD1
+    SVC2 --> POD2
+    POD0 -.reads.-> CM
+    POD1 -.reads.-> CM
+    POD2 -.reads.-> CM
     
     style HELM fill:#5c8dd8
     style NS fill:#326ce5
-    style POD fill:#4caf50
+    style POD0 fill:#4caf50
+    style POD1 fill:#4caf50
+    style POD2 fill:#4caf50
 ```
 
 ### Verifying the Deployment
 
-**Check deployment status**:
+**Check Helm release**:
 
 ```bash
 # Check Helm release
@@ -279,14 +298,23 @@ helm list -n ojp
 **Check Kubernetes resources**:
 
 ```bash
-# Check pod status
+# Check StatefulSet status
+kubectl get statefulset -n ojp
+
+# Expected output:
+# NAME         READY   AGE
+# ojp-server   3/3     5m
+
+# Check pods (StatefulSet creates predictable names)
 kubectl get pods -n ojp
 
 # Expected output:
-# NAME                          READY   STATUS    RESTARTS   AGE
-# ojp-server-7d8f9c5b4d-xyz12   1/1     Running   0          2m
+# NAME           READY   STATUS    RESTARTS   AGE
+# ojp-server-0   1/1     Running   0          5m
+# ojp-server-1   1/1     Running   0          4m
+# ojp-server-2   1/1     Running   0          3m
 
-# Check service
+# Check services (headless + individual pod services)
 kubectl get svc -n ojp
 
 # Expected output:
@@ -649,46 +677,30 @@ resources:
 
 #### Autoscaling Configuration
 
-```mermaid
-graph LR
-    subgraph "Horizontal Pod Autoscaler"
-    METRICS[CPU/Memory<br/>Metrics]
-    HPA[HPA Controller]
-    SCALE[Scale Decision]
-    end
-    
-    subgraph "OJP Deployment"
-    MIN[Min: 2 replicas]
-    CURRENT[Current]
-    MAX[Max: 10 replicas]
-    end
-    
-    METRICS --> HPA
-    HPA --> SCALE
-    SCALE --> MIN
-    SCALE --> CURRENT
-    SCALE --> MAX
-    
-    style HPA fill:#ffd54f
-    style CURRENT fill:#4caf50
-```
+⚠️ **Important Note on Autoscaling**: OJP's current multinode architecture does **not support dynamic autoscaling** in Kubernetes without additional infrastructure for service discovery. The JDBC driver must be configured with explicit server addresses, so when pods are added or removed, clients require reconfiguration.
 
 ```yaml
+# Autoscaling is disabled by default for OJP
 autoscaling:
-  enabled: true                              # Enable HPA
-  minReplicas: 2                             # Minimum pod count
-  maxReplicas: 10                            # Maximum pod count
-  targetCPUUtilizationPercentage: 80         # Scale at 80% CPU
-  targetMemoryUtilizationPercentage: 80      # Scale at 80% memory (optional)
+  enabled: false                             # Not recommended without dynamic discovery
+  
+# Instead, use a fixed replica count sized for peak load
+replicaCount: 3                              # Static count based on capacity planning
 ```
 
-**How autoscaling works**:
+**Why Autoscaling is Challenging**:
 
-1. **Metrics Server** collects pod resource usage
-2. **HPA** compares current usage to targets
-3. **Scale Up**: When usage > target, add pods (up to max)
-4. **Scale Down**: When usage < target, remove pods (down to min)
-5. **Cooldown**: Waits between scaling operations to avoid flapping
+1. **Static Client Configuration**: JDBC URL contains explicit server addresses (`server-0:1059,server-1:1059,server-2:1059`)
+2. **No Dynamic Discovery**: Clients cannot automatically discover new pods
+3. **Manual Reconfiguration**: Adding/removing pods requires updating client connection strings
+4. **Coordination Complexity**: Requires external service discovery mechanism (not yet implemented)
+
+**Recommended Approach**:
+
+- **Size for peak load**: Deploy enough replicas to handle maximum expected load
+- **Use monitoring**: Track resource utilization with Prometheus/Grafana
+- **Manual scaling**: Adjust replica count during maintenance windows when clients can be updated
+- **Future enhancement**: Dynamic service discovery is a planned feature (see Chapter 22: Project Vision)
 
 #### Node Affinity and Tolerations
 
@@ -924,52 +936,51 @@ spec:
         port: 53
 ```
 
-### Ingress Configuration
+### Exposing OJP Servers with Individual Pod Services
 
-**[IMAGE PROMPT 13]**: Create an architecture comparison diagram showing:
-- Traditional approach: External traffic → Ingress Controller → Load Balanced OJP Pods (showing single TCP connection issue)
-- Recommended approach: External traffic → Individual OJP Pod Services (NodePort/LoadBalancer) → Client-side load balancing
-Use Kubernetes architecture comparison style with pros/cons annotations
-Professional K8s networking guide
+**[IMAGE PROMPT 13]**: Create an architecture diagram showing:
+- Recommended approach: External traffic → Individual OJP Pod Services (StatefulSet) → Client-side load balancing
+- Show: StatefulSet pods (ojp-server-0, ojp-server-1, ojp-server-2) each with dedicated LoadBalancer/NodePort service
+- Illustrate JDBC driver connecting to all three endpoints simultaneously
+- Use Kubernetes architecture style with multinode connection visualization
+Professional K8s networking guide for OJP
 
-#### ⚠️ Important: Ingress and OJP Multinode Architecture
+#### ⚠️ Why Ingress is Not Recommended for OJP
 
-**OJP's multinode architecture requires special consideration in Kubernetes**:
+**OJP's multinode architecture requires each pod to be individually addressable**:
 
-OJP clients use a **client-side load balancing** strategy where the JDBC driver connects to multiple OJP server addresses simultaneously (e.g., `jdbc:ojp[server1:1059,server2:1059,server3:1059]_...`). This enables:
-- **Intelligent load distribution** based on real-time server load
-- **Automatic failover** when servers become unavailable
+OJP clients use a **client-side load balancing** strategy where the JDBC driver connects to multiple OJP server addresses simultaneously (e.g., `jdbc:ojp[server1:1059,server2:1059,server3:1059]_...`). This design enables:
+- **Intelligent load distribution** based on real-time server load metrics
+- **Automatic failover** when individual servers become unavailable
 - **Connection affinity** for transactions and temporary tables
 
-**Ingress Limitations for OJP**:
+**Why Ingress defeats OJP's architecture**:
 
-While Ingress can technically expose OJP via gRPC, it creates architectural challenges:
+Ingress controllers load balance at the **TCP connection level**. Once a gRPC connection is established through Ingress, all subsequent requests flow through that single OJP pod, completely defeating OJP's client-side intelligence. This results in:
+- ❌ Loss of intelligent load distribution
+- ❌ Loss of automatic failover capabilities  
+- ❌ Reduced resilience (single point of failure)
 
-1. **TCP Connection Stickiness**: Ingress controllers load balance at the **TCP connection level**. Once a gRPC connection is established, all requests flow through that single OJP pod, defeating OJP's client-side load balancing.
+**Recommended Pattern: StatefulSet with Individual Pod Services**
 
-2. **Loss of Failover Capabilities**: If the selected pod fails, the entire connection fails rather than transparently failing over to another pod.
-
-3. **Reduced Load Distribution**: The OJP driver cannot intelligently distribute load across servers based on real-time metrics.
-
-**Recommended Approach for Production**:
-
-Instead of using a single Ingress endpoint, **expose each OJP pod individually** so the JDBC driver can connect to all instances:
+Deploy OJP using a **StatefulSet** and expose each pod with its own LoadBalancer or NodePort service:
 
 ```yaml
-# Per-pod services using StatefulSet
+# Per-pod services for StatefulSet
 apiVersion: v1
 kind: Service
 metadata:
   name: ojp-server-0
   namespace: ojp
 spec:
-  type: LoadBalancer  # or NodePort
+  type: LoadBalancer  # or NodePort for on-premises
   selector:
     statefulset.kubernetes.io/pod-name: ojp-server-0
   ports:
     - protocol: TCP
       port: 1059
       targetPort: 1059
+      name: grpc
 ---
 apiVersion: v1
 kind: Service
@@ -984,73 +995,45 @@ spec:
     - protocol: TCP
       port: 1059
       targetPort: 1059
-# Repeat for each replica
-```
-
-**JDBC URL with multiple endpoints**:
-
-```java
-// Connect to all OJP pods directly
-String url = "jdbc:ojp[ojp-server-0.example.com:1059,ojp-server-1.example.com:1059,ojp-server-2.example.com:1059]_postgresql://localhost:5432/mydb";
-```
-
-This configuration preserves OJP's advanced capabilities while leveraging Kubernetes orchestration.
-
-**When Ingress Might Be Acceptable**:
-
-Ingress can be used for OJP in specific scenarios where the trade-offs are acceptable:
-- **Development/testing environments** where simplified access is prioritized over resilience
-- **Single-server deployments** where client-side load balancing isn't needed
-- **Non-critical workloads** where connection-level affinity is acceptable
-
-If you choose to use Ingress despite the limitations, here's the configuration:
-
-```yaml
-# ingress.yaml (for single-endpoint access - not recommended for production HA)
-apiVersion: networking.k8s.io/v1
-kind: Ingress
+      name: grpc
+---
+apiVersion: v1
+kind: Service
 metadata:
-  name: ojp-ingress
+  name: ojp-server-2
   namespace: ojp
-  annotations:
-    # For gRPC support (nginx-specific)
-    nginx.ingress.kubernetes.io/backend-protocol: "GRPC"
-    # Note: This creates TCP-level load balancing, not request-level
 spec:
-  ingressClassName: nginx
-  rules:
-    - host: ojp.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: ojp-server
-                port:
-                  number: 1059
-  # TLS configuration
-  tls:
-    - hosts:
-        - ojp.example.com
-      secretName: ojp-tls-cert
+  type: LoadBalancer
+  selector:
+    statefulset.kubernetes.io/pod-name: ojp-server-2
+  ports:
+    - protocol: TCP
+      port: 1059
+      targetPort: 1059
+      name: grpc
 ```
 
-**Create TLS secret**:
+**Retrieve external endpoints**:
 
 ```bash
-kubectl create secret tls ojp-tls-cert \
-  --namespace ojp \
-  --cert=path/to/cert.pem \
-  --key=path/to/key.pem
+# Get LoadBalancer external IPs
+kubectl get svc -n ojp ojp-server-0 ojp-server-1 ojp-server-2
+
+# Example output:
+# NAME            TYPE           EXTERNAL-IP       PORT(S)
+# ojp-server-0    LoadBalancer   34.123.45.67      1059:30001/TCP
+# ojp-server-1    LoadBalancer   34.123.45.68      1059:30002/TCP
+# ojp-server-2    LoadBalancer   34.123.45.69      1059:30003/TCP
 ```
 
-**gRPC Client configuration (single endpoint)**:
+**JDBC URL with all three endpoints**:
 
 ```java
-// Connect via Ingress (loses multinode benefits)
-String url = "jdbc:ojp[ojp.example.com:443]_postgresql://localhost:5432/mydb";
+// Connect to all OJP pods for full multinode benefits
+String url = "jdbc:ojp[34.123.45.67:1059,34.123.45.68:1059,34.123.45.69:1059]_postgresql://dbhost:5432/mydb";
 ```
+
+This configuration preserves OJP's intelligent client-side load balancing, automatic failover, and connection affinity while running in Kubernetes.
 
 ---
 
@@ -1128,66 +1111,104 @@ stateDiagram-v2
 
 ### Rolling Updates and Rollbacks
 
-**[IMAGE PROMPT 15]**: Create a visual representation of rolling update strategy for OJP:
-Show old pods gradually being replaced by new pods
-Display: maxSurge and maxUnavailable settings with client reconnection
-Illustrate graceful client failover to new pods
-Use timeline/animation-style diagram showing JDBC driver reconnection
-Professional deployment strategy guide
+**[IMAGE PROMPT 15]**: Create a visual representation of rolling update strategy for OJP StatefulSet:
+Show StatefulSet pods (0,1,2) gradually being replaced by new versions
+Display: Pod termination → Client failover → New pod ready
+Illustrate graceful client failover to remaining pods during update
+Use timeline/animation-style diagram showing JDBC driver reconnection behavior
+Professional StatefulSet deployment strategy guide
 
 #### Rolling Updates with OJP's Multinode Architecture
 
-**Important Consideration**: OJP's client-side load balancing provides natural support for rolling updates. When the JDBC driver detects a pod is unavailable (during replacement), it automatically fails over to available pods. This makes rolling updates seamless from the client perspective.
+**OJP's client-side load balancing naturally supports rolling updates**. When the JDBC driver detects a pod is unavailable (during pod termination), it automatically fails over to the remaining healthy pods. This makes rolling updates seamless from the client perspective.
 
-Configure deployment strategy:
+**StatefulSet Update Strategy**:
 
 ```yaml
-strategy:
-  type: RollingUpdate
-  rollingUpdate:
-    maxSurge: 1          # Max extra pods during update
-    maxUnavailable: 0    # Max unavailable pods (for zero-downtime)
+# StatefulSet rolling update configuration
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: ojp-server
+spec:
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0  # Update all pods (no partition)
+  # Note: StatefulSets update pods in reverse ordinal order (highest to lowest)
 ```
 
-**How It Works with OJP**:
+**How It Works with StatefulSet**:
 
-1. New pod starts with updated version
-2. Health probes pass, pod becomes ready
-3. Old pod is terminated (graceful shutdown)
-4. JDBC driver detects unavailable pod and redistributes connections
-5. Process repeats for next pod
+1. **Pod N termination begins** (e.g., ojp-server-2)
+2. **JDBC driver detects unavailability** and redistributes connections to pods 0 and 1
+3. **New pod N starts** with updated version and passes health checks
+4. **JDBC driver reconnects** to updated pod N
+5. **Process repeats** for pod N-1, N-2, etc., in reverse order
+
+This **reverse ordinal update** ensures the highest-numbered pod is updated first, maintaining at least N-1 pods available during the update.
 
 **Zero-Downtime Update Example**:
 
 ```mermaid
 gantt
-    title Rolling Update: 3 Replicas to New Version
+    title StatefulSet Rolling Update: 3 Replicas
     dateFormat X
     axisFormat %L
     
+    section Pod 0
+    Old Version    : 0, 6
+    New Version    : 6, 7
+    
     section Pod 1
-    Old Version: 0, 3
-    New Version: 3, 6
+    Old Version    : 0, 4
+    New Version    : 4, 7
     
     section Pod 2
-    Old Version: 0, 4
-    New Version: 4, 6
+    Old Version    : 0, 2
+    Terminating    : 2, 3
+    New Version    : 3, 7
     
-    section Pod 3
-    Old Version: 0, 5
-    New Version: 5, 6
-    
-    section Pod 4 (Surge)
-    New Version: 1, 2
+    section Client
+    Connected to 0,1,2 : 0, 2
+    Connected to 0,1   : 2, 3
+    Connected to 0,1,2 : 3, 7
 ```
 
-**Update Strategy Options**:
+**Best Practices for Zero-Downtime Updates**:
 
-| Configuration | Zero-Downtime | Speed | Resource Usage |
-|---------------|---------------|-------|----------------|
-| maxSurge=1, maxUnavailable=0 | ✅ Yes | Moderate | Low extra |
-| maxSurge=2, maxUnavailable=0 | ✅ Yes | Fast | Higher extra |
-| maxSurge=0, maxUnavailable=1 | ❌ No | Fast | No extra |
+1. **Always deploy at least 3 replicas** for updates (minimum 2 remain available)
+2. **Monitor client connections** during updates to verify failover behavior
+3. **Use pod disruption budgets** to control update pace
+4. **Test updates in staging** with production-like traffic patterns
+
+**Pod Disruption Budget Example**:
+
+```yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ojp-server-pdb
+  namespace: ojp
+spec:
+  minAvailable: 2  # Ensure at least 2 pods available during updates
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ojp-server
+```
+
+**Rollback if needed**:
+
+```bash
+# View StatefulSet history
+kubectl rollout history statefulset ojp-server -n ojp
+
+# Rollback to previous version
+kubectl rollout undo statefulset ojp-server -n ojp
+
+# Rollback to specific revision
+kubectl rollout undo statefulset ojp-server -n ojp --to-revision=2
+```
 
 ### Monitoring and Logging in Kubernetes
 
