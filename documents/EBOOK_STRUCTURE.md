@@ -101,6 +101,41 @@ The e-book is designed to guide readers from understanding the core problem OJP 
 
 ---
 
+#### Chapter 3a: Kubernetes Deployment with Helm
+- **3a.1 Kubernetes Prerequisites**
+  - Kubernetes cluster requirements
+  - Helm installation
+  - kubectl configuration
+- **3a.2 Installing OJP Server with Helm**
+  - Adding the OJP Helm repository
+  - Installing the ojp-server chart
+  - Verifying the deployment
+- **3a.3 Helm Chart Configuration**
+  - Server configuration parameters
+  - Resource limits and requests
+  - Autoscaling configuration
+  - Service configuration
+- **3a.4 Advanced Kubernetes Deployment**
+  - ConfigMaps and Secrets
+  - Persistent volumes for logs
+  - Network policies
+  - Ingress configuration
+- **3a.5 Kubernetes Best Practices**
+  - Health checks and readiness probes
+  - Rolling updates and rollbacks
+  - Monitoring and logging in K8s
+  - Multi-node deployment in Kubernetes
+
+**Source Documents:**
+- ojp-helm repository: https://github.com/Open-J-Proxy/ojp-helm
+  - README.md
+  - charts/ojp-server/README.md
+  - charts/ojp-server/values.yaml
+  - charts/ojp-server/Chart.yaml
+  - charts/ojp-server/templates/*.yaml
+
+---
+
 ### Part II: Configuration & Setup
 
 #### Chapter 4: Database Driver Configuration
@@ -627,6 +662,7 @@ The e-book is designed to guide readers from understanding the core problem OJP 
   - Build commands
   - Test commands
   - Docker commands
+  - Helm commands
 
 #### Appendix B: Database-Specific Guides
 - **B.1 Oracle Database**
@@ -654,19 +690,23 @@ The e-book is designed to guide readers from understanding the core problem OJP 
 - Technical terms and definitions
 - Acronyms and abbreviations
 - OJP-specific terminology
+- Kubernetes and Helm terminology
 
 #### Appendix D: Additional Resources
 - **D.1 External Links**
-  - GitHub repository
+  - GitHub repositories (main and helm)
+  - Artifact Hub (Helm charts)
   - Discord community
   - Issue tracker
 - **D.2 Related Projects**
   - Framework integration examples
   - Community contributions
+  - Helm chart repository
 - **D.3 Further Reading**
   - JDBC specifications
   - gRPC documentation
   - Connection pooling best practices
+  - Kubernetes and Helm documentation
 
 ---
 
@@ -678,10 +718,10 @@ The e-book is designed to guide readers from understanding the core problem OJP 
 3. "The OJP Book: Database Connection Management for Microservices and Beyond"
 
 ### Estimated Page Count
-- Based on content: 300-400 pages
+- Based on content: 320-420 pages (updated to include Kubernetes/Helm chapter)
 - Technical depth: Intermediate to Advanced
 - Code examples: Extensive
-- Diagrams: 20-30 throughout
+- Diagrams: 25-35 throughout (includes Kubernetes architecture diagrams)
 
 ### Format Recommendations
 - **Digital Formats**: PDF, EPUB, HTML
@@ -747,8 +787,8 @@ Based on the repository analysis, these topics may need additional content:
 4. **Production Case Studies**: Real-world implementation stories
 5. **Capacity Planning**: Guide for sizing OJP deployments
 6. **Disaster Recovery**: Backup and recovery strategies
-7. **Cloud Deployment**: AWS, Azure, GCP-specific guides
-8. **Kubernetes Deployment**: Container orchestration patterns
+7. **Cloud Deployment**: AWS, Azure, GCP-specific guides (Kubernetes covered in Chapter 3a)
+8. **Advanced Kubernetes Patterns**: StatefulSets, operators, service mesh integration
 9. **Cost Analysis**: TCO and ROI calculations
 10. **Upgrade Guide**: Version migration strategies
 

@@ -81,6 +81,68 @@ This document outlines a phased plan for writing the OJP e-book content, with ea
 
 ---
 
+## Phase 1a: Kubernetes Deployment (Part I - Chapter 3a)
+**Goal**: Document Kubernetes and Helm deployment of OJP Server
+
+**Deliverables**:
+- Chapter 3a: Kubernetes Deployment with Helm (complete text)
+
+**Estimated Time**: 2-3 hours
+
+**Source Materials to Leverage**:
+- ojp-helm repository (https://github.com/Open-J-Proxy/ojp-helm)
+  - README.md
+  - charts/ojp-server/README.md
+  - charts/ojp-server/values.yaml
+  - charts/ojp-server/Chart.yaml
+  - charts/ojp-server/templates/*.yaml (deployment, service, configmap)
+
+**Content Creation Tasks**:
+1. Write Chapter 3a.1: Kubernetes Prerequisites
+   - Kubernetes cluster requirements
+   - Helm installation and setup
+   - kubectl configuration
+   
+2. Write Chapter 3a.2: Installing OJP Server with Helm
+   - Adding the OJP Helm repository
+   - Installing the ojp-server chart
+   - Verifying the deployment
+   - Basic troubleshooting
+   
+3. Write Chapter 3a.3: Helm Chart Configuration
+   - Server configuration parameters (from values.yaml)
+   - Resource limits and requests
+   - Autoscaling configuration
+   - Service configuration options
+   - OpenTelemetry and Prometheus settings
+   - Slow query segregation settings
+   
+4. Write Chapter 3a.4: Advanced Kubernetes Deployment
+   - ConfigMaps and Secrets for sensitive data
+   - Persistent volumes for logs and state
+   - Network policies for security
+   - Ingress configuration for external access
+   
+5. Write Chapter 3a.5: Kubernetes Best Practices
+   - Health checks and readiness probes
+   - Rolling updates and rollbacks
+   - Monitoring and logging in K8s
+   - Multi-replica deployments
+   - Integration with existing Kubernetes monitoring
+
+**Output Files**:
+- `documents/ebook/part1-chapter3a-kubernetes-helm.md`
+
+**Success Criteria**:
+- Clear step-by-step Helm installation guide
+- All configuration options from values.yaml are documented
+- Examples for common deployment scenarios
+- Integration with Kubernetes ecosystem is explained
+- Troubleshooting section for common issues
+- Best practices for production deployments
+
+---
+
 ## Phase 2: Database Configuration (Part II - Chapters 4-5)
 **Goal**: Document how to configure database drivers and the JDBC driver
 
@@ -586,27 +648,42 @@ If priorities change, phases can be reordered:
 
 ### Option A: User-Focused First
 1. Phase 1 (Foundation)
-2. Phase 2 (Database Config)
-3. Phase 3 (Server & Frameworks)
-4. Phase 6 (Observability)
-5. Phase 4 (Advanced Performance)
-6. Phase 5 (Advanced Transactions)
-7. Phase 7 (Development)
-8. Phase 8 (Vision)
-9. Phase 9 (Appendices)
-10. Phase 10 (Integration)
+2. Phase 1a (Kubernetes/Helm)
+3. Phase 2 (Database Config)
+4. Phase 3 (Server & Frameworks)
+5. Phase 6 (Observability)
+6. Phase 4 (Advanced Performance)
+7. Phase 5 (Advanced Transactions)
+8. Phase 7 (Development)
+9. Phase 8 (Vision)
+10. Phase 9 (Appendices)
+11. Phase 10 (Integration)
 
 ### Option B: Critical Path First
 1. Phase 1 (Foundation)
 2. Phase 2 (Database Config)
 3. Phase 3 (Server & Frameworks)
-4. Phase 9 (Appendices - Quick Refs)
+4. Phase 1a (Kubernetes/Helm)
+5. Phase 9 (Appendices - Quick Refs)
+6. Phase 4 (Advanced Performance)
+7. Phase 5 (Advanced Transactions)
+8. Phase 6 (Observability)
+9. Phase 7 (Development)
+10. Phase 8 (Vision)
+11. Phase 10 (Integration)
+
+### Option C: Cloud-Native First
+1. Phase 1 (Foundation)
+2. Phase 1a (Kubernetes/Helm)
+3. Phase 2 (Database Config)
+4. Phase 3 (Server & Frameworks)
 5. Phase 4 (Advanced Performance)
 6. Phase 5 (Advanced Transactions)
 7. Phase 6 (Observability)
 8. Phase 7 (Development)
 9. Phase 8 (Vision)
-10. Phase 10 (Integration)
+10. Phase 9 (Appendices)
+11. Phase 10 (Integration)
 
 ---
 
@@ -614,6 +691,7 @@ If priorities change, phases can be reordered:
 
 ### Phase Status
 - [ ] Phase 1: Foundation Chapters
+- [ ] Phase 1a: Kubernetes Deployment with Helm
 - [ ] Phase 2: Database Configuration
 - [ ] Phase 3: Server & Framework Configuration
 - [ ] Phase 4: Advanced Features - Performance
@@ -625,11 +703,11 @@ If priorities change, phases can be reordered:
 - [ ] Phase 10: Integration, Review & Polish
 
 ### Completion Metrics
-- **Total Phases**: 10
-- **Estimated Total Time**: 25-35 hours
-- **Chapters to Write**: 22
+- **Total Phases**: 11 (updated from 10)
+- **Estimated Total Time**: 27-38 hours (updated from 25-35)
+- **Chapters to Write**: 23 (includes Chapter 3a: Kubernetes/Helm)
 - **Appendices to Create**: 4
-- **Expected Page Count**: 300-400 pages
+- **Expected Page Count**: 320-420 pages (updated to account for K8s content)
 
 ---
 
@@ -649,11 +727,11 @@ If priorities change, phases can be reordered:
 
 The e-book writing project will be considered successful when:
 
-1. **Content Completeness**: All 22 chapters and 4 appendices are written
+1. **Content Completeness**: All 23 chapters (including Kubernetes/Helm) and 4 appendices are written
 2. **Technical Accuracy**: All code examples work and configurations are correct
 3. **Readability**: Content flows naturally and is accessible to target audience
 4. **Professional Quality**: Formatting, diagrams, and presentation are polished
-5. **Practical Value**: Readers can successfully use OJP after reading
+5. **Practical Value**: Readers can successfully use OJP after reading (including Kubernetes deployment)
 6. **Community Approval**: Maintainers and community provide positive feedback
 
 ---
