@@ -112,54 +112,6 @@ public class UserService {
 }
 ```
 
-### Troubleshooting Spring Boot SLF4J Conflicts
-
-Spring Boot applications commonly encounter a logging configuration conflict when integrating OJP. The issue stems from having multiple SLF4J providers on the classpath. Spring Boot defaults to Logback for logging, but the OJP JDBC driver includes SLF4J Simple. When both are present, SLF4J reports multiple bindings and Spring Boot's logging initialization fails.
-
-**[IMAGE PROMPT: Create an error visualization showing the SLF4J conflict. Show two puzzle pieces trying to fit in the same space: one labeled "Logback (Spring Boot Default)" in blue and another labeled "SLF4J Simple (OJP Driver)" in orange. Between them show a red "X" with error text "Multiple SLF4J Providers Detected". Include the actual error message in a code block overlay: "LoggerFactory is not a Logback LoggerContext". Style: Technical error illustration with clear problem visualization.]**
-
-You'll recognize this problem when you see error messages like:
-
-```
-SLF4J(W): Class path contains multiple SLF4J providers.
-SLF4J(W): Found provider [org.slf4j.simple.SimpleServiceProvider]
-SLF4J(W): Found provider [ch.qos.logback.classic.spi.LogbackServiceProvider]
-Exception: LoggerFactory is not a Logback LoggerContext but Logback is on the classpath.
-```
-
-The solution is simple: tell SLF4J which provider to use. Add a JVM system property that explicitly selects Logback:
-
-```bash
-# As JVM argument
-java -Dslf4j.provider=ch.qos.logback.classic.spi.LogbackServiceProvider -jar myapp.jar
-
-# In application startup script
-export JAVA_OPTS="-Dslf4j.provider=ch.qos.logback.classic.spi.LogbackServiceProvider"
-java $JAVA_OPTS -jar myapp.jar
-```
-
-For containerized deployments, add this to your Dockerfile or Kubernetes pod specification:
-
-```dockerfile
-# Dockerfile
-ENV JAVA_OPTS="-Dslf4j.provider=ch.qos.logback.classic.spi.LogbackServiceProvider"
-CMD ["java", "$JAVA_OPTS", "-jar", "/app.jar"]
-```
-
-This configuration ensures Spring Boot's logging system initializes correctly while allowing OJP's internal logging to function. The SLF4J facade routes all log messages appropriately based on your logging configuration.
-
-```mermaid
-graph LR
-    A[Application Starts] --> B{Multiple SLF4J Providers?}
-    B -->|Yes| C[Check JVM Property]
-    B -->|No| D[Use Single Provider]
-    C --> E{Property Set?}
-    E -->|Yes| F[Use Specified Provider]
-    E -->|No| G[Error: Ambiguous]
-    F --> H[Logging Works]
-    D --> H
-    G --> I[Startup Fails]
-```
 
 ## 7.3 Quarkus Integration
 
@@ -243,7 +195,7 @@ sequenceDiagram
     App->>Panache: findByEmail(email)
     Panache->>Hibernate: Generate SQL
     Hibernate->>Driver: getConnection()
-    Driver->>Server: gRPC Connect
+    Driver->>Server: gRPC Request (getConnection)
     Server-->>Driver: Virtual Connection
     Driver-->>Hibernate: JDBC Connection
     Hibernate->>Driver: Execute Query

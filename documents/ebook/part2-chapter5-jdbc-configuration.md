@@ -79,9 +79,10 @@ String after = "jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb";
 // With datasource name
 String named = "jdbc:ojp[localhost:1059(mainApp)]_postgresql://localhost:5432/mydb";
 
-// With connection parameters
+// With connection parameters (including SSL)
 String params = "jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb?" +
                 "ssl=true&sslfactory=org.postgresql.ssl.NonValidatingFactory";
+// For SSL configuration details between OJP and database, see Chapter 6 Security section
 ```
 
 **MySQL**:
@@ -178,7 +179,12 @@ String orOpts = "jdbc:ojp[localhost:1059]_oracle:thin:@localhost:1521/XEPDB1?" +
 
 ## 5.2 Connection Pool Settings
 
-OJP supports HikariCP connection pool configuration on the client side via `ojp.properties`.
+OJP supports multiple connection pool implementations on the client side:
+- **HikariCP** (default for non-XA connections) - High-performance JDBC connection pool
+- **Apache DBCP** (alternative for non-XA connections) - Traditional pooling implementation  
+- **Custom XA Implementation** (for XA transactions) - Uses Apache Commons Pool 2 for backend session pooling (see Chapter 10 for details)
+
+The client-side pool configuration is managed via `ojp.properties` file. For XA-specific pooling architecture, refer to Chapter 10 which explains the dual-condition lifecycle and backend session management.
 
 ### Configuration File Location
 
@@ -296,7 +302,7 @@ Include formulas and examples for different workloads
 Use charts and calculations
 Professional capacity planning guide
 
-**Sizing Formula**:
+**Sizing Formula** (General Guidance):
 ```
 Pool Size = (Tn × (Cm - 1)) + 1
 
@@ -304,6 +310,8 @@ Where:
 Tn = Number of threads making requests
 Cm = Connection multiplier (1.5-2.0 for most workloads)
 ```
+
+**Important**: This formula is provided as general guidance only. Real-world pool sizing depends heavily on your specific workload characteristics, query execution times, transaction patterns, and database capabilities. Start with these recommendations, then adjust based on monitoring data, connection wait times, and actual usage patterns. Always load test with your specific workload before deploying to production.
 
 **Recommendations by Workload**:
 
@@ -512,32 +520,24 @@ Double pooling creates several serious problems. It wastes connections through m
 
 ### Spring Boot Integration
 
-**[IMAGE PROMPT 11]**: Create a Spring Boot configuration guide:
-Show application.yml with correct OJP configuration
-Highlight disabled HikariCP settings
-Include bean configuration example
-Use Spring Boot themed colors
-Professional Spring Boot guide
+Spring Boot integration with OJP requires disabling the framework's built-in connection pooling to avoid double-pooling issues. The key concepts and patterns are covered briefly below, but for detailed examples, complete configuration options, and troubleshooting guidance, see **Chapter 7: Framework Integration**.
 
-**application.yml** (Spring Boot 2.x/3.x):
-
+**Quick Reference**:
 ```yaml
 spring:
   datasource:
-    # OJP JDBC URL
     url: jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb
     username: myuser
     password: mypassword
     driver-class-name: org.openjproxy.jdbc.Driver
-    
-    # CRITICAL: Disable Spring Boot's HikariCP
-    type: com.zaxxer.hikari.HikariDataSource
-    hikari:
-      # Set to minimal or disable entirely
-      maximum-pool-size: 1
-      minimum-idle: 0
-      # OR use a custom DataSource that doesn't pool
+    # Disable HikariCP - see Chapter 7 for details
 ```
+
+**See Chapter 7** for complete Spring Boot integration including:
+- Full configuration examples for Spring Boot 2.x and 3.x
+- SLF4J logging conflict resolution
+- Transaction management patterns
+- Testing strategies
 
 **Better approach - Custom DataSource**:
 
@@ -564,82 +564,17 @@ public class DataSourceConfig {
 }
 ```
 
-### Quarkus Integration
 
-**application.properties**:
+### Quarkus and Micronaut Integration
 
-```properties
-# Quarkus OJP Configuration
+Both Quarkus and Micronaut also require special configuration to avoid double-pooling. Each framework has specific patterns for disabling built-in connection pooling and integrating with OJP.
 
-# OJP JDBC URL
-quarkus.datasource.jdbc.url=jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb
-quarkus.datasource.username=myuser
-quarkus.datasource.password=mypassword
-quarkus.datasource.jdbc.driver=org.openjproxy.jdbc.Driver
+**See Chapter 7** for complete framework integration coverage:
+- **Quarkus**: Unpooled mode configuration, native compilation considerations, dev mode setup
+- **Micronaut**: Custom DataSource factory patterns, AOP considerations
+- **Comparison**: Framework-specific trade-offs and best practices
 
-# CRITICAL: Disable Agroal (Quarkus's connection pool)
-quarkus.datasource.jdbc.max-size=1
-quarkus.datasource.jdbc.min-size=0
-
-# Alternative: Use simple datasource
-quarkus.datasource.jdbc.pooling-enabled=false
-```
-
-### Micronaut Integration
-
-**application.yml**:
-
-```yaml
-datasources:
-  default:
-    # OJP JDBC URL
-    url: jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb
-    username: myuser
-    password: mypassword
-    driverClassName: org.openjproxy.jdbc.Driver
-    
-    # CRITICAL: Disable Micronaut's connection pool
-    pooled: false
-```
-
-**Or with programmatic configuration**:
-
-```java
-import io.micronaut.context.annotation.Bean;
-import io.micronaut.context.annotation.Factory;
-import javax.sql.DataSource;
-import java.sql.DriverManager;
-
-@Factory
-public class DataSourceFactory {
-    
-    @Bean
-    public DataSource dataSource() {
-        return new DataSource() {
-            @Override
-            public Connection getConnection() throws SQLException {
-                return DriverManager.getConnection(
-                    "jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb",
-                    "myuser",
-                    "mypassword"
-                );
-            }
-            
-            @Override
-            public Connection getConnection(String username, String password) 
-                    throws SQLException {
-                return DriverManager.getConnection(
-                    "jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb",
-                    username,
-                    password
-                );
-            }
-            
-            // Implement other DataSource methods...
-        };
-    }
-}
-```
+---
 
 ### Transaction Management
 

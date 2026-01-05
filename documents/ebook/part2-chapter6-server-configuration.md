@@ -34,7 +34,11 @@ Performance tuning starts with the thread pool size, which defaults to 200 threa
 
 The maximum request size setting provides protection against oversized requests that could impact server stability. The default of 4MB is generous for typical JDBC operations, but you might increase it if you're working with very large result sets or binary data. Just remember that larger request sizes consume more memory, so balance this against your available resources.
 
-Connection idle timeout controls how long the server waits before closing inactive connections. The default of 30 seconds strikes a balance between resource conservation and connection overhead. In environments with consistent traffic patterns, you might increase this to reduce connection churn. Conversely, in resource-constrained environments with sporadic traffic, a shorter timeout helps free up resources more quickly.
+Connection idle timeout controls how long the server waits before closing inactive **gRPC connections** from clients. The default of 30 seconds strikes a balance between resource conservation and connection overhead. 
+
+**Important**: These are gRPC connection timeouts, not database connection timeouts. Each gRPC connection uses HTTP/2 multiplexing, allowing many virtual JDBC connections to share a single gRPC connection. This multiplexed architecture means one gRPC connection can handle hundreds of `getConnection()` calls from the client side.
+
+For most deployments, the default 30-second timeout works well. However, consider increasing this timeout (or even disabling it with a very high value) for environments with consistent traffic patterns, as maintaining the gRPC connection reduces overhead. The gRPC connection reestablishment is relatively lightweight, but avoiding it entirely is even better for performance.
 
 Here's how you configure these core settings:
 
@@ -79,7 +83,11 @@ sequenceDiagram
 
 ## 6.3 Security Configuration
 
-Security in OJP centers around IP-based access control, giving you fine-grained control over who can connect to your server. The security model is simple yet effective: you define IP whitelists that specify which clients can access the gRPC endpoint and which can access the Prometheus metrics endpoint.
+Security in OJP includes multiple layers: IP-based access control, TLS/mTLS encryption, and network segregation. This section covers IP whitelisting for basic access control. For comprehensive security guidance including SSL/TLS configuration between OJP Server and databases, mTLS between JDBC driver and OJP Server, and network architecture patterns, see **Chapter 11: Security** (to be written).
+
+### IP-Based Access Control
+
+IP whitelisting gives you fine-grained control over who can connect to your server. The security model is simple yet effective: you define IP whitelists that specify which clients can access the gRPC endpoint and which can access the Prometheus metrics endpoint.
 
 By default, both endpoints accept connections from anywhere (0.0.0.0/0), which is perfect for development but inappropriate for production. In production environments, you'll want to lock down access to specific networks or IP addresses. The server supports multiple formats for defining allowed addresses, including individual IPs, CIDR notation for network ranges, and comma-separated lists for multiple rules.
 
@@ -119,12 +127,17 @@ Remember that security configuration is checked on every connection attempt. The
 
 Effective logging is crucial for understanding server behavior and troubleshooting issues. OJP provides granular log level control, allowing you to adjust verbosity based on your needs. The server supports five log levels that follow the standard severity hierarchy: TRACE, DEBUG, INFO, WARN, and ERROR.
 
-In production, INFO level provides a good balance between visibility and log volume. You'll see important events like server startup, configuration changes, and connection pool status without overwhelming your log management system. When troubleshooting, DEBUG level reveals the internal decision-making process, showing you exactly how the server handles requests, manages connections, and applies configuration.
+For production environments, **ERROR level is recommended** for maximum performance unless investigating issues. This logs only critical errors while minimizing overhead. INFO level provides more operational visibility but increases log volume. Use DEBUG or TRACE only temporarily when troubleshooting specific issues.
+
+When troubleshooting, DEBUG level reveals the internal decision-making process, showing you exactly how the server handles requests, manages connections, and applies configuration.
 
 TRACE level is your deep-dive diagnostic tool. It logs every operation in exhaustive detail, including gRPC message contents, connection lifecycle events, and thread pool activity. Use TRACE sparingly and temporarily—the log volume can be substantial, and the performance impact is noticeable. Enable it when you need to understand exact request flow or diagnose subtle timing issues, then switch back to DEBUG or INFO once you've gathered your diagnostic data.
 
 ```bash
-# Production: INFO level for operational visibility
+# Production: ERROR level for maximum performance
+-Dojp.server.logLevel=ERROR
+
+# Production with operational visibility: INFO level
 -Dojp.server.logLevel=INFO
 
 # Development: DEBUG for detailed behavior
@@ -136,7 +149,11 @@ TRACE level is your deep-dive diagnostic tool. It logs every operation in exhaus
 
 Here's what you'll see at each level:
 
-At INFO level, you'll observe server lifecycle events (startup, shutdown), configuration summaries, connection pool statistics, and slow query notifications. This gives you operational awareness without excessive detail.
+At ERROR level, you'll only see critical failures and exceptions that require immediate attention. This is the recommended production setting for maximum performance.
+
+WARN level adds warnings about non-critical issues like configuration inconsistencies, deprecated features, or recoverable errors. Useful when you want to catch potential problems before they become critical.
+
+INFO level adds server lifecycle events (startup, shutdown), configuration summaries, connection pool statistics, and slow query notifications. This gives you operational awareness without excessive detail.
 
 DEBUG level adds request routing decisions, connection acquisition and release events, circuit breaker state changes, and detailed error contexts. This level helps you understand why the server makes specific decisions.
 
@@ -299,23 +316,25 @@ graph TD
     E --> G{Fast Pool Available?}
     F --> H{Slow Pool Available?}
     G -->|Yes| I[Execute in Fast Pool]
-    G -->|No| J{Slow Pool Idle?}
+    G -->|No| J{Slow Pool Idle >10s?}
     H -->|Yes| K[Execute in Slow Pool]
-    H -->|No| L{Fast Pool Idle?}
-    J -->|Yes| I
-    J -->|No| M[Wait for Fast Slot]
-    L -->|Yes| K
-    L -->|No| N[Wait for Slow Slot]
-    I --> O[Update Statistics]
-    K --> O
-    O --> P[Adjust Classification]
+    H -->|No| L{Fast Pool Idle >10s?}
+    J -->|Yes| M[Borrow from Slow Pool]
+    J -->|No| N[Wait for Fast Slot]
+    L -->|Yes| O[Borrow from Fast Pool]
+    L -->|No| P[Wait for Slow Slot]
+    M --> I
+    O --> K
+    I --> Q[Update Statistics]
+    K --> Q
+    Q --> R[Adjust Classification]
 ```
 
 ## 6.8 Configuration Best Practices
 
 With all these configuration options available, how do you choose the right settings? Start with the defaults—they're designed for typical workloads and provide good performance out of the box. Then adjust based on monitoring data and observed behavior. Don't preemptively tune settings based on assumptions; let your actual workload guide your configuration.
 
-For development environments, prioritize visibility and fast feedback. Use DEBUG logging, generous timeouts, and tolerant circuit breaker settings. This makes it easier to understand server behavior and diagnose issues during development.
+For development environments, prioritize visibility and fast feedback. Use INFO logging (or DEBUG for active development), generous timeouts, and tolerant circuit breaker settings. This makes it easier to understand server behavior and diagnose issues during development.
 
 ```bash
 # Development configuration
@@ -328,12 +347,12 @@ export OJP_SERVER_ALLOWEDIPS="0.0.0.0/0"
 export OJP_OPENTELEMETRY_ENABLED=true
 ```
 
-Production environments require different trade-offs. Use INFO logging for operational visibility without overwhelming your log system. Implement proper IP restrictions for security. Enable OpenTelemetry for distributed tracing. Configure appropriate timeouts for your SLAs.
+Production environments require different trade-offs. Use ERROR or INFO logging (ERROR recommended for maximum performance; INFO for operational visibility). Implement proper IP restrictions for security. Enable OpenTelemetry for distributed tracing. Configure appropriate timeouts for your SLAs. Be very careful with DEBUG and TRACE in production—they are extremely verbose and can impact performance significantly.
 
 ```bash
 # Production configuration
 export OJP_SERVER_PORT=1059
-export OJP_SERVER_LOGLEVEL=INFO
+export OJP_SERVER_LOGLEVEL=ERROR  # Recommended for production performance
 export OJP_PROMETHEUS_PORT=9159
 export OJP_SERVER_THREADPOOLSIZE=200
 export OJP_SERVER_CIRCUITBREAKERTHRESHOLD=3

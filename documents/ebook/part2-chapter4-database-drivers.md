@@ -296,7 +296,7 @@ cp ~/Downloads/ucp.jar ./ojp-libs/
 cp ~/Downloads/ons.jar ./ojp-libs/
 ```
 
-**Important**: To use Oracle UCP with OJP, you must provide an implementation of the OJP SPI (Service Provider Interface). See Chapter 11 for details on implementing `XAConnectionPoolProvider` or `DataSourceProvider`.
+**Important**: To use Oracle UCP with OJP, you must provide an implementation of the OJP SPI (Service Provider Interface). See Chapter 11 for details on implementing `XAConnectionPoolProvider` and/or `ConnectionPoolProvider`.
 
 **Connect to Oracle**:
 
