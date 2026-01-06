@@ -45,13 +45,17 @@ As of OJP version 0.3.2, the logging implementation has been updated to be compa
 
 **What Changed:**
 - **OJP JDBC Driver**: No longer bundles any SLF4J implementation. It only uses the SLF4J API with `provided` scope, allowing the consuming application to choose the logging implementation.
-- **OJP Server**: Uses Logback as the logging implementation instead of SLF4J Simple.
+- **OJP Server**: Uses Logback as the logging implementation with configurable options.
 
 **Benefits:**
 - ✅ No more logging conflicts when using OJP JDBC driver with Spring Boot
 - ✅ Seamless integration with Spring Boot's existing logging configuration
 - ✅ The consuming application (like your Spring Boot app) provides the logging implementation
 - ✅ Consistent logging across your entire application
+
+**OJP Server Logging Configuration:**
+
+For detailed information about configuring OJP Server logging (log levels, file locations, rotation policies), see the [OJP Server Configuration Guide](../../configuration/ojp-server-configuration.md#logging-settings).
 
 **For older versions (0.3.1-beta and earlier):**
 

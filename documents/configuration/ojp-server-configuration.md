@@ -18,9 +18,42 @@ The server supports configuration through both JVM system properties and environ
 
 ### Logging Settings
 
-| Property                      | Environment Variable          | Type    | Default | Description                               |
-|-------------------------------|-------------------------------|---------|---------|-------------------------------------------|
-| `ojp.server.logLevel`         | `OJP_SERVER_LOGLEVEL`         | string  | INFO    | Log verbosity level (TRACE, DEBUG, INFO, WARN, ERROR) |
+OJP Server uses Logback for logging with fully configurable options. All logging properties can be set via system properties or environment variables.
+
+| Property                           | Environment Variable               | Type    | Default                            | Description                                   |
+|------------------------------------|------------------------------------|---------|------------------------------------|-----------------------------------------------|
+| `ojp.server.logLevel`              | `OJP_SERVER_LOGLEVEL`              | string  | INFO                               | Root log level (TRACE, DEBUG, INFO, WARN, ERROR) |
+| `ojp.server.log.file`              | `OJP_SERVER_LOG_FILE`              | string  | logs/ojp-server.log                | Log file location                            |
+| `ojp.server.log.fileNamePattern`   | `OJP_SERVER_LOG_FILENAMEPATTERN`   | string  | logs/ojp-server.%d{yyyy-MM-dd}.log | Rolling file pattern (daily rollover)       |
+| `ojp.server.log.maxHistory`        | `OJP_SERVER_LOG_MAXHISTORY`        | int     | 30                                 | Number of days to keep log files            |
+| `ojp.server.log.totalSizeCap`      | `OJP_SERVER_LOG_TOTALSIZECAP`      | string  | 1GB                                | Total size cap for all log files            |
+| `ojp.server.log.pattern`           | `OJP_SERVER_LOG_PATTERN`           | string  | %d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n | Log message pattern |
+
+#### Logging Configuration Examples
+
+**Basic logging configuration:**
+```bash
+# Set log level to DEBUG
+-Dojp.server.logLevel=DEBUG
+
+# Change log file location
+-Dojp.server.log.file=/var/log/ojp/server.log
+
+# Keep 60 days of logs
+-Dojp.server.log.maxHistory=60
+
+# Set total size cap to 5GB
+-Dojp.server.log.totalSizeCap=5GB
+```
+
+**Production logging setup:**
+```bash
+java -Dojp.server.logLevel=INFO \
+     -Dojp.server.log.file=/var/log/ojp/server.log \
+     -Dojp.server.log.maxHistory=90 \
+     -Dojp.server.log.totalSizeCap=10GB \
+     -jar ojp-server.jar
+```
 
 ### Security Settings
 
@@ -193,7 +226,7 @@ ojp.server.slowQuerySegregation.fastSlotTimeout=60000
 java -Dojp.server.port=1059 \
      -Dojp.prometheus.port=9159 \
      -Dojp.server.logLevel=DEBUG \
-     -Dojp.server.accessLogging=true \
+     -Dojp.server.log.file=logs/ojp-dev.log \
      -Dojp.server.allowedIps="0.0.0.0/0" \
      -Dojp.server.slowQuerySegregation.enabled=true \
      -jar ojp-server.jar
@@ -205,7 +238,9 @@ java -Dojp.server.port=1059 \
 java -Dojp.server.port=1059 \
      -Dojp.prometheus.port=9159 \
      -Dojp.server.logLevel=INFO \
-     -Dojp.server.accessLogging=false \
+     -Dojp.server.log.file=/var/log/ojp/server.log \
+     -Dojp.server.log.maxHistory=90 \
+     -Dojp.server.log.totalSizeCap=10GB \
      -Dojp.server.threadPoolSize=300 \
      -Dojp.server.circuitBreakerTimeout=60000 \
      -Dojp.server.slowQuerySegregation.enabled=true \
@@ -241,6 +276,10 @@ data:
   OJP_SERVER_PORT: "1059"
   OJP_PROMETHEUS_PORT: "9159"
   OJP_SERVER_THREADPOOLSIZE: "200"
+  OJP_SERVER_LOGLEVEL: "INFO"
+  OJP_SERVER_LOG_FILE: "/var/log/ojp/server.log"
+  OJP_SERVER_LOG_MAXHISTORY: "60"
+  OJP_SERVER_LOG_TOTALSIZECAP: "5GB"
   OJP_SERVER_CIRCUITBREAKERTIMEOUT: "60000"
   OJP_SERVER_CIRCUITBREAKERTHRESHOLD: "3"
   OJP_SERVER_SLOWQUERYSEGREGATION_ENABLED: "true"
@@ -251,7 +290,6 @@ data:
   OJP_SERVER_ALLOWEDIPS: "10.244.0.0/16"
   OJP_PROMETHEUS_ALLOWEDIPS: "10.244.0.0/16"
   OJP_OPENTELEMETRY_ENABLED: "true"
-  OJP_SERVER_LOGLEVEL: "INFO"
 ```
 
 ## Configuration Validation
