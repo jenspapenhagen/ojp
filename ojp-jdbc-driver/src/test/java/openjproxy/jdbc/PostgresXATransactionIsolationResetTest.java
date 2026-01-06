@@ -126,8 +126,9 @@ public class PostgresXATransactionIsolationResetTest {
         xaConnection1.close();
         log.info("Client A: Closed XA connection, returned to pool");
         
-        // Small delay to ensure connection is back in pool
-        Thread.sleep(50);
+        // Delay to ensure connection is processed and backend session returned to pool
+        // XA pool processing may take longer than regular connection pools
+        Thread.sleep(500);
         
         // Client B: Get XA connection from pool
         xaConnection2 = createXAConnection(url, user, password);
@@ -226,7 +227,7 @@ public class PostgresXATransactionIsolationResetTest {
         
         connection1.close();
         xaConnection1.close();
-        Thread.sleep(50);
+        Thread.sleep(500);
         
         // Client 2: Get connection, verify reset, change to lowest isolation
         xaConnection2 = createXAConnection(url, user, password);
@@ -248,7 +249,7 @@ public class PostgresXATransactionIsolationResetTest {
         
         connection2.close();
         xaConnection2.close();
-        Thread.sleep(50);
+        Thread.sleep(500);
         
         // Client 3: Verify reset to default again
         xaConnection3 = createXAConnection(url, user, password);
@@ -288,7 +289,7 @@ public class PostgresXATransactionIsolationResetTest {
         // Close and reopen
         connection1.close();
         xaConnection1.close();
-        Thread.sleep(50);
+        Thread.sleep(500);
         
         xaConnection2 = createXAConnection(url, user, password);
         connection2 = xaConnection2.getConnection();
@@ -336,7 +337,7 @@ public class PostgresXATransactionIsolationResetTest {
         // Close connection
         connection1.close();
         xaConnection1.close();
-        Thread.sleep(50);
+        Thread.sleep(500);
         
         // New connection should have default isolation
         xaConnection2 = createXAConnection(url, user, password);
@@ -395,7 +396,7 @@ public class PostgresXATransactionIsolationResetTest {
         
         connection1.close();
         xaConnection1.close();
-        Thread.sleep(50);
+        Thread.sleep(500);
         
         // New connection should reset to configured default (SERIALIZABLE)
         xaConnection2 = createXAConnection(url, user, password);
@@ -436,7 +437,7 @@ public class PostgresXATransactionIsolationResetTest {
         
         // Eventually close the leaked XA connection
         xaConnection1.close();
-        Thread.sleep(50);
+        Thread.sleep(500);
         
         // Get new connection - should still have proper default isolation
         xaConnection2 = createXAConnection(url, user, password);
