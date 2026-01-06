@@ -1,0 +1,475 @@
+package openjproxy.jdbc;
+
+import lombok.extern.slf4j.Slf4j;
+import openjproxy.jdbc.testutil.TestDBUtils;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvFileSource;
+import org.openjproxy.jdbc.xa.OjpXADataSource;
+
+import javax.sql.XAConnection;
+import javax.transaction.xa.XAResource;
+import javax.transaction.xa.Xid;
+import java.sql.Connection;
+import java.sql.SQLException;
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
+
+/**
+ * Integration tests for XA transaction isolation reset behavior with PostgreSQL.
+ * These tests verify that transaction isolation levels are properly reset when
+ * XA connections return to the pool, preventing state pollution between sessions.
+ * 
+ * These tests require:
+ * 1. A running OJP server (localhost:1059)
+ * 2. A PostgreSQL database with XA support
+ * 3. Enable with -DenablePostgresTests=true
+ */
+@Slf4j
+public class PostgresXATransactionIsolationResetTest {
+
+    private static boolean isTestEnabled;
+    private XAConnection xaConnection1;
+    private XAConnection xaConnection2;
+    private XAConnection xaConnection3;
+    private Connection connection1;
+    private Connection connection2;
+    private Connection connection3;
+
+    @BeforeAll
+    public static void checkTestConfiguration() {
+        isTestEnabled = Boolean.parseBoolean(System.getProperty("enablePostgresTests", "false"));
+    }
+
+    public void setUp(String driverClass, String url, String user, String password) throws SQLException {
+        assumeFalse(!isTestEnabled, "Postgres XA isolation tests are disabled. Enable with -DenablePostgresTests=true");
+    }
+
+    private XAConnection createXAConnection(String url, String user, String password) throws SQLException {
+        OjpXADataSource xaDataSource = new OjpXADataSource();
+        xaDataSource.setUrl(url);
+        xaDataSource.setUser(user);
+        xaDataSource.setPassword(password);
+        return xaDataSource.getXAConnection(user, password);
+    }
+
+    @AfterEach
+    public void tearDown() {
+        TestDBUtils.closeQuietly(connection1);
+        TestDBUtils.closeQuietly(connection2);
+        TestDBUtils.closeQuietly(connection3);
+        
+        if (xaConnection1 != null) {
+            try { xaConnection1.close(); } catch (Exception e) { 
+                log.warn("Error closing XA connection 1: {}", e.getMessage());
+            }
+        }
+        if (xaConnection2 != null) {
+            try { xaConnection2.close(); } catch (Exception e) {
+                log.warn("Error closing XA connection 2: {}", e.getMessage());
+            }
+        }
+        if (xaConnection3 != null) {
+            try { xaConnection3.close(); } catch (Exception e) {
+                log.warn("Error closing XA connection 3: {}", e.getMessage());
+            }
+        }
+    }
+
+    /**
+     * CRITICAL TEST: Verifies that transaction isolation level is properly reset when
+     * XA connections are returned to the pool. This prevents connection state pollution.
+     * 
+     * Scenario that would FAIL before the fix:
+     * 1. Client A gets XA connection with default isolation (READ_COMMITTED)
+     * 2. Client A changes isolation to SERIALIZABLE
+     * 3. Client A closes connection (returns to pool)
+     * 4. Client B gets XA connection from pool
+     * 5. WITHOUT FIX: Client B would get connection with SERIALIZABLE isolation
+     * 6. WITH FIX: Client B gets connection with READ_COMMITTED isolation (properly reset)
+     */
+    @ParameterizedTest
+    @CsvFileSource(resources = "/postgres_xa_connection.csv")
+    public void testXAConnectionStatePollutionPrevention(String driverClass, String url, String user, String password) throws Exception {
+        setUp(driverClass, url, user, password);
+        
+        // Client A: Get XA connection and verify default isolation
+        xaConnection1 = createXAConnection(url, user, password);
+        connection1 = xaConnection1.getConnection();
+        
+        int defaultIsolation = connection1.getTransactionIsolation();
+        assertEquals(Connection.TRANSACTION_READ_COMMITTED, defaultIsolation,
+                "Default isolation should be READ_COMMITTED");
+        log.info("Client A: Default isolation level is READ_COMMITTED");
+        
+        // Client A: Change isolation to SERIALIZABLE within XA transaction
+        XAResource xaResource1 = xaConnection1.getXAResource();
+        Xid xid1 = new TestXid(1, "gtrid-1".getBytes(), "bqual-1".getBytes());
+        xaResource1.start(xid1, XAResource.TMNOFLAGS);
+        
+        connection1.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+        assertEquals(Connection.TRANSACTION_SERIALIZABLE, connection1.getTransactionIsolation(),
+                "Isolation should be changed to SERIALIZABLE");
+        log.info("Client A: Changed isolation to SERIALIZABLE");
+        
+        xaResource1.end(xid1, XAResource.TMSUCCESS);
+        xaResource1.commit(xid1, true);
+        
+        // Client A: Close connection (return to pool)
+        connection1.close();
+        xaConnection1.close();
+        log.info("Client A: Closed XA connection, returned to pool");
+        
+        // Small delay to ensure connection is back in pool
+        Thread.sleep(50);
+        
+        // Client B: Get XA connection from pool
+        xaConnection2 = createXAConnection(url, user, password);
+        connection2 = xaConnection2.getConnection();
+        log.info("Client B: Obtained XA connection from pool");
+        
+        // CRITICAL ASSERTION: Verify isolation is reset to READ_COMMITTED
+        int isolationAfterReset = connection2.getTransactionIsolation();
+        assertEquals(Connection.TRANSACTION_READ_COMMITTED, isolationAfterReset,
+                "Isolation should be reset to READ_COMMITTED (pool should reset state)");
+        log.info("Client B: Isolation correctly reset to READ_COMMITTED");
+        
+        // Close Client B's connection
+        connection2.close();
+        xaConnection2.close();
+    }
+
+    /**
+     * Tests that rapidly changing isolation levels across multiple XA clients
+     * doesn't cause pool pollution. This stress test simulates aggressive
+     * isolation level changes.
+     */
+    @ParameterizedTest
+    @CsvFileSource(resources = "/postgres_xa_connection.csv")
+    public void testXARapidIsolationChangesMultipleClients(String driverClass, String url, String user, String password) throws Exception {
+        setUp(driverClass, url, user, password);
+        
+        int[] isolationLevels = {
+            Connection.TRANSACTION_READ_UNCOMMITTED,
+            Connection.TRANSACTION_READ_COMMITTED,
+            Connection.TRANSACTION_REPEATABLE_READ,
+            Connection.TRANSACTION_SERIALIZABLE
+        };
+        
+        // Simulate 10 clients rapidly changing isolation levels
+        for (int i = 0; i < 10; i++) {
+            XAConnection xaConn = createXAConnection(url, user, password);
+            Connection conn = xaConn.getConnection();
+            XAResource xaResource = xaConn.getXAResource();
+            
+            try {
+                // Start XA transaction
+                Xid xid = new TestXid(i + 1, ("gtrid-" + i).getBytes(), ("bqual-" + i).getBytes());
+                xaResource.start(xid, XAResource.TMNOFLAGS);
+                
+                // Change to random isolation level
+                int targetIsolation = isolationLevels[i % isolationLevels.length];
+                conn.setTransactionIsolation(targetIsolation);
+                log.info("Client {}: Set isolation to {}", i, targetIsolation);
+                
+                // End and commit transaction
+                xaResource.end(xid, XAResource.TMSUCCESS);
+                xaResource.commit(xid, true);
+                
+            } finally {
+                conn.close();
+                xaConn.close();
+            }
+            
+            // Small delay
+            Thread.sleep(10);
+        }
+        
+        // After all the churn, verify next connection has default isolation
+        xaConnection1 = createXAConnection(url, user, password);
+        connection1 = xaConnection1.getConnection();
+        
+        assertEquals(Connection.TRANSACTION_READ_COMMITTED, connection1.getTransactionIsolation(),
+                "After multiple clients with different isolation levels, new connection should have READ_COMMITTED");
+        log.info("Final verification: Isolation correctly maintained at READ_COMMITTED");
+    }
+
+    /**
+     * Tests extreme isolation level transitions (lowest to highest and vice versa)
+     * to ensure reset works correctly for all isolation levels.
+     */
+    @ParameterizedTest
+    @CsvFileSource(resources = "/postgres_xa_connection.csv")
+    public void testXAExtremeIsolationLevelChanges(String driverClass, String url, String user, String password) throws Exception {
+        setUp(driverClass, url, user, password);
+        
+        // Client 1: Change to highest isolation (SERIALIZABLE)
+        xaConnection1 = createXAConnection(url, user, password);
+        connection1 = xaConnection1.getConnection();
+        XAResource xaResource1 = xaConnection1.getXAResource();
+        
+        Xid xid1 = new TestXid(1, "gtrid-high".getBytes(), "bqual-high".getBytes());
+        xaResource1.start(xid1, XAResource.TMNOFLAGS);
+        
+        connection1.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+        assertEquals(Connection.TRANSACTION_SERIALIZABLE, connection1.getTransactionIsolation());
+        log.info("Client 1: Set to highest isolation (SERIALIZABLE)");
+        
+        xaResource1.end(xid1, XAResource.TMSUCCESS);
+        xaResource1.commit(xid1, true);
+        
+        connection1.close();
+        xaConnection1.close();
+        Thread.sleep(50);
+        
+        // Client 2: Get connection, verify reset, change to lowest isolation
+        xaConnection2 = createXAConnection(url, user, password);
+        connection2 = xaConnection2.getConnection();
+        XAResource xaResource2 = xaConnection2.getXAResource();
+        
+        assertEquals(Connection.TRANSACTION_READ_COMMITTED, connection2.getTransactionIsolation(),
+                "Should be reset to READ_COMMITTED after SERIALIZABLE");
+        
+        Xid xid2 = new TestXid(2, "gtrid-low".getBytes(), "bqual-low".getBytes());
+        xaResource2.start(xid2, XAResource.TMNOFLAGS);
+        
+        connection2.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
+        assertEquals(Connection.TRANSACTION_READ_UNCOMMITTED, connection2.getTransactionIsolation());
+        log.info("Client 2: Set to lowest isolation (READ_UNCOMMITTED)");
+        
+        xaResource2.end(xid2, XAResource.TMSUCCESS);
+        xaResource2.commit(xid2, true);
+        
+        connection2.close();
+        xaConnection2.close();
+        Thread.sleep(50);
+        
+        // Client 3: Verify reset to default again
+        xaConnection3 = createXAConnection(url, user, password);
+        connection3 = xaConnection3.getConnection();
+        
+        assertEquals(Connection.TRANSACTION_READ_COMMITTED, connection3.getTransactionIsolation(),
+                "Should be reset to READ_COMMITTED after READ_UNCOMMITTED");
+        log.info("Client 3: Correctly reset to READ_COMMITTED");
+    }
+
+    /**
+     * Tests that basic isolation reset works within a simple XA transaction workflow.
+     */
+    @ParameterizedTest
+    @CsvFileSource(resources = "/postgres_xa_connection.csv")
+    public void testXABasicIsolationReset(String driverClass, String url, String user, String password) throws Exception {
+        setUp(driverClass, url, user, password);
+        
+        // Get XA connection
+        xaConnection1 = createXAConnection(url, user, password);
+        connection1 = xaConnection1.getConnection();
+        XAResource xaResource = xaConnection1.getXAResource();
+        
+        // Verify default
+        assertEquals(Connection.TRANSACTION_READ_COMMITTED, connection1.getTransactionIsolation());
+        
+        // Start XA transaction and change isolation
+        Xid xid = new TestXid(1, "basic-test".getBytes(), "branch-1".getBytes());
+        xaResource.start(xid, XAResource.TMNOFLAGS);
+        
+        connection1.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+        assertEquals(Connection.TRANSACTION_REPEATABLE_READ, connection1.getTransactionIsolation());
+        
+        xaResource.end(xid, XAResource.TMSUCCESS);
+        xaResource.commit(xid, true);
+        
+        // Close and reopen
+        connection1.close();
+        xaConnection1.close();
+        Thread.sleep(50);
+        
+        xaConnection2 = createXAConnection(url, user, password);
+        connection2 = xaConnection2.getConnection();
+        
+        // Verify reset
+        assertEquals(Connection.TRANSACTION_READ_COMMITTED, connection2.getTransactionIsolation(),
+                "Isolation should be reset after connection returned to pool");
+    }
+
+    /**
+     * Tests multiple isolation changes within the same XA session.
+     * Verifies that only the final state needs to be reset when connection is closed.
+     */
+    @ParameterizedTest
+    @CsvFileSource(resources = "/postgres_xa_connection.csv")
+    public void testXAMultipleIsolationChangesInSession(String driverClass, String url, String user, String password) throws Exception {
+        setUp(driverClass, url, user, password);
+        
+        xaConnection1 = createXAConnection(url, user, password);
+        connection1 = xaConnection1.getConnection();
+        XAResource xaResource = xaConnection1.getXAResource();
+        
+        // Transaction 1: Change isolation multiple times
+        Xid xid1 = new TestXid(1, "multi-change-1".getBytes(), "branch-1".getBytes());
+        xaResource.start(xid1, XAResource.TMNOFLAGS);
+        
+        connection1.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+        connection1.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+        connection1.setTransactionIsolation(Connection.TRANSACTION_READ_UNCOMMITTED);
+        
+        assertEquals(Connection.TRANSACTION_READ_UNCOMMITTED, connection1.getTransactionIsolation());
+        
+        xaResource.end(xid1, XAResource.TMSUCCESS);
+        xaResource.commit(xid1, true);
+        
+        // Transaction 2: Change again
+        Xid xid2 = new TestXid(2, "multi-change-2".getBytes(), "branch-2".getBytes());
+        xaResource.start(xid2, XAResource.TMNOFLAGS);
+        
+        connection1.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+        
+        xaResource.end(xid2, XAResource.TMSUCCESS);
+        xaResource.commit(xid2, true);
+        
+        // Close connection
+        connection1.close();
+        xaConnection1.close();
+        Thread.sleep(50);
+        
+        // New connection should have default isolation
+        xaConnection2 = createXAConnection(url, user, password);
+        connection2 = xaConnection2.getConnection();
+        
+        assertEquals(Connection.TRANSACTION_READ_COMMITTED, connection2.getTransactionIsolation(),
+                "After multiple changes in same session, isolation should reset to READ_COMMITTED");
+    }
+
+    /**
+     * Verifies that the default isolation level for new XA connections is READ_COMMITTED.
+     */
+    @ParameterizedTest
+    @CsvFileSource(resources = "/postgres_xa_connection.csv")
+    public void testXADefaultIsolationLevel(String driverClass, String url, String user, String password) throws Exception {
+        setUp(driverClass, url, user, password);
+        
+        xaConnection1 = createXAConnection(url, user, password);
+        connection1 = xaConnection1.getConnection();
+        
+        int defaultIsolation = connection1.getTransactionIsolation();
+        assertEquals(Connection.TRANSACTION_READ_COMMITTED, defaultIsolation,
+                "Default isolation level should be READ_COMMITTED");
+        
+        log.info("Verified: Default XA isolation level is READ_COMMITTED");
+    }
+
+    /**
+     * Tests custom configured isolation level.
+     * Note: This test uses a separate CSV file with custom isolation property configured.
+     */
+    @ParameterizedTest
+    @CsvFileSource(resources = "/postgres_xa_connection_custom_isolation.csv")
+    public void testXAConfiguredCustomIsolation(String driverClass, String url, String user, String password) throws Exception {
+        setUp(driverClass, url, user, password);
+        
+        // When custom isolation is configured via properties, connections should start with that isolation
+        xaConnection1 = createXAConnection(url, user, password);
+        connection1 = xaConnection1.getConnection();
+        XAResource xaResource1 = xaConnection1.getXAResource();
+        
+        // The CSV has SERIALIZABLE configured, so default should be SERIALIZABLE
+        int configuredDefault = connection1.getTransactionIsolation();
+        assertEquals(Connection.TRANSACTION_SERIALIZABLE, configuredDefault,
+                "With custom configuration, default should be SERIALIZABLE");
+        log.info("Verified: Custom configured isolation (SERIALIZABLE) is applied");
+        
+        // Change to different isolation
+        Xid xid1 = new TestXid(1, "custom-test-1".getBytes(), "branch-1".getBytes());
+        xaResource1.start(xid1, XAResource.TMNOFLAGS);
+        
+        connection1.setTransactionIsolation(Connection.TRANSACTION_READ_COMMITTED);
+        
+        xaResource1.end(xid1, XAResource.TMSUCCESS);
+        xaResource1.commit(xid1, true);
+        
+        connection1.close();
+        xaConnection1.close();
+        Thread.sleep(50);
+        
+        // New connection should reset to configured default (SERIALIZABLE)
+        xaConnection2 = createXAConnection(url, user, password);
+        connection2 = xaConnection2.getConnection();
+        
+        assertEquals(Connection.TRANSACTION_SERIALIZABLE, connection2.getTransactionIsolation(),
+                "Should reset to configured default (SERIALIZABLE), not READ_COMMITTED");
+        log.info("Verified: Isolation reset to custom configured default (SERIALIZABLE)");
+    }
+
+    /**
+     * Tests isolation reset after abnormal connection closure.
+     * Simulates a connection leak scenario where connection is not properly closed.
+     */
+    @ParameterizedTest
+    @CsvFileSource(resources = "/postgres_xa_connection.csv")
+    public void testXAIsolationResetAfterConnectionLeak(String driverClass, String url, String user, String password) throws Exception {
+        setUp(driverClass, url, user, password);
+        
+        // Create connection and change isolation
+        xaConnection1 = createXAConnection(url, user, password);
+        connection1 = xaConnection1.getConnection();
+        XAResource xaResource1 = xaConnection1.getXAResource();
+        
+        Xid xid1 = new TestXid(1, "leak-test".getBytes(), "branch-1".getBytes());
+        xaResource1.start(xid1, XAResource.TMNOFLAGS);
+        
+        connection1.setTransactionIsolation(Connection.TRANSACTION_SERIALIZABLE);
+        
+        xaResource1.end(xid1, XAResource.TMSUCCESS);
+        xaResource1.commit(xid1, true);
+        
+        // Simulate leak: Just close logical connection, not XA connection
+        connection1.close();
+        // Don't close xaConnection1 immediately - simulate leak
+        
+        Thread.sleep(100);
+        
+        // Eventually close the leaked XA connection
+        xaConnection1.close();
+        Thread.sleep(50);
+        
+        // Get new connection - should still have proper default isolation
+        xaConnection2 = createXAConnection(url, user, password);
+        connection2 = xaConnection2.getConnection();
+        
+        assertEquals(Connection.TRANSACTION_READ_COMMITTED, connection2.getTransactionIsolation(),
+                "Even after connection leak, new connection should have correct default isolation");
+        log.info("Verified: Isolation reset works even after simulated connection leak");
+    }
+
+    /**
+     * Simple Xid implementation for testing.
+     */
+    private static class TestXid implements Xid {
+        private final int formatId;
+        private final byte[] globalTransactionId;
+        private final byte[] branchQualifier;
+
+        public TestXid(int formatId, byte[] globalTransactionId, byte[] branchQualifier) {
+            this.formatId = formatId;
+            this.globalTransactionId = globalTransactionId;
+            this.branchQualifier = branchQualifier;
+        }
+
+        @Override
+        public int getFormatId() {
+            return formatId;
+        }
+
+        @Override
+        public byte[] getGlobalTransactionId() {
+            return globalTransactionId;
+        }
+
+        @Override
+        public byte[] getBranchQualifier() {
+            return branchQualifier;
+        }
+    }
+}
