@@ -105,11 +105,12 @@
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
         </dependency>
-        <!-- https://mvnrepository.com/artifact/org.slf4j/slf4j-simple -->
+        <!-- Logback Classic (includes logback-core and provides SLF4J binding) -->
+        <!-- https://mvnrepository.com/artifact/ch.qos.logback/logback-classic -->
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
-            <version>${slf4j.version}</version>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>${logback.version}</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/net.jpountz.lz4/lz4 -->
@@ -246,7 +247,6 @@
                             <port>1059</port>
                         </ports>
                         <jvmFlags>
-                            <jvmFlag>-Dorg.slf4j.simpleLogger.defaultLogLevel=error</jvmFlag>
                             <jvmFlag>-Dojp.libs.path=/opt/ojp/ojp-libs</jvmFlag>
                         </jvmFlags>
                     </container>
