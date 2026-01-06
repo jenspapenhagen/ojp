@@ -184,9 +184,6 @@ ojp.connection.pool.defaultTransactionIsolation=READ_COMMITTED
 # Using constant name
 ojp.connection.pool.defaultTransactionIsolation=TRANSACTION_SERIALIZABLE
 
-# Using numeric value
-ojp.connection.pool.defaultTransactionIsolation=2
-
 # For XA connections
 ojp.xa.connection.pool.defaultTransactionIsolation=SERIALIZABLE
 ```
@@ -194,7 +191,7 @@ ojp.xa.connection.pool.defaultTransactionIsolation=SERIALIZABLE
 **Behavior:**
 
 - **When configured**: All connections will be reset to this configured isolation level when returned to the pool
-- **When not configured**: OJP auto-detects the database default and uses that for reset
+- **When not configured**: OJP auto-detects the database default (typically READ_COMMITTED) and uses that for reset
 - **Invalid values**: Logged as warning, auto-detection will be used instead
 - **Per-datasource**: Configuration is per-datasource in multi-datasource setups
 

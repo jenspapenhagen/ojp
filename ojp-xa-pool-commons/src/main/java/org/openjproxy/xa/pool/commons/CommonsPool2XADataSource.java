@@ -621,13 +621,6 @@ public class CommonsPool2XADataSource implements XADataSource {
         
         value = value.trim();
         
-        // Try to parse as integer first
-        try {
-            return Integer.parseInt(value);
-        } catch (NumberFormatException e) {
-            // Not an integer, try string names
-        }
-        
         // Parse string names (case-insensitive)
         switch (value.toUpperCase()) {
             case "TRANSACTION_NONE":
@@ -647,8 +640,8 @@ public class CommonsPool2XADataSource implements XADataSource {
                 return java.sql.Connection.TRANSACTION_SERIALIZABLE;
             default:
                 log.warn("Invalid transaction isolation value: {}. Valid values are: " +
-                        "NONE, READ_UNCOMMITTED, READ_COMMITTED, REPEATABLE_READ, SERIALIZABLE, " +
-                        "or numeric values 0, 1, 2, 4, 8. Isolation reset will not be configured.", value);
+                        "NONE, READ_UNCOMMITTED, READ_COMMITTED, REPEATABLE_READ, SERIALIZABLE. " +
+                        "Isolation reset will not be configured.", value);
                 return null;
         }
     }

@@ -281,13 +281,6 @@ public class DataSourceConfigurationManager {
         
         value = value.trim();
         
-        // Try to parse as integer first
-        try {
-            return Integer.parseInt(value);
-        } catch (NumberFormatException e) {
-            // Not an integer, try to parse as string name
-        }
-        
         // Parse string names (case-insensitive)
         switch (value.toUpperCase()) {
             case "TRANSACTION_NONE":
@@ -307,8 +300,8 @@ public class DataSourceConfigurationManager {
                 return java.sql.Connection.TRANSACTION_SERIALIZABLE;
             default:
                 log.warn("Invalid transaction isolation value for property '{}': {}. " +
-                        "Valid values are: NONE, READ_UNCOMMITTED, READ_COMMITTED, REPEATABLE_READ, SERIALIZABLE, " +
-                        "or numeric values 0, 1, 2, 4, 8. Auto-detection will be used.", key, value);
+                        "Valid values are: NONE, READ_UNCOMMITTED, READ_COMMITTED, REPEATABLE_READ, SERIALIZABLE. " +
+                        "Auto-detection will be used.", key, value);
                 return null;
         }
     }

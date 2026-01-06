@@ -67,7 +67,7 @@ batchJob.ojp.connection.pool.minimumIdle=1
 | `ojp.connection.pool.connectionTimeout` | Connection timeout (ms) | 10000 |
 | `ojp.connection.pool.idleTimeout` | Idle timeout (ms) | 600000 |
 | `ojp.connection.pool.maxLifetime` | Max connection lifetime (ms) | 1800000 |
-| `ojp.connection.pool.defaultTransactionIsolation` | Default transaction isolation level | auto-detect |
+| `ojp.connection.pool.defaultTransactionIsolation` | Default transaction isolation level | auto-detect (typically READ_COMMITTED) |
 | `ojp.datasource.name` | Logical datasource name | default |
 
 ### Transaction Isolation Configuration
@@ -75,7 +75,7 @@ batchJob.ojp.connection.pool.minimumIdle=1
 The `defaultTransactionIsolation` property configures how connections are reset when returned to the pool:
 
 ```properties
-# Auto-detect from database (default behavior)
+# Auto-detect from database (default behavior - typically READ_COMMITTED)
 # No configuration needed
 
 # Explicit configuration (string names - recommended)
@@ -85,16 +85,17 @@ ojp.connection.pool.defaultTransactionIsolation=SERIALIZABLE
 # Using JDBC constant names
 ojp.connection.pool.defaultTransactionIsolation=TRANSACTION_READ_COMMITTED
 
-# Using numeric values (0=NONE, 1=READ_UNCOMMITTED, 2=READ_COMMITTED, 4=REPEATABLE_READ, 8=SERIALIZABLE)
-ojp.connection.pool.defaultTransactionIsolation=2
-
 # For XA connections
 ojp.xa.connection.pool.defaultTransactionIsolation=SERIALIZABLE
 ```
 
+**Supported Values:**
+- String names: `READ_COMMITTED`, `SERIALIZABLE`, `READ_UNCOMMITTED`, `REPEATABLE_READ`, `NONE`
+- JDBC constant names: `TRANSACTION_READ_COMMITTED`, `TRANSACTION_SERIALIZABLE`, etc.
+
 **Behavior:**
 - When configured: All connections reset to this isolation level when returned to pool
-- When not configured: Auto-detects database default (backward compatible)
+- When not configured: Auto-detects database default (typically READ_COMMITTED for most databases)
 - Optimization: Only resets if isolation level was actually changed during session
 
 ### Provider-Specific Properties

@@ -151,13 +151,13 @@ By default, OJP **auto-detects** the database's default transaction isolation le
 
 The property accepts multiple formats (case-insensitive):
 
-| String Name | Constant Name | Numeric Value | Description |
-|-------------|---------------|---------------|-------------|
-| `NONE` | `TRANSACTION_NONE` | `0` | Transactions not supported |
-| `READ_UNCOMMITTED` | `TRANSACTION_READ_UNCOMMITTED` | `1` | Lowest isolation - dirty reads allowed |
-| `READ_COMMITTED` | `TRANSACTION_READ_COMMITTED` | `2` | Most common - prevents dirty reads |
-| `REPEATABLE_READ` | `TRANSACTION_REPEATABLE_READ` | `4` | Prevents non-repeatable reads |
-| `SERIALIZABLE` | `TRANSACTION_SERIALIZABLE` | `8` | Highest isolation - fully isolated |
+| String Name | Constant Name | Description |
+|-------------|---------------|-------------|
+| `NONE` | `TRANSACTION_NONE` | Transactions not supported |
+| `READ_UNCOMMITTED` | `TRANSACTION_READ_UNCOMMITTED` | Lowest isolation - dirty reads allowed |
+| `READ_COMMITTED` | `TRANSACTION_READ_COMMITTED` | Most common - prevents dirty reads |
+| `REPEATABLE_READ` | `TRANSACTION_REPEATABLE_READ` | Prevents non-repeatable reads |
+| `SERIALIZABLE` | `TRANSACTION_SERIALIZABLE` | Highest isolation - fully isolated |
 
 #### Configuration Examples
 
@@ -167,9 +167,6 @@ ojp.connection.pool.defaultTransactionIsolation=READ_COMMITTED
 
 # Using constant name
 ojp.connection.pool.defaultTransactionIsolation=TRANSACTION_SERIALIZABLE
-
-# Using numeric value
-ojp.connection.pool.defaultTransactionIsolation=2
 
 # For XA connections
 ojp.xa.connection.pool.defaultTransactionIsolation=SERIALIZABLE
