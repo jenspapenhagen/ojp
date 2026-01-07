@@ -76,6 +76,22 @@ public class BackendSessionImpl implements XABackendSession {
         this.connection = xaConnection.getConnection();
         this.xaResource = xaConnection.getXAResource();
         
+        // Set default transaction isolation level if configured
+        // This must be done in open() because getConnection() returns a fresh logical connection
+        if (defaultTransactionIsolation != null) {
+            try {
+                int currentIsolation = connection.getTransactionIsolation();
+                if (currentIsolation != defaultTransactionIsolation) {
+                    log.debug("Setting transaction isolation to default {} (was {})", 
+                            defaultTransactionIsolation, currentIsolation);
+                    connection.setTransactionIsolation(defaultTransactionIsolation);
+                }
+            } catch (SQLException e) {
+                log.warn("Error setting default transaction isolation in open(): {}", e.getMessage());
+                // Don't throw - continue even if isolation set fails
+            }
+        }
+        
         log.debug("Backend session opened");
     }
     
@@ -209,6 +225,22 @@ public class BackendSessionImpl implements XABackendSession {
             
             // The XAResource should remain the same (from the XAConnection)
             // No need to re-obtain it - it's tied to the XAConnection, not the logical connection
+            
+            // Set default transaction isolation level if configured
+            // This is critical because getConnection() returns a fresh connection with database default isolation
+            if (defaultTransactionIsolation != null) {
+                try {
+                    int currentIsolation = connection.getTransactionIsolation();
+                    if (currentIsolation != defaultTransactionIsolation) {
+                        log.debug("Setting transaction isolation to default {} after sanitization (was {})", 
+                                defaultTransactionIsolation, currentIsolation);
+                        connection.setTransactionIsolation(defaultTransactionIsolation);
+                    }
+                } catch (SQLException e) {
+                    log.warn("Error setting default transaction isolation after sanitization: {}", e.getMessage());
+                    // Don't throw - continue even if isolation set fails
+                }
+            }
             
             // Clear warnings on the new connection
             try {
