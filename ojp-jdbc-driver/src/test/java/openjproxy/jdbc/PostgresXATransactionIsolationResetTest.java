@@ -367,20 +367,24 @@ public class PostgresXATransactionIsolationResetTest {
 
     /**
      * Tests custom configured isolation level.
-     * This test uses system property to configure custom isolation.
+     * This test uses system property to configure custom isolation and a unique URL
+     * to ensure it gets its own server-side pool with the custom configuration.
      */
     @ParameterizedTest
     @CsvFileSource(resources = "/postgres_xa_connection.csv")
     public void testXAConfiguredCustomIsolation(String driverClass, String url, String user, String password) throws Exception {
-        setUp(driverClass, url, user, password);
-        
-        // Set custom isolation via system property before creating connection
+        // Set custom isolation via system property BEFORE setUp
         String originalValue = System.getProperty("ojp.xa.connection.pool.defaultTransactionIsolation");
         try {
             System.setProperty("ojp.xa.connection.pool.defaultTransactionIsolation", "SERIALIZABLE");
             
+            // Modify URL to make it unique so we get a dedicated pool with custom isolation
+            // Append a query parameter to ensure different connHash on server
+            String customUrl = url.contains("?") ? url + "&_customIsolation=true" : url + "?_customIsolation=true";
+            setUp(driverClass, customUrl, user, password);
+            
             // When custom isolation is configured via properties, connections should start with that isolation
-            xaConnection1 = createXAConnection(url, user, password);
+            xaConnection1 = createXAConnection(customUrl, user, password);
             connection1 = xaConnection1.getConnection();
             XAResource xaResource1 = xaConnection1.getXAResource();
             
@@ -404,7 +408,7 @@ public class PostgresXATransactionIsolationResetTest {
             Thread.sleep(500);
             
             // New connection should reset to configured default (SERIALIZABLE)
-            xaConnection2 = createXAConnection(url, user, password);
+            xaConnection2 = createXAConnection(customUrl, user, password);
             connection2 = xaConnection2.getConnection();
             
             assertEquals(Connection.TRANSACTION_SERIALIZABLE, connection2.getTransactionIsolation(),
