@@ -76,7 +76,7 @@ public class BackendSessionImpl implements XABackendSession {
         this.connection = xaConnection.getConnection();
         this.xaResource = xaConnection.getXAResource();
         
-        log.info("[{}] open() called - Connection object hashCode: {}, xaConnection hashCode: {}", 
+        log.debug("[{}] open() called - Connection object hashCode: {}, xaConnection hashCode: {}", 
                 sessionId, System.identityHashCode(connection), System.identityHashCode(xaConnection));
         
         // Set default transaction isolation
@@ -84,17 +84,17 @@ public class BackendSessionImpl implements XABackendSession {
         // whose isolation level needs to be explicitly set to the configured default
         try {
             int currentIsolation = connection.getTransactionIsolation();
-            log.info("[{}] open() - Current isolation: {}, Default isolation: {}", 
+            log.debug("[{}] open() - Current isolation: {}, Default isolation: {}", 
                     sessionId, currentIsolation, defaultTransactionIsolation);
             if (currentIsolation != defaultTransactionIsolation) {
-                log.info("[{}] open() - Setting transaction isolation from {} to default {}", 
+                log.debug("[{}] open() - Setting transaction isolation from {} to default {}", 
                         sessionId, currentIsolation, defaultTransactionIsolation);
                 connection.setTransactionIsolation(defaultTransactionIsolation);
                 int afterSet = connection.getTransactionIsolation();
-                log.info("[{}] open() - After setTransactionIsolation, isolation is now: {}", 
+                log.debug("[{}] open() - After setTransactionIsolation, isolation is now: {}", 
                         sessionId, afterSet);
             } else {
-                log.info("[{}] open() - Transaction isolation already at default {}", sessionId, defaultTransactionIsolation);
+                log.debug("[{}] open() - Transaction isolation already at default {}", sessionId, defaultTransactionIsolation);
             }
         } catch (SQLException e) {
             log.error("[{}] open() - Error setting default transaction isolation: {}", sessionId, e.getMessage());
@@ -164,7 +164,7 @@ public class BackendSessionImpl implements XABackendSession {
             throw new IllegalStateException("Session not opened");
         }
         
-        log.info("[{}] reset() called - Connection object hashCode: {}", 
+        log.debug("[{}] reset() called - Connection object hashCode: {}", 
                 sessionId, System.identityHashCode(connection));
         
         try {
@@ -200,17 +200,17 @@ public class BackendSessionImpl implements XABackendSession {
             // (so sanitizeAfterTransaction() wasn't called)
             try {
                 int currentIsolation = connection.getTransactionIsolation();
-                log.info("[{}] reset() - Current isolation: {}, Default isolation: {}", 
+                log.debug("[{}] reset() - Current isolation: {}, Default isolation: {}", 
                         sessionId, currentIsolation, defaultTransactionIsolation);
                 if (currentIsolation != defaultTransactionIsolation) {
-                    log.info("[{}] reset() - Resetting transaction isolation from {} to default {}", 
+                    log.debug("[{}] reset() - Resetting transaction isolation from {} to default {}", 
                             sessionId, currentIsolation, defaultTransactionIsolation);
                     connection.setTransactionIsolation(defaultTransactionIsolation);
                     int afterSet = connection.getTransactionIsolation();
-                    log.info("[{}] reset() - After setTransactionIsolation, isolation is now: {}", 
+                    log.debug("[{}] reset() - After setTransactionIsolation, isolation is now: {}", 
                             sessionId, afterSet);
                 } else {
-                    log.info("[{}] reset() - Transaction isolation already at default {}", sessionId, defaultTransactionIsolation);
+                    log.debug("[{}] reset() - Transaction isolation already at default {}", sessionId, defaultTransactionIsolation);
                 }
             } catch (SQLException e) {
                 log.warn("[{}] reset() - Error resetting transaction isolation: {}", sessionId, e.getMessage());
@@ -231,7 +231,7 @@ public class BackendSessionImpl implements XABackendSession {
             throw new IllegalStateException("Cannot sanitize closed session");
         }
         
-        log.info("[{}] sanitizeAfterTransaction() called - Connection object hashCode: {}", 
+        log.debug("[{}] sanitizeAfterTransaction() called - Connection object hashCode: {}", 
                 sessionId, System.identityHashCode(connection));
         
         // Reset transaction isolation on the current connection
@@ -245,17 +245,17 @@ public class BackendSessionImpl implements XABackendSession {
         //    isolation is reset before the session is reused
         try {
             int currentIsolation = connection.getTransactionIsolation();
-            log.info("[{}] sanitizeAfterTransaction() - Current isolation: {}, Default isolation: {}", 
+            log.debug("[{}] sanitizeAfterTransaction() - Current isolation: {}, Default isolation: {}", 
                     sessionId, currentIsolation, defaultTransactionIsolation);
             if (currentIsolation != defaultTransactionIsolation) {
-                log.info("[{}] sanitizeAfterTransaction() - Resetting transaction isolation from {} to default {}", 
+                log.debug("[{}] sanitizeAfterTransaction() - Resetting transaction isolation from {} to default {}", 
                         sessionId, currentIsolation, defaultTransactionIsolation);
                 connection.setTransactionIsolation(defaultTransactionIsolation);
                 int afterSet = connection.getTransactionIsolation();
-                log.info("[{}] sanitizeAfterTransaction() - After setTransactionIsolation, isolation is now: {}", 
+                log.debug("[{}] sanitizeAfterTransaction() - After setTransactionIsolation, isolation is now: {}", 
                         sessionId, afterSet);
             } else {
-                log.info("[{}] sanitizeAfterTransaction() - Transaction isolation already at default {}", 
+                log.debug("[{}] sanitizeAfterTransaction() - Transaction isolation already at default {}", 
                         sessionId, defaultTransactionIsolation);
             }
         } catch (SQLException e) {
