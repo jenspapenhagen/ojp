@@ -7,8 +7,6 @@ import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.validate.SqlConformanceEnum;
 import org.openjproxy.grpc.server.SqlStatementXXHash;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -26,7 +24,6 @@ public class SqlEnhancerEngine {
     private final ConcurrentHashMap<String, SqlEnhancementResult> cache;
     private final OjpSqlDialect dialect;
     private final org.apache.calcite.sql.SqlDialect calciteDialect;
-    private static final int DEFAULT_CACHE_SIZE = 1000;
     
     
     /**
