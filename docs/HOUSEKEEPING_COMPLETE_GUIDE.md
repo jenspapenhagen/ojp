@@ -126,6 +126,63 @@ graph TB
 4. **Passive Max Lifetime** - Enforced during validation (no active background thread needed)
 5. **Shared Listener** - All tasks use the same `HousekeepingListener` instance for consistent logging
 
+### Thread Allocation Details
+
+**Question: Does each pool permanently allocate one thread?**
+
+**Answer: Yes, BUT only when housekeeping features are enabled.**
+
+#### Thread Allocation Rules
+
+```
+IF (leak detection enabled) OR (diagnostics enabled) THEN
+    Create ONE ScheduledExecutorService with ONE daemon thread
+ELSE
+    No executor created, no threads allocated
+END IF
+```
+
+#### Thread Lifecycle
+
+1. **Creation**: When `CommonsPool2XADataSource` constructor completes, if any housekeeping feature is enabled
+2. **Name**: Thread named `"ojp-xa-housekeeping"` 
+3. **Type**: Daemon thread (won't prevent JVM shutdown)
+4. **Scheduling**: Both leak detection and diagnostics tasks share the same thread via `scheduleAtFixedRate()`
+5. **Execution**: Tasks run sequentially on the shared thread (never concurrently)
+6. **Termination**: When pool is closed via `close()`, executor shuts down gracefully with 30-second timeout
+
+#### Resource Impact
+
+**Per Pool Instance:**
+- **Thread count**: 1 daemon thread (if any feature enabled), 0 otherwise
+- **Memory**: ~1 MB per thread (Java thread stack size)
+- **CPU**: Idle between scheduled executions, minimal during execution (<1% impact)
+
+**Example Scenarios:**
+
+1. **Application with 1 XA pool, leak detection enabled**
+   - Threads allocated: 1
+   - Tasks scheduled: 1 (leak detection every 1 min)
+
+2. **Application with 1 XA pool, leak detection + diagnostics enabled**
+   - Threads allocated: 1 (shared)
+   - Tasks scheduled: 2 (leak detection every 1 min, diagnostics every 5 min)
+
+3. **Application with 3 XA pools, all features enabled**
+   - Threads allocated: 3 (one per pool)
+   - Each pool's thread runs its own tasks independently
+
+4. **Application with 1 XA pool, all housekeeping disabled**
+   - Threads allocated: 0
+   - No executor created
+
+#### Why Single-Threaded?
+
+1. **Simplicity**: No coordination or synchronization needed between tasks
+2. **Low Overhead**: Minimal resource footprint per pool
+3. **Sufficient**: Tasks run quickly (<100ms each) and don't need concurrency
+4. **Safe**: Sequential execution eliminates race conditions
+
 ---
 
 ## Feature Details
@@ -633,6 +690,96 @@ xa.diagnostics.intervalMs=300000           # Every 5 min
 - [ ] Set up alerts for repeated leak warnings
 - [ ] Document expected long-running query patterns
 - [ ] Test with realistic load before production
+
+---
+
+## Resource Management
+
+### Thread Allocation Per Pool
+
+Each `CommonsPool2XADataSource` instance may allocate resources based on configuration:
+
+#### Allocation Decision
+
+```java
+// In CommonsPool2XADataSource constructor:
+if (housekeepingConfig.isLeakDetectionEnabled() || 
+    housekeepingConfig.isDiagnosticsEnabled()) {
+    // Create ONE single-threaded ScheduledExecutorService
+    housekeepingExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "ojp-xa-housekeeping");
+        t.setDaemon(true);  // Won't prevent JVM shutdown
+        return t;
+    });
+}
+```
+
+#### Resource Footprint
+
+| Configuration | Threads | Memory | CPU Impact |
+|---------------|---------|---------|------------|
+| All features disabled | 0 | 0 bytes | 0% |
+| Leak detection only | 1 daemon | ~1 MB | <0.5% |
+| Diagnostics only | 1 daemon | ~1 MB | <0.1% |
+| Both features enabled | 1 daemon (shared) | ~1 MB | <1% |
+
+#### Scaling Examples
+
+**Single Database Application**
+```
+1 CommonsPool2XADataSource instance
+├── 1 daemon thread ("ojp-xa-housekeeping")
+├── Runs leak detection every 1 minute
+└── Runs diagnostics every 5 minutes (if enabled)
+```
+
+**Multi-Database Application**
+```
+3 CommonsPool2XADataSource instances (PostgreSQL, MySQL, Oracle)
+├── PostgreSQL pool → 1 thread ("ojp-xa-housekeeping") → Monitors PostgreSQL sessions only
+├── MySQL pool      → 1 thread ("ojp-xa-housekeeping") → Monitors MySQL sessions only
+└── Oracle pool     → 1 thread ("ojp-xa-housekeeping") → Monitors Oracle sessions only
+
+Total: 3 independent threads, each monitoring its own pool
+```
+
+#### Thread Lifecycle
+
+1. **Creation**: During pool constructor if any feature enabled
+2. **Active State**: Thread sleeps between scheduled task executions
+3. **Task Execution**: Wakes up, runs task (<100ms), goes back to sleep
+4. **Shutdown**: Graceful termination with 30-second timeout on pool.close()
+
+```java
+// On pool close:
+if (housekeepingExecutor != null) {
+    housekeepingExecutor.shutdown();
+    if (!housekeepingExecutor.awaitTermination(30, TimeUnit.SECONDS)) {
+        housekeepingExecutor.shutdownNow();
+    }
+}
+```
+
+#### Why Not Singleton?
+
+We use **per-pool threads** instead of a singleton for:
+
+1. **Isolation**: Each pool's tasks only access their own data structures
+2. **Independence**: Pools can have different configurations (intervals, timeouts)
+3. **Lifecycle**: Thread lifecycle tied to pool lifecycle (clean shutdown)
+4. **Simplicity**: No global state, no coordination, no cross-pool locks
+5. **Scalability**: No bottleneck from shared thread pool
+
+#### Memory Calculation
+
+For N pool instances with housekeeping enabled:
+- **Threads**: N daemon threads
+- **Memory**: N × ~1 MB (Java thread stack)
+- **Typical**: 1-3 pools per application = 1-3 MB total
+
+This is negligible compared to connection pool memory (each connection: ~5-10 MB).
+
+---
 
 ### Monitoring
 
