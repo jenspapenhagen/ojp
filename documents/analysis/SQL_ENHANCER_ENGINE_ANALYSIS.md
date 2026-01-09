@@ -223,6 +223,381 @@ Calcite supports parsing and optimizing SQL for:
 
 ---
 
+## Execution Flow Diagrams
+
+This section documents the exact execution flow of the SQL Enhancer Engine using Mermaid diagrams, showing how SQL queries are processed through all three implementation phases.
+
+### Overall Query Processing Flow
+
+```mermaid
+flowchart TD
+    Start[Client SQL Query] --> Entry[StatementServiceImpl.executeQueryInternal]
+    Entry --> CheckEnabled{SQL Enhancer<br/>Enabled?}
+    
+    CheckEnabled -->|No| DirectExec[Execute Original SQL]
+    CheckEnabled -->|Yes| StartTiming[Start Enhancement Timer]
+    
+    StartTiming --> Enhance[SqlEnhancerEngine.enhance]
+    Enhance --> EnhanceResult[SqlEnhancementResult]
+    EnhanceResult --> StopTiming[Calculate Enhancement Duration]
+    
+    StopTiming --> LogIfLong{Duration<br/>>10ms?}
+    LogIfLong -->|Yes| LogDuration[Log Enhancement Duration]
+    LogIfLong -->|No| CheckModified{SQL<br/>Modified?}
+    
+    LogDuration --> CheckModified
+    CheckModified -->|Yes| LogMod[Log SQL Modification]
+    CheckModified -->|No| UseSQL[Use Enhanced SQL]
+    
+    LogMod --> UseSQL
+    UseSQL --> DirectExec
+    DirectExec --> PrepStmt[Prepare Statement]
+    PrepStmt --> Execute[Execute Query]
+    Execute --> Return[Return ResultSet]
+    
+    style CheckEnabled fill:#e1f5ff
+    style Enhance fill:#fff4e1
+    style EnhanceResult fill:#e8f5e9
+```
+
+### Phase 1: Basic SQL Parsing Flow
+
+```mermaid
+flowchart TD
+    Start[enhance SQL] --> CheckDisabled{Enhancer<br/>Enabled?}
+    CheckDisabled -->|No| Passthrough1[Return Passthrough Result]
+    
+    CheckDisabled -->|Yes| StartTimer[Start Timer]
+    StartTimer --> TryParse{Try Parse}
+    
+    TryParse -->|Success| ParseSQL[SqlParser.create]
+    ParseSQL --> ParseQuery[parser.parseQuery]
+    ParseQuery --> ValidSQL[SQL is Syntactically Valid]
+    ValidSQL --> LogSuccess[Log Debug: Parse Success]
+    LogSuccess --> ReturnSuccess[Return Success Result<br/>original SQL, not modified]
+    
+    TryParse -->|SqlParseException| LogError[Log Debug: Parse Error]
+    LogError --> Passthrough2[Return Passthrough Result]
+    
+    TryParse -->|Other Exception| LogWarn[Log Warn: Unexpected Error]
+    LogWarn --> Passthrough3[Return Passthrough Result]
+    
+    ReturnSuccess --> CheckDuration{Duration<br/>>50ms?}
+    Passthrough2 --> CheckDuration
+    Passthrough3 --> CheckDuration
+    
+    CheckDuration -->|Yes| LogPerf[Log Debug: Enhancement Duration]
+    CheckDuration -->|No| End[Return Result]
+    LogPerf --> End
+    
+    Passthrough1 --> End
+    
+    style TryParse fill:#fff4e1
+    style ValidSQL fill:#e8f5e9
+    style LogError fill:#ffebee
+    style Passthrough1 fill:#f5f5f5
+    style Passthrough2 fill:#f5f5f5
+    style Passthrough3 fill:#f5f5f5
+```
+
+### Phase 2: Caching and Validation Flow
+
+```mermaid
+flowchart TD
+    Start[enhance SQL] --> CheckDisabled{Enhancer<br/>Enabled?}
+    CheckDisabled -->|No| Passthrough[Return Passthrough Result]
+    
+    CheckDisabled -->|Yes| CheckCache{Check<br/>LRU Cache}
+    CheckCache -->|Hit| LogCacheHit[Log Debug: Cache Hit]
+    LogCacheHit --> ReturnCached[Return Cached Result<br/>&lt;1ms overhead]
+    
+    CheckCache -->|Miss| StartTimer[Start Timer]
+    StartTimer --> TryParse{Try Parse<br/>& Validate}
+    
+    TryParse -->|Success| ParseSQL[SqlParser.create with config]
+    ParseSQL --> ParseQuery[parser.parseQuery]
+    ParseQuery --> ValidSQL[SQL Validated]
+    ValidSQL --> LogSuccess[Log Debug: Parse & Validation Success]
+    LogSuccess --> CreateSuccess[Create Success Result]
+    
+    TryParse -->|SqlParseException| LogParseError[Log Debug: Parse Error]
+    LogParseError --> CreatePassthrough1[Create Passthrough Result]
+    
+    TryParse -->|Other Exception| LogUnexpected[Log Warn: Unexpected Error]
+    LogUnexpected --> CreatePassthrough2[Create Passthrough Result]
+    
+    CreateSuccess --> StopTimer[Stop Timer]
+    CreatePassthrough1 --> StopTimer
+    CreatePassthrough2 --> StopTimer
+    
+    StopTimer --> CheckPerf{Duration<br/>>50ms?}
+    CheckPerf -->|Yes| LogPerf[Log Debug: Enhancement Duration]
+    CheckPerf -->|No| CacheResult[Cache Result synchronized]
+    
+    LogPerf --> CacheResult
+    CacheResult --> Return[Return Result]
+    
+    ReturnCached --> Return
+    Passthrough --> Return
+    
+    style CheckCache fill:#e1f5ff
+    style LogCacheHit fill:#c8e6c9
+    style ReturnCached fill:#e8f5e9
+    style CacheResult fill:#fff9c4
+    style ValidSQL fill:#e8f5e9
+```
+
+### Phase 3: Multi-Dialect Support Flow
+
+```mermaid
+flowchart TD
+    Start[enhance SQL] --> CheckDisabled{Enhancer<br/>Enabled?}
+    CheckDisabled -->|No| Passthrough[Return Passthrough Result]
+    
+    CheckDisabled -->|Yes| CheckCache{Check<br/>LRU Cache<br/>by SQL hash}
+    CheckCache -->|Hit| LogCacheHit[Log Debug: Cache Hit<br/>with dialect info]
+    LogCacheHit --> ReturnCached[Return Cached Result]
+    
+    CheckCache -->|Miss| StartTimer[Start Timer]
+    StartTimer --> GetDialect[Get Configured Dialect<br/>PostgreSQL/MySQL/Oracle/etc]
+    GetDialect --> GetConfig[Get Parser Config<br/>with Dialect Conformance]
+    
+    GetConfig --> TryParse{Try Parse<br/>with Dialect}
+    
+    TryParse -->|Success| CreateParser[SqlParser.create<br/>with dialect config]
+    CreateParser --> ParseQuery[parser.parseQuery]
+    ParseQuery --> ValidateSQL[SQL Validated<br/>with Dialect Rules]
+    ValidateSQL --> LogSuccess[Log Debug: Parse Success<br/>with dialect name]
+    LogSuccess --> CreateSuccess[Create Success Result]
+    
+    TryParse -->|SqlParseException| LogParseError[Log Debug: Parse Error<br/>with dialect info]
+    LogParseError --> CreatePassthrough1[Create Passthrough Result]
+    
+    TryParse -->|Other Exception| LogUnexpected[Log Warn: Unexpected Error<br/>with dialect info]
+    LogUnexpected --> CreatePassthrough2[Create Passthrough Result]
+    
+    CreateSuccess --> StopTimer[Stop Timer]
+    CreatePassthrough1 --> StopTimer
+    CreatePassthrough2 --> StopTimer
+    
+    StopTimer --> CheckPerf{Duration<br/>>50ms?}
+    CheckPerf -->|Yes| LogPerf[Log Debug: Duration]
+    CheckPerf -->|No| CacheResult[Cache Result synchronized]
+    
+    LogPerf --> CacheResult
+    CacheResult --> Return[Return Result]
+    
+    ReturnCached --> Return
+    Passthrough --> Return
+    
+    style GetDialect fill:#e1f5ff
+    style GetConfig fill:#e1f5ff
+    style ValidateSQL fill:#e8f5e9
+    style CheckCache fill:#fff9c4
+```
+
+### Dialect Translation Flow (Optional Feature)
+
+```mermaid
+flowchart TD
+    Start[translateDialect call] --> CheckEnabled{Enhancer<br/>Enabled?}
+    CheckEnabled -->|No| ReturnOriginal1[Return Original SQL]
+    
+    CheckEnabled -->|Yes| GetSource[Get Source Dialect<br/>from engine config]
+    GetSource --> GetTarget[Get Target Dialect<br/>from parameter]
+    GetTarget --> TryTranslate{Try Parse<br/>& Translate}
+    
+    TryTranslate -->|Success| ParseSource[Parse with Source Dialect]
+    ParseSource --> GetAST[Get SqlNode AST]
+    GetAST --> GetTargetDialect[Get Target Calcite Dialect]
+    GetTargetDialect --> ConvertSQL[sqlNode.toSqlString<br/>targetDialect]
+    ConvertSQL --> ExtractSQL[Extract SQL String]
+    ExtractSQL --> LogTranslate[Log Debug: Translation Success]
+    LogTranslate --> ReturnTranslated[Return Translated SQL]
+    
+    TryTranslate -->|Exception| LogTranslateError[Log Warn: Translation Failed]
+    LogTranslateError --> ReturnOriginal2[Return Original SQL]
+    
+    ReturnTranslated --> End[Return Result]
+    ReturnOriginal1 --> End
+    ReturnOriginal2 --> End
+    
+    style GetSource fill:#e1f5ff
+    style GetTarget fill:#e1f5ff
+    style ConvertSQL fill:#fff4e1
+    style LogTranslateError fill:#ffebee
+    style ReturnTranslated fill:#e8f5e9
+```
+
+### Initialization Flow
+
+```mermaid
+flowchart TD
+    Start[Server Startup] --> LoadConfig[Load ServerConfiguration]
+    LoadConfig --> ReadEnabled[Read ojp.sql.enhancer.enabled]
+    ReadEnabled --> ReadDialect[Read ojp.sql.enhancer.dialect]
+    
+    ReadDialect --> CreateEngine[Create SqlEnhancerEngine<br/>enabled, dialectName]
+    CreateEngine --> InitCache[Initialize LRU Cache<br/>1000 entries]
+    InitCache --> ParseDialectName[Parse Dialect Name<br/>case-insensitive]
+    
+    ParseDialectName --> MapDialect{Valid<br/>Dialect?}
+    MapDialect -->|Yes| GetCalciteDialect[Get Calcite Dialect<br/>Implementation]
+    MapDialect -->|No| DefaultGeneric[Default to GENERIC]
+    
+    DefaultGeneric --> GetCalciteDialect
+    GetCalciteDialect --> GetConformance[Get SQL Conformance<br/>for Dialect]
+    
+    GetConformance --> ConfigureParser[Configure SqlParser<br/>with conformance]
+    ConfigureParser --> StoreConfig[Store parserConfig]
+    
+    StoreConfig --> CheckEnabled{Enabled?}
+    CheckEnabled -->|Yes| LogEnabled[Log INFO: Engine Enabled<br/>with dialect]
+    CheckEnabled -->|No| LogDisabled[Log INFO: Engine Disabled]
+    
+    LogEnabled --> InjectService[Inject into StatementServiceImpl]
+    LogDisabled --> InjectService
+    InjectService --> Ready[Engine Ready for Use]
+    
+    style LoadConfig fill:#e1f5ff
+    style InitCache fill:#fff9c4
+    style MapDialect fill:#fff4e1
+    style GetCalciteDialect fill:#e1f5ff
+    style ConfigureParser fill:#e1f5ff
+    style Ready fill:#e8f5e9
+```
+
+### Cache Management Flow
+
+```mermaid
+flowchart TD
+    Start[Cache Operation] --> Operation{Operation<br/>Type?}
+    
+    Operation -->|Get| GetKey[Extract SQL Hash Key]
+    GetKey --> SyncGet[Synchronized Get]
+    SyncGet --> CheckExists{Entry<br/>Exists?}
+    CheckExists -->|Yes| UpdateLRU[Update LRU Order]
+    UpdateLRU --> ReturnValue[Return Cached Result]
+    CheckExists -->|No| ReturnNull[Return null]
+    
+    Operation -->|Put| GetKeyPut[Extract SQL Hash Key]
+    GetKeyPut --> SyncPut[Synchronized Put]
+    SyncPut --> AddEntry[Add to Cache]
+    AddEntry --> CheckSize{Size ><br/>1000?}
+    CheckSize -->|Yes| EvictOldest[Evict Oldest Entry<br/>LRU]
+    CheckSize -->|No| Done1[Done]
+    EvictOldest --> Done1
+    
+    Operation -->|Clear| SyncClear[Synchronized Clear]
+    SyncClear --> ClearAll[Clear All Entries]
+    ClearAll --> LogClear[Log INFO: Cache Cleared]
+    LogClear --> Done2[Done]
+    
+    Operation -->|Stats| GetSize[Get Current Size]
+    GetSize --> FormatStats[Format: size / 1000]
+    FormatStats --> ReturnStats[Return Stats String]
+    
+    ReturnValue --> End[End]
+    ReturnNull --> End
+    Done1 --> End
+    Done2 --> End
+    ReturnStats --> End
+    
+    style SyncGet fill:#fff9c4
+    style SyncPut fill:#fff9c4
+    style SyncClear fill:#fff9c4
+    style UpdateLRU fill:#e8f5e9
+    style EvictOldest fill:#ffebee
+```
+
+### Error Handling and Pass-Through Flow
+
+```mermaid
+flowchart TD
+    Start[SQL Enhancement Request] --> TryEnhance{Try<br/>Enhancement}
+    
+    TryEnhance -->|Success| ValidSQL[SQL is Valid]
+    ValidSQL --> ReturnEnhanced[Return Enhanced SQL<br/>SqlEnhancementResult.success]
+    
+    TryEnhance -->|SqlParseException| CatchParseError[Catch Parse Error]
+    CatchParseError --> LogDebugParse[Log Debug: Parse Error<br/>with SQL snippet]
+    LogDebugParse --> CreatePassthrough1[Create Passthrough Result<br/>original SQL unchanged]
+    
+    TryEnhance -->|RuntimeException| CatchRuntime[Catch Runtime Error]
+    CatchRuntime --> LogWarnRuntime[Log Warn: Unexpected Error<br/>with stack trace]
+    LogWarnRuntime --> CreatePassthrough2[Create Passthrough Result<br/>original SQL unchanged]
+    
+    TryEnhance -->|Any Other Exception| CatchGeneral[Catch General Exception]
+    CatchGeneral --> LogWarnGeneral[Log Warn: Unexpected Error<br/>with details]
+    LogWarnGeneral --> CreatePassthrough3[Create Passthrough Result<br/>original SQL unchanged]
+    
+    CreatePassthrough1 --> StatementExec[StatementServiceImpl<br/>continues with original SQL]
+    CreatePassthrough2 --> StatementExec
+    CreatePassthrough3 --> StatementExec
+    ReturnEnhanced --> StatementExec
+    
+    StatementExec --> PrepareStmt[Prepare Statement]
+    PrepareStmt --> ExecuteDB[Execute on Database]
+    ExecuteDB --> Success{Query<br/>Success?}
+    
+    Success -->|Yes| ReturnResults[Return Results to Client]
+    Success -->|No| DBError[Database Error]
+    DBError --> ReturnError[Return Error to Client]
+    
+    ReturnResults --> End[End]
+    ReturnError --> End
+    
+    style CatchParseError fill:#ffebee
+    style CatchRuntime fill:#ffebee
+    style CatchGeneral fill:#ffebee
+    style CreatePassthrough1 fill:#f5f5f5
+    style CreatePassthrough2 fill:#f5f5f5
+    style CreatePassthrough3 fill:#f5f5f5
+    style ValidSQL fill:#e8f5e9
+    style ExecuteDB fill:#e1f5ff
+```
+
+### Performance Characteristics Flow
+
+```mermaid
+flowchart TD
+    Start[SQL Query Arrives] --> CheckCache{Cache<br/>Check}
+    
+    CheckCache -->|Hit 70-90%| FastPath[Fast Path<br/>&lt;1ms overhead]
+    FastPath --> ReturnCached[Return from Cache]
+    ReturnCached --> Execute[Execute SQL]
+    
+    CheckCache -->|Miss 10-30%| SlowPath[Slow Path]
+    SlowPath --> MeasureComplexity{Query<br/>Complexity?}
+    
+    MeasureComplexity -->|Simple SELECT| SimpleParse[Parse: 5-20ms]
+    MeasureComplexity -->|Complex JOIN| ComplexParse[Parse: 50-150ms]
+    MeasureComplexity -->|Very Complex| VeryComplexParse[Parse: 100-200ms]
+    
+    SimpleParse --> CacheNew[Cache Result]
+    ComplexParse --> CacheNew
+    VeryComplexParse --> CacheNew
+    
+    CacheNew --> Execute
+    Execute --> NetImpact{Overall<br/>Impact?}
+    
+    NetImpact -->|Warm Cache| Low[3-5% overhead<br/>acceptable]
+    NetImpact -->|Cold Start| High[Higher initial latency<br/>then fast]
+    
+    Low --> End[Complete]
+    High --> End
+    
+    style FastPath fill:#e8f5e9
+    style ReturnCached fill:#c8e6c9
+    style SimpleParse fill:#fff9c4
+    style ComplexParse fill:#ffe0b2
+    style VeryComplexParse fill:#ffccbc
+    style Low fill:#e8f5e9
+    style High fill:#fff4e1
+```
+
+---
+
 ## Integration Points
 
 ### 1. StatementServiceImpl Integration
