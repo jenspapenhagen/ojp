@@ -5,15 +5,17 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.validate.SqlConformanceEnum;
+import org.openjproxy.grpc.server.SqlStatementXXHash;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * SQL Enhancer Engine that uses Apache Calcite for SQL parsing, validation, and optimization.
  * 
  * Phase 1: Basic integration with SQL parsing only
- * Phase 2: Add validation and optimization with caching
+ * Phase 2: Add validation and optimization with caching (uses XXHash for cache keys)
  * Phase 3: Add database-specific dialect support and custom functions
  */
 @Slf4j
@@ -21,24 +23,11 @@ public class SqlEnhancerEngine {
     
     private final boolean enabled;
     private final SqlParser.Config parserConfig;
-    private final LRUCache<String, SqlEnhancementResult> cache;
+    private final ConcurrentHashMap<String, SqlEnhancementResult> cache;
     private final OjpSqlDialect dialect;
     private final org.apache.calcite.sql.SqlDialect calciteDialect;
+    private static final int DEFAULT_CACHE_SIZE = 1000;
     
-    // LRU Cache implementation
-    private static class LRUCache<K, V> extends LinkedHashMap<K, V> {
-        private final int maxSize;
-        
-        public LRUCache(int maxSize) {
-            super(maxSize + 1, 0.75f, true);
-            this.maxSize = maxSize;
-        }
-        
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
-            return size() > maxSize;
-        }
-    }
     
     /**
      * Creates a new SqlEnhancerEngine with the given enabled status and dialect.
@@ -48,7 +37,7 @@ public class SqlEnhancerEngine {
      */
     public SqlEnhancerEngine(boolean enabled, String dialectName) {
         this.enabled = enabled;
-        this.cache = new LRUCache<>(1000); // Default cache size of 1000
+        this.cache = new ConcurrentHashMap<>();
         this.dialect = OjpSqlDialect.fromString(dialectName);
         this.calciteDialect = dialect.getCalciteDialect();
         
@@ -63,7 +52,7 @@ public class SqlEnhancerEngine {
             .withCaseSensitive(false); // Most SQL is case-insensitive
         
         if (enabled) {
-            log.info("SQL Enhancer Engine initialized and enabled with dialect: {} (validation and caching)", dialectName);
+            log.info("SQL Enhancer Engine initialized and enabled with dialect: {} (validation and caching with XXHash)", dialectName);
         } else {
             log.info("SQL Enhancer Engine initialized but disabled");
         }
@@ -120,7 +109,7 @@ public class SqlEnhancerEngine {
      * @return String describing cache statistics
      */
     public String getCacheStats() {
-        return String.format("Cache size: %d / %d", cache.size(), 1000);
+        return String.format("Cache size: %d (no max limit, dynamically expands)", cache.size());
     }
     
     /**
@@ -135,6 +124,10 @@ public class SqlEnhancerEngine {
      * Parses, validates, and optionally optimizes SQL.
      * Phase 3: Adds database-specific dialect support.
      * 
+     * Note: Enhancement happens synchronously in the same thread as query execution,
+     * on the first execution of each unique SQL query. The SQL is blocked until 
+     * parsing completes or times out. Subsequent executions use cached results.
+     * 
      * @param sql The SQL statement to enhance
      * @return SqlEnhancementResult containing the result
      */
@@ -144,13 +137,14 @@ public class SqlEnhancerEngine {
             return SqlEnhancementResult.passthrough(sql);
         }
         
-        // Phase 2: Check cache first
-        synchronized (cache) {
-            SqlEnhancementResult cached = cache.get(sql);
-            if (cached != null) {
-                log.debug("Cache hit for SQL (dialect: {}): {}", dialect, sql.substring(0, Math.min(sql.length(), 50)));
-                return cached;
-            }
+        // Phase 2: Use XXHash for cache key (same algorithm used by QueryPerformanceMonitor)
+        String sqlHash = SqlStatementXXHash.hashSqlQuery(sql);
+        
+        // Check cache first - no synchronization needed for ConcurrentHashMap.get()
+        SqlEnhancementResult cached = cache.get(sqlHash);
+        if (cached != null) {
+            log.debug("Cache hit for SQL (dialect: {}): {}", dialect, sql.substring(0, Math.min(sql.length(), 50)));
+            return cached;
         }
         
         long startTime = System.currentTimeMillis();
@@ -191,10 +185,9 @@ public class SqlEnhancerEngine {
             log.debug("SQL enhancement took {}ms for SQL: {}", duration, sql.substring(0, Math.min(sql.length(), 50)));
         }
         
-        // Phase 2: Cache the result
-        synchronized (cache) {
-            cache.put(sql, result);
-        }
+        // Phase 2: Cache the result - ConcurrentHashMap.put() is thread-safe without explicit synchronization
+        // If two threads cache the same SQL simultaneously, the last one wins (acceptable - same result)
+        cache.put(sqlHash, result);
         
         return result;
     }
