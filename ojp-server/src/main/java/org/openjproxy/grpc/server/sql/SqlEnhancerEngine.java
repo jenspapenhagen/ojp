@@ -5,7 +5,6 @@ import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.validate.SqlConformanceEnum;
-import org.openjproxy.grpc.server.SqlStatementXXHash;
 
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -13,7 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * SQL Enhancer Engine that uses Apache Calcite for SQL parsing, validation, and optimization.
  * 
  * Phase 1: Basic integration with SQL parsing only
- * Phase 2: Add validation and optimization with caching (uses XXHash for cache keys)
+ * Phase 2: Add validation and optimization with caching (uses original SQL as cache keys)
  * Phase 3: Add database-specific dialect support and custom functions
  */
 @Slf4j
@@ -49,7 +48,7 @@ public class SqlEnhancerEngine {
             .withCaseSensitive(false); // Most SQL is case-insensitive
         
         if (enabled) {
-            log.info("SQL Enhancer Engine initialized and enabled with dialect: {} (validation and caching with XXHash)", dialectName);
+            log.info("SQL Enhancer Engine initialized and enabled with dialect: {} (validation and caching)", dialectName);
         } else {
             log.info("SQL Enhancer Engine initialized but disabled");
         }
@@ -134,11 +133,9 @@ public class SqlEnhancerEngine {
             return SqlEnhancementResult.passthrough(sql);
         }
         
-        // Phase 2: Use XXHash for cache key (same algorithm used by QueryPerformanceMonitor)
-        String sqlHash = SqlStatementXXHash.hashSqlQuery(sql);
-        
+        // Phase 2: Use original SQL as cache key
         // Check cache first - no synchronization needed for ConcurrentHashMap.get()
-        SqlEnhancementResult cached = cache.get(sqlHash);
+        SqlEnhancementResult cached = cache.get(sql);
         if (cached != null) {
             log.debug("Cache hit for SQL (dialect: {}): {}", dialect, sql.substring(0, Math.min(sql.length(), 50)));
             return cached;
@@ -184,7 +181,7 @@ public class SqlEnhancerEngine {
         
         // Phase 2: Cache the result - ConcurrentHashMap.put() is thread-safe without explicit synchronization
         // If two threads cache the same SQL simultaneously, the last one wins (acceptable - same result)
-        cache.put(sqlHash, result);
+        cache.put(sql, result);
         
         return result;
     }

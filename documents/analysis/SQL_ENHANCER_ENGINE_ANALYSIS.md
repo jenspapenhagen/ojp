@@ -241,11 +241,11 @@ flowchart TD
     
     StartTiming --> Enhance[SqlEnhancerEngine.enhance<br/>SYNCHRONOUS - Same Thread]
     
-    Enhance --> CacheCheck{Check Cache<br/>using XXHash}
+    Enhance --> CacheCheck{Check Cache<br/>using SQL as key}
     CacheCheck -->|Cache Hit| FastPath[Return Cached Result<br/>~1ms overhead]
     CacheCheck -->|Cache Miss| Parse[Parse SQL with Calcite<br/>5-150ms overhead]
     
-    Parse --> CacheResult[Store in Cache<br/>using XXHash key]
+    Parse --> CacheResult[Store in Cache<br/>using SQL as key]
     CacheResult --> ParseDone[Return Result]
     FastPath --> ParseDone
     
@@ -316,15 +316,14 @@ flowchart TD
 
 ### Phase 2: Caching and Validation Flow
 
-**Cache Implementation:** Uses XXHash (same algorithm as QueryPerformanceMonitor) for cache keys. ConcurrentHashMap provides thread-safety without explicit synchronization locks.
+**Cache Implementation:** Uses original SQL strings as cache keys. ConcurrentHashMap provides thread-safety without explicit synchronization locks.
 
 ```mermaid
 flowchart TD
     Start[enhance SQL] --> CheckDisabled{Enhancer<br/>Enabled?}
     CheckDisabled -->|No| Passthrough[Return Passthrough Result]
     
-    CheckDisabled -->|Yes| HashSQL[Compute XXHash<br/>of SQL string]
-    HashSQL --> CheckCache{Check<br/>ConcurrentHashMap}
+    CheckDisabled -->|Yes| CheckCache{Check<br/>ConcurrentHashMap}
     CheckCache -->|Hit| LogCacheHit[Log Debug: Cache Hit]
     LogCacheHit --> ReturnCached[Return Cached Result<br/>&lt;1ms overhead]
     
@@ -487,20 +486,18 @@ flowchart TD
 
 ### Cache Management Flow
 
-**Cache Implementation:** ConcurrentHashMap with XXHash keys. Thread-safe without explicit synchronization. No size limit - dynamically expands.
+**Cache Implementation:** ConcurrentHashMap with SQL strings as keys. Thread-safe without explicit synchronization. No size limit - dynamically expands.
 
 ```mermaid
 flowchart TD
     Start[Cache Operation] --> Operation{Operation<br/>Type?}
     
-    Operation -->|Get| ComputeHash1[Compute XXHash<br/>of SQL string]
-    ComputeHash1 --> GetOp[ConcurrentHashMap.get<br/>NO LOCK NEEDED]
+    Operation -->|Get| GetOp[ConcurrentHashMap.get<br/>NO LOCK NEEDED]
     GetOp --> CheckExists{Entry<br/>Exists?}
     CheckExists -->|Yes| ReturnValue[Return Cached Result]
     CheckExists -->|No| ReturnNull[Return null]
     
-    Operation -->|Put| ComputeHash2[Compute XXHash<br/>of SQL string]
-    ComputeHash2 --> PutOp[ConcurrentHashMap.put<br/>NO LOCK NEEDED]
+    Operation -->|Put| PutOp[ConcurrentHashMap.put<br/>NO LOCK NEEDED]
     PutOp --> AddEntry[Add to Cache<br/>Thread-Safe]
     AddEntry --> NoteSize[No size limit<br/>Dynamically expands]
     NoteSize --> Done1[Done]
@@ -1205,22 +1202,23 @@ This section addresses specific implementation questions and design decisions ma
 - Cache makes performance acceptable for production use
 - Original SQL always available as fallback
 
-### Q2: Which SQL hash algorithm is used?
+### Q2: Which cache key is used?
 
-**Answer:** **XXHash** - the same cheap, fast hashing algorithm already used by QueryPerformanceMonitor.
+**Answer:** **Original SQL strings** - the actual SQL text is used as the cache key.
 
 **Details:**
-- Reuses existing `SqlStatementXXHash.hashSqlQuery()` utility
-- Extremely fast (microseconds for typical SQL strings)
-- Excellent collision resistance for non-cryptographic use
-- Consistent with rest of OJP performance tracking
-- Normalizes SQL (lowercase, trim, collapse whitespace) before hashing
+- Uses the original SQL string directly as the ConcurrentHashMap key
+- No normalization or hashing needed
+- Fast lookups with String.equals() and String.hashCode()
+- Simple and straightforward implementation
+- Easy to debug and understand cached queries
 
-**Why reuse XXHash?**
-- Already proven in production for query performance tracking
-- No need to introduce a new hashing algorithm
-- Same hash used for cache key and performance correlation
-- Fast enough that hashing overhead is negligible
+**Why use original SQL strings?**
+- Simpler implementation - no hash computation overhead
+- Direct SQL storage enables better debugging and inspection
+- ConcurrentHashMap handles String keys efficiently
+- SQL strings are already unique identifiers for queries
+- Easier to correlate cache entries with actual queries in logs
 
 ### Q3: Why no LRU eviction with 1000 entry limit?
 

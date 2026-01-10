@@ -40,7 +40,7 @@ Restart OJP server.
 
 Once enabled, the feature works automatically:
 1. Queries are validated and parsed
-2. Results cached using XXHash
+2. Results cached using original SQL as keys
 3. Cache hits are fast (<1ms)
 4. Errors pass through gracefully
 
