@@ -229,21 +229,16 @@ class SqlEnhancerEngineTest {
     // The translateDialect feature works in principle but hits Guava version conflicts
     // This is a known issue with Apache Calcite and Guava dependencies
     
-    /*
+
     @Test
     void testDialectTranslation() {
         SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "POSTGRESQL");
         
         String sql = "SELECT * FROM users WHERE id = 1";
         
-        // Translate to MySQL - may fail due to Guava compatibility issues
-        try {
-            String translated = engine.translateDialect(sql, OjpSqlDialect.MYSQL);
-            assertNotNull(translated, "Translated SQL should not be null");
-        } catch (Exception e) {
-            // Expected due to Guava compatibility - translation is optional feature
-            log.info("Dialect translation skipped due to known Guava compatibility issue");
-        }
+        // Translate to MySQL
+        String translated = engine.translateDialect(sql, OjpSqlDialect.MYSQL);
+        assertNotNull(translated, "Translated SQL should not be null");
     }
     
     @Test
@@ -255,16 +250,10 @@ class SqlEnhancerEngineTest {
                      "LEFT JOIN orders o ON u.id = o.user_id " +
                      "GROUP BY u.id, u.name";
         
-        // Translate to Oracle - may fail due to Guava compatibility issues
-        try {
-            String translated = engine.translateDialect(sql, OjpSqlDialect.ORACLE);
-            assertNotNull(translated, "Translated complex SQL should not be null");
-        } catch (Exception e) {
-            // Expected due to Guava compatibility - translation is optional feature
-            log.info("Dialect translation skipped due to known Guava compatibility issue");
-        }
+        // Translate to Oracle
+        String translated = engine.translateDialect(sql, OjpSqlDialect.ORACLE);
+        assertNotNull(translated, "Translated complex SQL should not be null");
     }
-    */
     
     @Test
     void testCaching_WithDialect() {
