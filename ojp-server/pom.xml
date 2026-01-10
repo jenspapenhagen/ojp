@@ -105,11 +105,12 @@
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
         </dependency>
-        <!-- https://mvnrepository.com/artifact/org.slf4j/slf4j-simple -->
+        <!-- Logback Classic (includes logback-core and provides SLF4J binding) -->
+        <!-- https://mvnrepository.com/artifact/ch.qos.logback/logback-classic -->
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
-            <version>${slf4j.version}</version>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>${logback.version}</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/net.jpountz.lz4/lz4 -->
@@ -190,6 +191,14 @@
             <version>5.12.1</version>
             <scope>test</scope>
         </dependency>
+
+        <!-- Apache Calcite SQL Parser and Optimizer -->
+        <!-- https://mvnrepository.com/artifact/org.apache.calcite/calcite-core -->
+        <dependency>
+            <groupId>org.apache.calcite</groupId>
+            <artifactId>calcite-core</artifactId>
+            <version>1.37.0</version>
+        </dependency>
     </dependencies>
 
     <build>
@@ -246,7 +255,6 @@
                             <port>1059</port>
                         </ports>
                         <jvmFlags>
-                            <jvmFlag>-Dorg.slf4j.simpleLogger.defaultLogLevel=error</jvmFlag>
                             <jvmFlag>-Dojp.libs.path=/opt/ojp/ojp-libs</jvmFlag>
                         </jvmFlags>
                     </container>

@@ -37,10 +37,12 @@
         </dependency>
 
         <!-- SLF4J API for logging -->
+        <!-- SLF4J API should be provided by the consuming application -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
+            <scope>provided</scope>
         </dependency>
 
         <!-- JUnit 5 for testing -->
