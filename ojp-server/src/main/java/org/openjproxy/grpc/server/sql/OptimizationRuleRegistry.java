@@ -29,7 +29,9 @@ public class OptimizationRuleRegistry {
         // Register aggressive optimization rules (Phase 3)
         registerRule("FILTER_INTO_JOIN", CoreRules.FILTER_INTO_JOIN);
         registerRule("JOIN_COMMUTE", CoreRules.JOIN_COMMUTE);
-        registerRule("SUB_QUERY_REMOVE", CoreRules.SUB_QUERY_REMOVE);
+        // Note: SUB_QUERY_REMOVE not available in Calcite 1.37.0
+        // Available alternatives: PROJECT_SUB_QUERY_TO_CORRELATE, FILTER_SUB_QUERY_TO_CORRELATE
+        // registerRule("SUB_QUERY_REMOVE", CoreRules.SUB_QUERY_REMOVE);
     }
     
     /**
@@ -84,8 +86,8 @@ public class OptimizationRuleRegistry {
     public List<RelOptRule> getAggressiveRules() {
         return getRulesByNames(Arrays.asList(
             "FILTER_INTO_JOIN",
-            "JOIN_COMMUTE",
-            "SUB_QUERY_REMOVE"
+            "JOIN_COMMUTE"
+            // Note: SUB_QUERY_REMOVE not available in Calcite 1.37.0
         ));
     }
     

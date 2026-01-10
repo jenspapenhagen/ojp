@@ -517,10 +517,10 @@ class SqlEnhancerEngineTest {
     
     @Test
     void testAggressiveRules() {
-        // Test with aggressive rules
+        // Test with aggressive rules (excluding SUB_QUERY_REMOVE which is not available in Calcite 1.37.0)
         List<String> aggressiveRules = Arrays.asList(
             "FILTER_REDUCE", "PROJECT_REDUCE", 
-            "FILTER_INTO_JOIN", "JOIN_COMMUTE", "SUB_QUERY_REMOVE"
+            "FILTER_INTO_JOIN", "JOIN_COMMUTE"
         );
         SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, aggressiveRules);
         
