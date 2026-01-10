@@ -184,8 +184,6 @@ mvn test -Dtest=SqlEnhancerEngineTest
 
 **Per-Datasource Configuration:** Will be added in future update.
 
-**Configuration Properties:** Optimization rules and settings will be configurable via properties file in future update.
-
 ## Documentation
 
 - **Technical Analysis:** `/documents/analysis/SQL_ENHANCER_ENGINE_ANALYSIS.md` (comprehensive technical details)

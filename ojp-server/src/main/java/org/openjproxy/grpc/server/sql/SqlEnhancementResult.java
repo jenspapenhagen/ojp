@@ -7,9 +7,8 @@ import java.util.List;
 
 /**
  * Result of SQL enhancement operation.
- * Contains the enhanced SQL and metadata about the enhancement process.
- * 
- * Phase 2: Added optimization metadata fields.
+ * Contains the enhanced SQL and metadata about the enhancement process including
+ * optimization metrics and applied transformation rules.
  */
 @Getter
 public class SqlEnhancementResult {
@@ -19,7 +18,7 @@ public class SqlEnhancementResult {
     private final boolean hasErrors;
     private final String errorMessage;
     
-    // Phase 2: Optimization metadata
+    // Optimization metadata
     private final boolean optimized;
     private final List<String> appliedRules;
     private final long optimizationTimeMs;

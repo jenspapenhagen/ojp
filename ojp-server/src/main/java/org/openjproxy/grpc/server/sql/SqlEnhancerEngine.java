@@ -11,6 +11,7 @@ import org.apache.calcite.sql.validate.SqlConformanceEnum;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * SQL Enhancer Engine that uses Apache Calcite for SQL parsing, validation, and optimization.
@@ -38,11 +39,11 @@ public class SqlEnhancerEngine {
     private final OptimizationRuleRegistry ruleRegistry;
     private final List<String> enabledRules;
     
-    // Metrics tracking
-    private long totalQueriesProcessed = 0;
-    private long totalQueriesOptimized = 0;
-    private long totalOptimizationTimeMs = 0;
-    private long totalQueriesModified = 0;
+    // Metrics tracking - using AtomicLong for thread-safe updates without synchronization
+    private final AtomicLong totalQueriesProcessed = new AtomicLong(0);
+    private final AtomicLong totalQueriesOptimized = new AtomicLong(0);
+    private final AtomicLong totalOptimizationTimeMs = new AtomicLong(0);
+    private final AtomicLong totalQueriesModified = new AtomicLong(0);
     
     
     /**
@@ -180,19 +181,23 @@ public class SqlEnhancerEngine {
             return "Optimization disabled";
         }
         
-        long avgOptimizationTime = totalQueriesOptimized > 0 ? 
-            totalOptimizationTimeMs / totalQueriesOptimized : 0;
+        long processed = totalQueriesProcessed.get();
+        long optimized = totalQueriesOptimized.get();
+        long optimizationTime = totalOptimizationTimeMs.get();
+        long modified = totalQueriesModified.get();
         
-        double optimizationRate = totalQueriesProcessed > 0 ? 
-            (100.0 * totalQueriesOptimized / totalQueriesProcessed) : 0.0;
+        long avgOptimizationTime = optimized > 0 ? optimizationTime / optimized : 0;
         
-        double modificationRate = totalQueriesOptimized > 0 ? 
-            (100.0 * totalQueriesModified / totalQueriesOptimized) : 0.0;
+        double optimizationRate = processed > 0 ? 
+            (100.0 * optimized / processed) : 0.0;
+        
+        double modificationRate = optimized > 0 ? 
+            (100.0 * modified / optimized) : 0.0;
         
         return String.format(
             "Optimization Stats: Processed=%d, Optimized=%d (%.1f%%), Modified=%d (%.1f%%), AvgTime=%dms",
-            totalQueriesProcessed, totalQueriesOptimized, optimizationRate,
-            totalQueriesModified, modificationRate, avgOptimizationTime
+            processed, optimized, optimizationRate,
+            modified, modificationRate, avgOptimizationTime
         );
     }
     
@@ -230,9 +235,7 @@ public class SqlEnhancerEngine {
         }
         
         // Track metrics
-        synchronized (this) {
-            totalQueriesProcessed++;
-        }
+        totalQueriesProcessed.incrementAndGet();
         
         long startTime = System.currentTimeMillis();
         SqlEnhancementResult result;
@@ -276,12 +279,10 @@ public class SqlEnhancerEngine {
                                 boolean wasModified = !sql.trim().equalsIgnoreCase(optimizedSql.trim());
                                 
                                 // Track metrics
-                                synchronized (this) {
-                                    totalQueriesOptimized++;
-                                    totalOptimizationTimeMs += optimizationTime;
-                                    if (wasModified) {
-                                        totalQueriesModified++;
-                                    }
+                                totalQueriesOptimized.incrementAndGet();
+                                totalOptimizationTimeMs.addAndGet(optimizationTime);
+                                if (wasModified) {
+                                    totalQueriesModified.incrementAndGet();
                                 }
                                 
                                 if (wasModified) {
