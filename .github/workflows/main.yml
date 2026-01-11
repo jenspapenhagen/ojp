@@ -112,8 +112,10 @@ jobs:
         run: mvn test -pl ojp-jdbc-driver -Dgpg.skip=true -DenableH2Tests=true
 
       # Meterian Security Scanner - scans for vulnerabilities
+      # Only runs on Java 22 to avoid redundant scans across matrix jobs
       # continue-on-error ensures that scan failures don't block other jobs
       - name: Meterian Scanner
+        if: matrix.java-version == 22
         uses: MeterianHQ/meterian-github-action@v1.0.17
         continue-on-error: true
 
