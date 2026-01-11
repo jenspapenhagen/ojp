@@ -2,10 +2,15 @@ package org.openjproxy.grpc.server.sql;
 
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Test;
+
+import java.util.Arrays;
+import java.util.List;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Tests for SqlEnhancerEngine - Phases 1, 2, and 3
+ * Tests for SqlEnhancerEngine with query optimization capabilities.
+ * Tests validation, caching, optimization, and SQL generation.
  */
 @Slf4j
 class SqlEnhancerEngineTest {
@@ -44,7 +49,7 @@ class SqlEnhancerEngineTest {
         String sql = "SELECT * FROM WHERE";
         SqlEnhancementResult result = engine.enhance(sql);
         
-        // Phase 2: Invalid SQL should pass through (no errors thrown)
+        // Invalid SQL should pass through (no errors thrown)
         assertEquals(sql, result.getEnhancedSql(), "Invalid SQL should pass through");
         assertFalse(result.isModified(), "SQL should not be modified");
         assertFalse(result.isHasErrors(), "Should not mark as error in pass-through mode");
@@ -76,7 +81,7 @@ class SqlEnhancerEngineTest {
         assertFalse(result.isHasErrors(), "Should not have errors for prepared statement");
     }
     
-    // Phase 2 tests
+    // Optimization tests
     
     @Test
     void testCaching() {
@@ -155,7 +160,7 @@ class SqlEnhancerEngineTest {
         assertFalse(result.isHasErrors(), "Valid SQL should not have errors");
     }
     
-    // Phase 3 tests
+    // Dialect tests
     
     @Test
     void testDialectConfiguration_PostgreSQL() {
@@ -220,46 +225,69 @@ class SqlEnhancerEngineTest {
         assertEquals(OjpSqlDialect.GENERIC, engine.getDialect(), "Should default to generic dialect");
     }
     
-    // Phase 3 dialect translation tests disabled due to known Guava compatibility issue with Calcite
+    // Dialect translation tests disabled due to known Guava compatibility issue with Calcite
     // The translateDialect feature works in principle but hits Guava version conflicts
     // This is a known issue with Apache Calcite and Guava dependencies
     
-    /*
+
     @Test
-    void testDialectTranslation() {
+    void testDialectTranslation_PostgreSQLToMySQL() {
         SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "POSTGRESQL");
         
-        String sql = "SELECT * FROM users WHERE id = 1";
+        // PostgreSQL-specific: LIMIT syntax
+        String sql = "SELECT * FROM users WHERE status = 'active' LIMIT 10 OFFSET 5";
         
-        // Translate to MySQL - may fail due to Guava compatibility issues
-        try {
-            String translated = engine.translateDialect(sql, OjpSqlDialect.MYSQL);
-            assertNotNull(translated, "Translated SQL should not be null");
-        } catch (Exception e) {
-            // Expected due to Guava compatibility - translation is optional feature
-            log.info("Dialect translation skipped due to known Guava compatibility issue");
-        }
+        // Translate to MySQL (MySQL also supports LIMIT OFFSET, so should be similar)
+        String translated = engine.translateDialect(sql, OjpSqlDialect.MYSQL);
+        assertNotNull(translated, "Translated SQL should not be null");
+        assertTrue(translated.contains("SELECT"), "Should contain SELECT");
+        assertTrue(translated.contains("USERS"), "Should contain table name");
     }
     
     @Test
-    void testDialectTranslation_ComplexQuery() {
+    void testDialectTranslation_GenericToOracle() {
         SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC");
         
+        // Generic SQL with aggregate function
         String sql = "SELECT u.id, u.name, COUNT(o.id) as order_count " +
                      "FROM users u " +
                      "LEFT JOIN orders o ON u.id = o.user_id " +
                      "GROUP BY u.id, u.name";
         
-        // Translate to Oracle - may fail due to Guava compatibility issues
-        try {
-            String translated = engine.translateDialect(sql, OjpSqlDialect.ORACLE);
-            assertNotNull(translated, "Translated complex SQL should not be null");
-        } catch (Exception e) {
-            // Expected due to Guava compatibility - translation is optional feature
-            log.info("Dialect translation skipped due to known Guava compatibility issue");
-        }
+        // Translate to Oracle
+        String translated = engine.translateDialect(sql, OjpSqlDialect.ORACLE);
+        assertNotNull(translated, "Translated complex SQL should not be null");
+        assertTrue(translated.contains("SELECT"), "Should contain SELECT");
+        assertTrue(translated.contains("COUNT"), "Should preserve COUNT function");
     }
-    */
+    
+    @Test
+    void testDialectTranslation_OracleToMultipleDialects() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "ORACLE");
+        
+        // Oracle-specific: ROWNUM for limiting results
+        String oracleSQL = "SELECT * FROM (SELECT * FROM orders ORDER BY created_at DESC) WHERE ROWNUM <= 10";
+        
+        // Translate to PostgreSQL
+        String postgreSql = engine.translateDialect(oracleSQL, OjpSqlDialect.POSTGRESQL);
+        assertNotNull(postgreSql, "PostgreSQL translation should not be null");
+        log.info("Oracle to PostgreSQL: {} -> {}", oracleSQL, postgreSql);
+        
+        // Translate to MySQL
+        String mySql = engine.translateDialect(oracleSQL, OjpSqlDialect.MYSQL);
+        assertNotNull(mySql, "MySQL translation should not be null");
+        log.info("Oracle to MySQL: {} -> {}", oracleSQL, mySql);
+        
+        // Translate to SQL Server
+        String sqlServer = engine.translateDialect(oracleSQL, OjpSqlDialect.SQL_SERVER);
+        assertNotNull(sqlServer, "SQL Server translation should not be null");
+        log.info("Oracle to SQL Server: {} -> {}", oracleSQL, sqlServer);
+        
+        // All translations should contain the table and ordering concept
+        assertTrue(postgreSql.contains("ORDERS"), "PostgreSQL should contain orders table");
+        assertTrue(mySql.contains("ORDERS"), "MySQL should contain orders table");
+        assertTrue(sqlServer.contains("ORDERS"), "SQL Server should contain orders table");
+    }
     
     @Test
     void testCaching_WithDialect() {
@@ -277,5 +305,467 @@ class SqlEnhancerEngineTest {
         
         String cacheStats = engine.getCacheStats();
         assertTrue(cacheStats.contains("1"), "Cache should have 1 entry");
+    }
+    
+    // Relational Algebra Conversion tests
+    
+    @Test
+    void testConversionEnabled_SimpleQuery() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true);
+        
+        String sql = "SELECT * FROM users WHERE id = 1";
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        assertNotNull(result.getEnhancedSql(), "Enhanced SQL should not be null");
+        assertFalse(result.isHasErrors(), "Should not have errors for valid SQL");
+        // Returns original SQL after validating conversion works
+        assertEquals(sql, result.getEnhancedSql(), "Conversion test returns original SQL");
+    }
+    
+    @Test
+    void testConversionEnabled_ComplexJoin() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true);
+        
+        String sql = "SELECT u.id, u.name, o.order_id " +
+                     "FROM users u " +
+                     "INNER JOIN orders o ON u.id = o.user_id " +
+                     "WHERE u.status = 'active'";
+        
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        assertNotNull(result.getEnhancedSql(), "Enhanced SQL should not be null");
+        assertFalse(result.isHasErrors(), "Should not have errors for valid complex SQL");
+    }
+    
+    @Test
+    void testConversionEnabled_WithCache() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true);
+        
+        String sql = "SELECT * FROM users WHERE id = 1";
+        
+        // First call - should convert and cache
+        SqlEnhancementResult result1 = engine.enhance(sql);
+        
+        // Second call - should hit cache
+        SqlEnhancementResult result2 = engine.enhance(sql);
+        
+        assertEquals(result1.getEnhancedSql(), result2.getEnhancedSql(), 
+                    "Cached result should match");
+    }
+    
+    @Test
+    void testConversionDisabled_DefaultBehavior() {
+        // Default constructor should have conversion disabled
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC");
+        
+        String sql = "SELECT * FROM users WHERE id = 1";
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        assertNotNull(result.getEnhancedSql(), "Enhanced SQL should not be null");
+        assertEquals(sql, result.getEnhancedSql(), "Should return original SQL");
+    }
+    
+    @Test
+    void testConversionEnabled_ErrorHandling() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true);
+        
+        // Invalid SQL that should fail conversion but not break the system
+        String sql = "SELECT * FROM WHERE";
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        // Should fallback to original SQL (pass-through mode)
+        assertNotNull(result.getEnhancedSql(), "Should return some SQL");
+    }
+    
+    // Optimization tests - Optimization
+    
+    @Test
+    void testOptimizationEnabled_SimpleQuery() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, null);
+        
+        String sql = "SELECT * FROM users WHERE id = 1";
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        assertNotNull(result.getEnhancedSql(), "Enhanced SQL should not be null");
+        assertFalse(result.isHasErrors(), "Should not have errors for valid SQL");
+        assertTrue(result.isOptimized(), "Should be marked as optimized");
+        assertNotNull(result.getAppliedRules(), "Applied rules list should not be null");
+        assertTrue(result.getOptimizationTimeMs() >= 0, "Optimization time should be non-negative");
+    }
+    
+    @Test
+    void testOptimizationEnabled_WithSpecificRules() {
+        List<String> rules = Arrays.asList("FILTER_REDUCE", "PROJECT_REDUCE");
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, rules);
+        
+        String sql = "SELECT id, name FROM users WHERE status = 'active'";
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        assertNotNull(result.getEnhancedSql(), "Enhanced SQL should not be null");
+        assertTrue(result.isOptimized(), "Should be marked as optimized");
+        assertEquals(rules, result.getAppliedRules(), "Applied rules should match configured rules");
+    }
+    
+    @Test
+    void testOptimizationEnabled_ComplexJoin() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, null);
+        
+        String sql = "SELECT u.id, u.name, o.order_id " +
+                     "FROM users u " +
+                     "INNER JOIN orders o ON u.id = o.user_id " +
+                     "WHERE u.status = 'active'";
+        
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        assertNotNull(result.getEnhancedSql(), "Complex SQL should optimize successfully");
+        assertFalse(result.isHasErrors(), "Should not have errors for valid complex SQL");
+        assertTrue(result.isOptimized(), "Should be marked as optimized");
+    }
+    
+    @Test
+    void testOptimizationDisabled() {
+        // Conversion enabled, but optimization disabled
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, false, null);
+        
+        String sql = "SELECT * FROM users WHERE id = 1";
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        assertNotNull(result.getEnhancedSql(), "Enhanced SQL should not be null");
+        assertFalse(result.isOptimized(), "Should NOT be marked as optimized");
+        assertEquals(0, result.getOptimizationTimeMs(), "Optimization time should be 0");
+        assertTrue(result.getAppliedRules().isEmpty(), "Applied rules should be empty");
+    }
+    
+    @Test
+    void testOptimizationEnabled_WithCache() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, null);
+        
+        String sql = "SELECT * FROM users WHERE id = 1";
+        
+        // First call - should optimize and cache
+        SqlEnhancementResult result1 = engine.enhance(sql);
+        
+        // Second call - should hit cache
+        SqlEnhancementResult result2 = engine.enhance(sql);
+        
+        assertEquals(result1.getEnhancedSql(), result2.getEnhancedSql(), 
+                    "Cached result should match");
+        assertEquals(result1.isOptimized(), result2.isOptimized(), 
+                    "Optimization status should match in cache");
+    }
+    
+    @Test
+    void testOptimizationEnabled_ErrorHandling() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, null);
+        
+        // Invalid SQL that should fail optimization but not break the system
+        String sql = "SELECT * FROM WHERE";
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        // Should fallback to original SQL (pass-through mode)
+        assertNotNull(result.getEnhancedSql(), "Should return some SQL");
+        assertFalse(result.isOptimized(), "Invalid SQL should not be optimized");
+    }
+    
+    // Dialect tests - SQL Generation
+    
+    @Test
+    void testSqlGeneration_SimpleQuery() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, null);
+        
+        String sql = "SELECT * FROM users WHERE id = 1";
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        assertNotNull(result.getEnhancedSql(), "Enhanced SQL should not be null");
+        assertTrue(result.isOptimized(), "Should be marked as optimized");
+        // SQL generation should produce valid SQL
+        assertTrue(result.getEnhancedSql().contains("SELECT"), "Should contain SELECT");
+        assertTrue(result.getEnhancedSql().contains("FROM"), "Should contain FROM");
+    }
+    
+    @Test
+    void testSqlGeneration_WithOptimization() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, null);
+        
+        // Query that can be optimized
+        String sql = "SELECT id, name FROM (SELECT id, name, email FROM users)";
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        assertNotNull(result.getEnhancedSql(), "Enhanced SQL should not be null");
+        assertTrue(result.isOptimized(), "Should be marked as optimized");
+        // The optimized SQL should still be valid
+        assertFalse(result.isHasErrors(), "Should not have errors");
+    }
+    
+    @Test
+    void testSqlGeneration_ReturnsActualOptimizedSql() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, null);
+        
+        String sql = "SELECT * FROM users WHERE id = 1";
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        // Now returns actual SQL (might be optimized or original)
+        assertNotNull(result.getEnhancedSql(), "Should return SQL");
+        assertTrue(result.isOptimized(), "Should be marked as optimized");
+        assertTrue(result.getOptimizationTimeMs() > 0, "Should have optimization time");
+    }
+    
+    // Metrics and advanced features tests
+    
+    @Test
+    void testOptimizationMetrics() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, null);
+        
+        // Process some queries
+        engine.enhance("SELECT * FROM users WHERE id = 1");
+        engine.enhance("SELECT * FROM orders WHERE status = 'active'");
+        engine.enhance("SELECT id, name FROM (SELECT id, name, email FROM users)");
+        
+        // Get stats
+        String stats = engine.getOptimizationStats();
+        
+        assertNotNull(stats, "Stats should not be null");
+        assertTrue(stats.contains("Processed="), "Should contain processed count");
+        assertTrue(stats.contains("Optimized="), "Should contain optimized count");
+    }
+    
+    @Test
+    void testMetrics_WhenOptimizationDisabled() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, false, null);
+        
+        engine.enhance("SELECT * FROM users WHERE id = 1");
+        
+        String stats = engine.getOptimizationStats();
+        assertEquals("Optimization disabled", stats, "Should indicate optimization is disabled");
+    }
+    
+    @Test
+    void testAggressiveRules() {
+        // Test with aggressive rules (excluding SUB_QUERY_REMOVE which is not available in Calcite 1.37.0)
+        List<String> aggressiveRules = Arrays.asList(
+            "FILTER_REDUCE", "PROJECT_REDUCE", 
+            "FILTER_INTO_JOIN", "JOIN_COMMUTE"
+        );
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, aggressiveRules);
+        
+        String sql = "SELECT u.id, u.name FROM users u " +
+                     "INNER JOIN orders o ON u.id = o.user_id " +
+                     "WHERE u.status = 'active'";
+        
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        assertNotNull(result.getEnhancedSql(), "Should return optimized SQL");
+        assertTrue(result.isOptimized(), "Should be marked as optimized");
+        // Aggressive rules applied
+        assertTrue(result.getAppliedRules().contains("FILTER_INTO_JOIN") || 
+                   result.getAppliedRules().contains("FILTER_REDUCE"),
+                   "Should have aggressive rules in applied list");
+    }
+    
+    @Test
+    void testMetrics_TrackModifications() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, null);
+        
+        // Query that might be optimized
+        engine.enhance("SELECT id, name FROM (SELECT id, name, email FROM users)");
+        
+        String stats = engine.getOptimizationStats();
+        
+        // Should track processed and optimized queries
+        assertTrue(stats.contains("Processed=1"), "Should have processed 1 query");
+        assertTrue(stats.contains("Optimized=1"), "Should have optimized 1 query");
+    }
+    
+    // ========================================================================
+    // OPTIMIZATION EXAMPLES - Clearly Marked Test Cases
+    // ========================================================================
+    
+    /**
+     * Test Case 1: PREDICATE PUSHDOWN
+     * Optimization should move filters closer to the data source to reduce intermediate result sets.
+     * 
+     * Example:
+     * Before: SELECT * FROM (SELECT * FROM users JOIN orders ON ...) WHERE users.status = 'active'
+     * After:  SELECT * FROM (SELECT * FROM users WHERE status = 'active') JOIN orders ON ...
+     */
+    @Test
+    void testOptimization_PredicatePushdown() {
+        // Use aggressive rules that include FILTER_INTO_JOIN for predicate pushdown
+        List<String> aggressiveRules = Arrays.asList(
+            "FILTER_REDUCE", "PROJECT_REDUCE", "FILTER_INTO_JOIN"
+        );
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, aggressiveRules);
+        
+        // Query with filter that can be pushed into the join
+        String sql = "SELECT u.id, u.name, o.order_id " +
+                     "FROM users u " +
+                     "INNER JOIN orders o ON u.id = o.user_id " +
+                     "WHERE u.status = 'active' AND u.created_at > '2024-01-01'";
+        
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        assertNotNull(result.getEnhancedSql(), "Optimized SQL should not be null");
+        assertTrue(result.isOptimized(), "Query should be marked as optimized");
+        
+        // Check if predicate pushdown rule was applied
+        boolean predicatePushdownApplied = result.getAppliedRules().contains("FILTER_INTO_JOIN") ||
+                                           result.getAppliedRules().contains("FILTER_REDUCE");
+        assertTrue(predicatePushdownApplied, 
+            "Predicate pushdown optimization rule (FILTER_INTO_JOIN or FILTER_REDUCE) should be applied");
+        
+        log.info("OPTIMIZATION TEST - PREDICATE PUSHDOWN:");
+        log.info("Original SQL: {}", sql);
+        log.info("Optimized SQL: {}", result.getEnhancedSql());
+        log.info("Applied Rules: {}", result.getAppliedRules());
+        log.info("Optimization Time: {}ms", result.getOptimizationTimeMs());
+    }
+    
+    /**
+     * Test Case 2: PROJECTION ELIMINATION
+     * Optimization should remove unused columns from subqueries.
+     * 
+     * Example:
+     * Before: SELECT id, name FROM (SELECT id, name, email, phone, address FROM users)
+     * After:  SELECT id, name FROM users
+     */
+    @Test
+    void testOptimization_ProjectionElimination() {
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, null);
+        
+        // Query with unnecessary columns in subquery
+        String sql = "SELECT id, name FROM (SELECT id, name, email, phone, address, status FROM users WHERE status = 'active')";
+        
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        assertNotNull(result.getEnhancedSql(), "Optimized SQL should not be null");
+        assertTrue(result.isOptimized(), "Query should be marked as optimized");
+        
+        // Check if projection optimization rules were applied
+        boolean projectionOptimized = result.getAppliedRules().contains("PROJECT_REDUCE") ||
+                                      result.getAppliedRules().contains("PROJECT_REMOVE") ||
+                                      result.getAppliedRules().contains("PROJECT_MERGE");
+        assertTrue(projectionOptimized, 
+            "Projection elimination rule (PROJECT_REDUCE/PROJECT_REMOVE/PROJECT_MERGE) should be applied");
+        
+        // The optimized query should be more efficient (potentially removing the subquery)
+        String optimized = result.getEnhancedSql();
+        assertFalse(optimized.isEmpty(), "Optimized SQL should not be empty");
+        
+        log.info("OPTIMIZATION TEST - PROJECTION ELIMINATION:");
+        log.info("Original SQL: {}", sql);
+        log.info("Optimized SQL: {}", optimized);
+        log.info("Applied Rules: {}", result.getAppliedRules());
+        log.info("SQL was modified: {}", result.isModified());
+        log.info("Optimization Time: {}ms", result.getOptimizationTimeMs());
+    }
+    
+    /**
+     * Test Case 3: JOIN REORDERING
+     * Optimization should reorder joins to create smaller intermediate result sets.
+     * 
+     * Example:
+     * Before: SELECT * FROM large_table JOIN small_table ON ... JOIN medium_table ON ...
+     * After:  SELECT * FROM small_table JOIN medium_table ON ... JOIN large_table ON ...
+     */
+    @Test
+    void testOptimization_JoinReordering() {
+        // Use aggressive rules that include JOIN_COMMUTE for join reordering
+        List<String> aggressiveRules = Arrays.asList(
+            "FILTER_REDUCE", "PROJECT_REDUCE", "JOIN_COMMUTE"
+        );
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, aggressiveRules);
+        
+        // Query with multiple joins that could be reordered
+        String sql = "SELECT u.id, u.name, o.order_id, p.product_name " +
+                     "FROM users u " +
+                     "INNER JOIN orders o ON u.id = o.user_id " +
+                     "INNER JOIN products p ON o.product_id = p.id " +
+                     "WHERE u.status = 'active' AND p.category = 'electronics'";
+        
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        assertNotNull(result.getEnhancedSql(), "Optimized SQL should not be null");
+        assertTrue(result.isOptimized(), "Query should be marked as optimized");
+        
+        // Check if join reordering rule was applied
+        boolean joinReorderingApplied = result.getAppliedRules().contains("JOIN_COMMUTE");
+        // Note: JOIN_COMMUTE may not always be applied depending on the query structure
+        
+        log.info("OPTIMIZATION TEST - JOIN REORDERING:");
+        log.info("Original SQL: {}", sql);
+        log.info("Optimized SQL: {}", result.getEnhancedSql());
+        log.info("Applied Rules: {}", result.getAppliedRules());
+        log.info("Join reordering (JOIN_COMMUTE) applied: {}", joinReorderingApplied);
+        log.info("Optimization Time: {}ms", result.getOptimizationTimeMs());
+    }
+    
+    /**
+     * Test Case 4: SUBQUERY ELIMINATION
+     * Note: SUB_QUERY_REMOVE rule is not available in Apache Calcite 1.37.0
+     * This test demonstrates that correlated subqueries could be converted to joins
+     * if the rule were available.
+     * 
+     * Example:
+     * Before: SELECT * FROM users WHERE id IN (SELECT user_id FROM orders WHERE status = 'completed')
+     * After:  SELECT DISTINCT users.* FROM users INNER JOIN orders ON users.id = orders.user_id 
+     *         WHERE orders.status = 'completed'
+     */
+    @Test
+    void testOptimization_SubqueryElimination_Limited() {
+        // Note: SUB_QUERY_REMOVE is not available in Calcite 1.37.0, so this test demonstrates
+        // that we handle subqueries gracefully even without that specific optimization
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, null);
+        
+        // Query with subquery that could theoretically be converted to a join
+        String sql = "SELECT u.id, u.name " +
+                     "FROM users u " +
+                     "WHERE u.id IN (SELECT user_id FROM orders WHERE status = 'completed')";
+        
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        assertNotNull(result.getEnhancedSql(), "Optimized SQL should not be null");
+        assertTrue(result.isOptimized(), "Query should be marked as optimized");
+        
+        // We can still apply other optimizations even without SUB_QUERY_REMOVE
+        assertFalse(result.getAppliedRules().isEmpty(), 
+            "Some optimization rules should be applied");
+        
+        log.info("OPTIMIZATION TEST - SUBQUERY (Limited - SUB_QUERY_REMOVE not available in Calcite 1.37.0):");
+        log.info("Original SQL: {}", sql);
+        log.info("Optimized SQL: {}", result.getEnhancedSql());
+        log.info("Applied Rules: {}", result.getAppliedRules());
+        log.info("Note: SUB_QUERY_REMOVE optimization is not available in Apache Calcite 1.37.0");
+        log.info("Optimization Time: {}ms", result.getOptimizationTimeMs());
+    }
+    
+    /**
+     * Comprehensive test combining multiple optimization types
+     */
+    @Test
+    void testOptimization_CombinedOptimizations() {
+        List<String> allRules = Arrays.asList(
+            "FILTER_REDUCE", "PROJECT_REDUCE", "FILTER_MERGE", "PROJECT_MERGE",
+            "FILTER_INTO_JOIN", "JOIN_COMMUTE"
+        );
+        SqlEnhancerEngine engine = new SqlEnhancerEngine(true, "GENERIC", true, true, allRules);
+        
+        // Complex query that can benefit from multiple optimizations
+        String sql = "SELECT u.id, u.name " +
+                     "FROM (SELECT id, name, email, status, created_at FROM users) u " +
+                     "INNER JOIN orders o ON u.id = o.user_id " +
+                     "WHERE u.status = 'active' AND o.status = 'completed' AND u.created_at > '2024-01-01'";
+        
+        SqlEnhancementResult result = engine.enhance(sql);
+        
+        assertNotNull(result.getEnhancedSql(), "Optimized SQL should not be null");
+        assertTrue(result.isOptimized(), "Query should be marked as optimized");
+        assertTrue(result.getAppliedRules().size() > 0, "Multiple optimization rules should be applied");
+        
+        log.info("OPTIMIZATION TEST - COMBINED OPTIMIZATIONS:");
+        log.info("Original SQL: {}", sql);
+        log.info("Optimized SQL: {}", result.getEnhancedSql());
+        log.info("Applied Rules: {}", result.getAppliedRules());
+        log.info("Optimization Time: {}ms", result.getOptimizationTimeMs());
+        log.info("SQL Modified: {}", result.isModified());
     }
 }
