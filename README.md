@@ -137,25 +137,12 @@ Welcome to OJP! We appreciate your interest in contributing. This guide will hel
 ---
 
 ## Partners
-<a href="https://www.linkedin.com/in/devsjava/" target="_blank" rel="noopener">
-<img width="120px" height="120px" src="documents/images/comunidade_brasil_jug.jpeg" alt="Comunidade Brasil JUG" />
-</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<a href="https://github.com/switcherapi" target="_blank" rel="noopener">
-<img width="180px" src="https://github.com/switcherapi/switcherapi-assets/blob/master/logo/switcherapi_grey.png?raw=true" alt="Comunidade Brasil JUG" />
-</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<a href="https://www.meterian.io/" target="_blank" rel="noopener">
-<img width="180px" src="https://www.meterian.io/images/brand/meterian_logo_blue.svg" alt="Materian" />
-</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<a href="https://www.youtube.com/@cbrjar" target="_blank" rel="noopener">
-<img width="180px" src="/documents/images/cyber_jar_logo.png" alt="Materian" />
-</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<a href="https://javachallengers.com/career-diagnosis" target="_blank" rel="noopener">
-<img width="150px" src="/documents/images/java_challengers_logo.jpeg" alt="Java Challengers" />
-</a>
-<a href="https://omnifish.ee/piranha/" target="_blank" rel="noopener">
-<img width="150px" src="/documents/images/omnifish-logo.png" alt="OmniFish" />
-</a>
+
+| Logo | Description | Website |
+|------|-------------|---------|
+| <a href="https://www.linkedin.com/in/devsjava/" target="_blank" rel="noopener"><img width="120px" height="120px" src="documents/images/comunidade_brasil_jug.jpeg" alt="Comunidade Brasil JUG" /></a> | Brazilian Java User Group connecting developers for knowledge sharing and professional networking | [linkedin.com/in/devsjava](https://www.linkedin.com/in/devsjava/) |
+| <a href="https://github.com/switcherapi" target="_blank" rel="noopener"><img width="180px" src="https://github.com/switcherapi/switcherapi-assets/blob/master/logo/switcherapi_grey.png?raw=true" alt="Switcher API" /></a> | Feature management platform for managing features at scale with performance focus | [github.com/switcherapi](https://github.com/switcherapi) |
+| <a href="https://www.meterian.io/" target="_blank" rel="noopener"><img width="180px" src="https://www.meterian.io/images/brand/meterian_logo_blue.svg" alt="Meterian" /></a> | Software composition analysis tool for identifying security vulnerabilities in open-source dependencies | [meterian.io](https://www.meterian.io/) |
+| <a href="https://www.youtube.com/@cbrjar" target="_blank" rel="noopener"><img width="180px" src="/documents/images/cyber_jar_logo.png" alt="CyberJAR" /></a> | YouTube channel for advanced Java and Spring developers covering GraalVM, containers, and modern JVM topics | [youtube.com/@cbrjar](https://www.youtube.com/@cbrjar) |
+| <a href="https://javachallengers.com/career-diagnosis" target="_blank" rel="noopener"><img width="150px" src="/documents/images/java_challengers_logo.jpeg" alt="Java Challengers" /></a> | Platform providing Java programming challenges for skill diagnosis and career development | [javachallengers.com](https://javachallengers.com/career-diagnosis) |
+| <a href="https://omnifish.ee/piranha/" target="_blank" rel="noopener"><img width="150px" src="/documents/images/omnifish-logo.png" alt="OmniFish" /></a> | Cloud-native Jakarta EE runtime for serverless and containerized Java applications | [omnifish.ee/piranha](https://omnifish.ee/piranha/) |
