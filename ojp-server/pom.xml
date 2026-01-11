@@ -15,7 +15,7 @@
     </parent>
 
     <properties>
-        <grpc.version>1.70.0</grpc.version>
+        <grpc.version>1.73.0</grpc.version>
         <netty.version>4.1.119.Final</netty.version>
         <slf4j.version>2.0.17</slf4j.version>
         <jib.plugin.version>3.4.5</jib.plugin.version>
