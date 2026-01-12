@@ -187,6 +187,11 @@ jobs:
           nohup java -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar > /tmp/ojp-server.log 2>&1 &
           echo $! > /tmp/ojp-server.pid
 
+      - name: Test and Run (ojp-server-enhancer on port 10593)
+        run: |
+          nohup java -Dojp.server.port=10593 -Dojp.prometheus.port=9163 -Dojp.sql.enhancer.enabled=true -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar > /tmp/ojp-server-enhancer.log 2>&1 &
+          echo $! > /tmp/ojp-server-enhancer.pid
+
       - name: Wait for ojp-server to start
         run: sleep 10
 
@@ -206,7 +211,12 @@ jobs:
 
       - name: Show ojp-server.log
         if: always()
-        run: cat /tmp/ojp-server.log || echo "/tmp/ojp-server.log not found"
+        run: |
+          echo "=== OJP Server (default) log ==="
+          cat /tmp/ojp-server.log || echo "/tmp/ojp-server.log not found"
+          echo ""
+          echo "=== OJP Server (with SQL enhancer) log ==="
+          cat /tmp/ojp-server-enhancer.log || echo "/tmp/ojp-server-enhancer.log not found"
 
   # ===========================================================================
   # JOB 3: MySQL Integration Tests
