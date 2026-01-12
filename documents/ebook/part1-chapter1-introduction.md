@@ -494,7 +494,7 @@ OJP makes intentional trade-offs that may not suit every use case:
 #### ⚠️ What OJP Does NOT Guarantee
 - **Strict JDBC Equivalence**: While OJP implements JDBC interfaces, some edge cases may behave differently (see Appendix E for compatibility matrix)
 - **Zero Latency Overhead**: Network hop adds 1-3ms per operation; unacceptable for microsecond-latency requirements
-- **XA Transaction Durability Beyond Database**: OJP coordinates XA transactions but doesn't provide transaction manager durability across restarts
+- **Strict XA Correctness Under All Failures**: OJP coordinates XA transactions reliably but cannot guarantee exactly-once commit semantics under catastrophic failures (coordinator crashes during commit, network partitions). See Chapter 10 Section 10.9 for detailed analysis of XA guarantees and limitations.
 - **Query Optimization**: OJP doesn't optimize SQL queries; it manages connections. Slow queries remain slow.
 - **Transparent Failover for All Scenarios**: Failover works for idle connections; active transactions may need application-level retry
 
