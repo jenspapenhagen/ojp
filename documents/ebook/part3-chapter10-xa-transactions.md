@@ -1009,7 +1009,7 @@ This is what financial systems, payment rails, mission-critical ledgers, and reg
 
 Understanding OJP's actual capabilities prevents misconceptions:
 
-1. **Connection Pooling (80% Overhead Reduction)**: OJP maintains a warm pool of XA-capable connections, dramatically reducing the 50-200ms overhead of creating new XA connections for each transaction.
+1. **Connection Pooling (80% Overhead Reduction)**: OJP maintains a warm pool of XA-capable connections, dramatically reducing the 50-200ms overhead of creating new XA connections for each transaction. When an XAConnection from the pool is enlisted in an XA session (via `xaResource.start(xid, flags)`), it remains pinned to that session until the XA session finishes—meaning commit or rollback has been executed and `close()` has been called on the XAConnection. This pinning ensures transaction integrity: the same physical database connection handles all operations within a single XA transaction branch, preventing issues that could arise from connection switching mid-transaction.
 
 2. **High Availability and Load Balancing**: Multiple OJP instances provide resilience. New transactions can start on any healthy instance. Session stickiness ensures transaction integrity.
 
