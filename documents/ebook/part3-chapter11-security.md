@@ -8,7 +8,6 @@ OJP's security model follows a defense-in-depth approach with multiple layers wo
 
 Understanding these layers and how they interact is crucial for designing a secure OJP deployment. Each layer addresses different threat models: IP whitelisting prevents unauthorized network access, TLS encryption protects against eavesdropping and man-in-the-middle attacks, mTLS provides strong authentication without passwords, and network segregation contains breaches. Together, they create a robust security posture that protects your most critical asset—your data.
 
-
 ```mermaid
 graph TD
     A[Client Application] -->|1. Network Access| B{IP Whitelist?}
@@ -40,7 +39,6 @@ The first security boundary is between your OJP Server and backend databases. En
 Database connections carry your most sensitive information—user credentials, personal data, financial records, healthcare information. Without encryption, this data travels in plaintext across network cables, switches, and routers. Any compromise at the network level exposes everything. TLS encryption renders intercepted traffic unreadable, protecting confidentiality even if network security is breached.
 
 Beyond compliance requirements (GDPR, HIPAA, PCI-DSS typically mandate encryption in transit), encrypted connections provide integrity guarantees. TLS ensures that data isn't modified in transit, protecting against sophisticated attacks that alter data between application and database. This integrity protection is just as important as confidentiality.
-
 
 ### PostgreSQL SSL Configuration
 
@@ -195,7 +193,6 @@ Mutual TLS (mTLS) provides the strongest authentication model for gRPC connectio
 gRPC is built on HTTP/2 over TLS, making it naturally suited for certificate-based authentication. With mTLS enabled, every connection undergoes a mutual handshake: the server presents its certificate to the client (proving server identity), and the client presents its certificate to the server (proving client identity). Both certificates must be signed by a trusted Certificate Authority (CA), and neither can be expired or revoked.
 
 This bidirectional trust model means compromising a single component doesn't grant access—an attacker needs both a valid client certificate and the server's trust. Combined with certificate rotation and revocation capabilities, mTLS provides enterprise-grade security suitable for sensitive production environments.
-
 
 ```mermaid
 sequenceDiagram
@@ -447,7 +444,6 @@ java -Dojp.client.tls.enabled=true \
      -jar test-app.jar
 ```
 
-
 ## 11.4 Network Segregation Patterns
 
 Network architecture determines your security posture as much as encryption and authentication. Where you place your OJP Server within your network topology affects attack surfaces, compliance requirements, and operational complexity. Let's explore the three primary patterns and when to use each.
@@ -488,7 +484,6 @@ In this pattern, OJP Server resides in the same network segment as your applicat
 - Microservices architectures with service mesh
 - Deployments prioritizing performance over maximum isolation
 
-
 ### Pattern 2: OJP in Database Network
 
 **Architecture:**
@@ -524,7 +519,6 @@ Here, OJP Server sits within the database network tier, fully isolated from the 
 - Compliance-driven architectures
 - Production systems handling sensitive data
 - Organizations with strict database access policies
-
 
 ### Pattern 3: OJP in Dedicated DMZ/Middleware Network
 
@@ -565,7 +559,6 @@ This pattern introduces a third network tier specifically for middleware compone
 - Multi-tenant SaaS platforms
 - Highly regulated industries requiring maximum separation
 - Organizations with dedicated network security teams
-
 
 ### Pattern Comparison Matrix
 
@@ -795,9 +788,6 @@ Different regulations have specific requirements:
 Security in OJP requires a holistic approach. Encrypt all connections—from applications to OJP, and from OJP to databases. Implement mTLS for strong authentication without password vulnerabilities. Design your network architecture to limit blast radius and satisfy compliance requirements. Use IP whitelisting as a first line of defense. And follow operational best practices for secrets management, audit logging, and regular assessments.
 
 The investment in proper security pays dividends in reduced risk, compliance confidence, and operational peace of mind. Start with the basics (TLS encryption and IP whitelisting), progress to mTLS for production systems, and evolve your network architecture as security requirements mature.
-
-
----
 
 ## Next Steps
 

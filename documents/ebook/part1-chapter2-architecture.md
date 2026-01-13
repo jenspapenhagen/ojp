@@ -47,12 +47,6 @@ graph TB
 
 ### ojp-server: The gRPC Server
 
-- gRPC Server endpoint (port 1059)
-- HikariCP Connection Pool Manager
-- Multiple database pools (PostgreSQL, MySQL, Oracle)
-- Request Handler threads
-- Metrics/Telemetry collector (Prometheus on port 9159)
-- Configuration manager
 Use a layered architecture style with clear component boundaries
 Professional enterprise architecture diagram with icons and labels
 
@@ -675,12 +669,6 @@ This architecture makes OJP adaptable to specialized requirements while maintain
 
 ### Complete System Architecture
 
-- Application layer (multiple instances)
-- OJP JDBC Driver layer
-- Network layer (gRPC/HTTP2)
-- OJP Server layer (with all internal components)
-- Connection Pool layer (HikariCP with multiple DB pools)
-- Database layer (multiple databases)
 Include all protocols, ports, and data flows
 Use professional enterprise architecture poster style
 Large, detailed, suitable for printing
@@ -777,10 +765,6 @@ graph TB
 
 ### Component Interaction
 
-- How components communicate
-- What data flows between them
-- Key interfaces and contracts
-- Configuration and dependencies
 Use UML component diagram notation
 Professional software architecture documentation style
 
@@ -835,10 +819,6 @@ sequenceDiagram
 
 ### Data Flow Diagram
 
-- External entities (Applications, Databases, Monitoring systems)
-- Processes (OJP Driver, OJP Server, Connection Pools)
-- Data stores (Session cache, Prepared statement cache, Metrics)
-- Data flows (SQL queries, Result sets, Metrics, Configuration)
 Use standard DFD notation with appropriate symbols
 Professional systems analysis diagram style
 

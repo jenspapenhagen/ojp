@@ -10,7 +10,6 @@ Before diving into framework-specific details, let's understand why OJP integrat
 
 OJP changes this model by moving pooling to a central server. Your application still uses familiar datasource APIs and transaction management, but instead of pooling real database connections, it creates lightweight virtual connections to the OJP server. The server maintains the actual database connection pool and coordinates access across all your application instances.
 
-
 This architectural shift requires you to disable the framework's local connection pooling. If you leave it enabled, you'll end up with double-pooling: your application creates a pool of virtual OJP connections, which then compete for real database connections in the OJP pool. This wastes resources and obscures the benefits of centralized management.
 
 The integration pattern always follows three steps, regardless of framework. First, update your JDBC URL to use the OJP format that specifies the OJP server location and target database. Second, remove or disable the framework's bundled connection pool implementation. Third, add the OJP JDBC driver as a dependency so your application can communicate with the OJP server.
@@ -59,7 +58,6 @@ The integration starts with your Maven or Gradle build file. You'll add the OJP 
 ```
 
 With the dependencies configured, turn your attention to the application configuration. Spring Boot's `application.properties` or `application.yml` file controls datasource settings. You'll update three properties: the JDBC URL to point to OJP, the driver class name to use OJP's driver, and the datasource type to prevent pooling.
-
 
 Here's a complete configuration example:
 
@@ -138,7 +136,6 @@ quarkus.datasource.password=mypassword
 ```
 
 The `unpooled=true` setting is Quarkus's explicit way of indicating you don't want connection pooling at the application layer. This maps directly to our requirement of avoiding double-pooling with OJP.
-
 
 ### Quarkus Native Mode Considerations
 
@@ -306,7 +303,6 @@ public class DataSourceFactory {
 }
 ```
 
-
 This factory creates a DataSource that obtains connections directly from DriverManager rather than maintaining a pool. Since DriverManager is registered with the OJP JDBC driver, it returns OJP virtual connections automatically.
 
 Your `application.properties` file provides the configuration values:
@@ -373,7 +369,6 @@ Quarkus provides the most explicit configuration through its `unpooled=true` set
 
 Micronaut requires the most custom code with its DataSource factory pattern, but this approach gives you complete control over connection acquisition. If you need custom logic around connection creation—perhaps for multi-tenancy or dynamic datasource routing—Micronaut's factory pattern provides natural extension points.
 
-
 All three frameworks support the full feature set of JDBC and JPA. Transactions, connection pooling (via OJP), batch operations, and stored procedures all work correctly regardless of framework choice. The differences lie in configuration style rather than capabilities.
 
 ### Performance Considerations
@@ -420,7 +415,6 @@ endpoints.health.jdbc.enabled=true
 
 Third, configure appropriate timeouts at both the framework level and in your OJP properties file. The framework's datasource timeout should be slightly longer than OJP's connection acquisition timeout to avoid racing error conditions. This ensures OJP's circuit breaker can trip before your framework timeout fires, giving you clearer error messages.
 
-
 Fourth, leverage your framework's transaction management properly. Use `@Transactional` annotations (or equivalent) to define clear transaction boundaries. OJP tracks transaction state across the virtual connection, ensuring that real database connections are held only for the duration of your transactions, not the entire HTTP request.
 
 Finally, test your integration thoroughly. Write integration tests that exercise database operations through your framework's repository layer. Verify that transactions commit and rollback correctly, that connection leaks don't occur, and that concurrent requests don't interfere with each other. These tests give you confidence that OJP integration works correctly in your specific application context.
@@ -432,7 +426,6 @@ If you're adding OJP to an existing application, the migration process is straig
 The migration typically proceeds in phases. First, deploy the OJP server and verify it can connect to your database. Configure a small test application to use OJP and validate that basic operations work. Then migrate one application at a time, monitoring each for connection behavior and performance.
 
 During migration, watch for common pitfalls. Applications that manually create datasources in code rather than using framework configuration might bypass your OJP setup. Custom connection management code that assumes local database access may need adjustment. Connection string builders that construct URLs programmatically need updates to include the OJP server specification.
-
 
 Monitor your applications closely after migration. Look at connection metrics, query performance, transaction success rates, and error logs. Compare these metrics to pre-migration baselines to ensure OJP integration hasn't introduced regressions. Most issues surface quickly if they exist—within the first day or two of running with real traffic.
 
@@ -465,4 +458,3 @@ Spring Boot users exclude HikariCP and use SimpleDriverDataSource. Quarkus users
 The beauty of this integration is that your application code doesn't change. Repositories, services, transactions, and ORM mappings all work exactly as before. OJP integration happens entirely at the configuration layer, making it low-risk and reversible if needed.
 
 Choose your framework based on your application requirements, not OJP compatibility—all three work excellently with OJP. Focus on properly disabling local pooling, configuring appropriate timeouts, and monitoring connection behavior to ensure your integration works correctly.
-

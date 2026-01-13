@@ -7,8 +7,8 @@ This comprehensive e-book provides complete documentation for Open-J-Proxy (OJP)
 ## Content Overview
 
 **Total Content**: 1,043KB across 24 chapters + 6 appendices  
-**Visual Assets**: 139 AI-ready image prompts (in Appendix F), 73 Mermaid diagrams  
-**Completion**: 100% (all 24 chapters written + complete visual assets appendix)
+**Visual Assets**: 139 AI-ready image prompts (centralized in Appendix F), 73 Mermaid diagrams  
+**Completion**: 100% (all 24 chapters written)
 
 ## Documentation Version
 
@@ -69,7 +69,7 @@ This e-book is fully synchronized with the latest features and implementations i
 - [Appendix C: Glossary](appendix-c-glossary.md)
 - [Appendix D: Resources and References](appendix-d-resources.md)
 - [Appendix E: JDBC Compatibility Reference](appendix-e-jdbc-compatibility.md)
-- [Appendix F: Visual Asset Prompts](appendix-f-visual-assets.md) ⭐ **NEW**
+- [Appendix F: Visual Asset Prompts](appendix-f-visual-assets.md)
 
 ## Reading Paths
 
@@ -102,21 +102,6 @@ Start with Chapter 3 (Quick Start Guide) for immediate hands-on experience, then
 3. Chapter 18: Testing Philosophy and Code Quality
 4. Chapter 19: Contributor Recognition Program
 
-## Visual Assets
-
-All visual asset prompts (139 total) have been extracted to **Appendix F: Visual Asset Prompts** to keep chapter content focused on technical information. Each prompt includes:
-- Chapter and section reference
-- Detailed description for AI image generation
-- Corporate template specifications
-
-**To generate and integrate images:**
-1. See `scripts/IMAGE-GENERATION-GUIDE.md` for complete instructions
-2. Use extraction script: `bash scripts/extract-image-prompts.sh`
-3. Generate images with AI service (DALL-E 3, Midjourney, or Stable Diffusion)
-4. Integrate using: `python3 scripts/update-image-references.py`
-
-**Cost Estimates**: $10-30 for all 139 images depending on service used.
-
 ## E-Book Characteristics
 
 **Scope**: Comprehensive technical documentation covering OJP from architecture to contribution, fully up-to-date with latest features and current implementation details
@@ -135,17 +120,16 @@ All visual asset prompts (139 total) have been extracted to **Appendix F: Visual
 
 1. **Browse by Topic**: Use the table of contents above to navigate to specific topics
 2. **Follow Reading Paths**: Choose a reading path based on your role and goals
-3. **Reference Appendices**: Quick lookups for commands, configurations, terminology, and visual assets
-4. **Visual Learning**: All 139 image prompts are centralized in Appendix F for batch generation
-5. **Technical Diagrams**: 73 Mermaid diagrams are embedded throughout for visual explanations
+3. **Reference Appendices**: Quick lookups for commands, configurations, and terminology
+4. **Visual Learning**: All chapters include AI-ready image prompts for diagram generation
+5. **Technical Diagrams**: Mermaid diagrams are embedded throughout for visual explanations
 
 ## Format Notes
 
 - All chapters are written in Markdown format
 - Code examples are syntax-highlighted and production-ready
-- 139 AI-ready image prompts in Appendix F (for DALL-E, Midjourney, Stable Diffusion)
-- 73 Mermaid diagrams embedded in chapters for technical visualization
-- Corporate template specifications provided for consistent visual style
+- AI-ready image prompts can be used with DALL-E, Midjourney, or similar tools
+- Mermaid diagrams can be rendered with any Mermaid-compatible viewer
 
 ## Publishing Formats
 

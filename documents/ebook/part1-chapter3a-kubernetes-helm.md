@@ -12,10 +12,6 @@ Before deploying OJP to Kubernetes, ensure you have the necessary tools and infr
 
 ### Required Tools
 
-- Kubernetes cluster (with K8s logo and version 1.20+)
-- Helm 3.x installed (with Helm logo)
-- kubectl configured (with kubectl logo)
-- Network access to cluster
 Use modern cloud-native design with icons
 Professional getting-started guide style with checkboxes
 
@@ -77,9 +73,6 @@ kubectl get nodes
 
 #### Helm Installation
 
-- macOS (using Homebrew)
-- Linux (using package manager)
-- Windows (using Chocolatey)
 Show terminal commands and success indicators
 Professional cross-platform installation guide style
 
@@ -215,11 +208,6 @@ helm search repo ojp
 
 ### Basic Installation
 
-- Helm chart being deployed
-- Kubernetes resources being created (StatefulSet, Services, ConfigMap)
-- Pods starting up with stable identities (ojp-server-0, ojp-server-1, ojp-server-2)
-- Individual per-pod LoadBalancer services exposing each pod
-- Headless service for StatefulSet DNS discovery
 Use Kubernetes architecture diagram style with resource icons
 Professional cloud-native deployment guide showing StatefulSet architecture
 
@@ -488,10 +476,6 @@ The OJP Helm chart provides extensive configuration options through the `values.
 
 ### Complete Configuration Reference
 
-- Server Settings (port, thread pool, timeouts)
-- Observability (OpenTelemetry, Prometheus)
-- Advanced Features (slow query segregation, circuit breaker)
-- Kubernetes Settings (replicas, resources, autoscaling)
 Use categorized sections with icons for each category
 Professional configuration reference guide style
 
@@ -632,10 +616,6 @@ The Helm chart creates two types of services:
 1. **Headless Service**: For StatefulSet pod discovery and internal DNS
 2. **Per-Pod LoadBalancer Services**: For individual pod access with external IPs
 
-- Headless service (ClusterIP: None) for StatefulSet DNS
-- Individual per-pod LoadBalancer services (ojp-server-0, ojp-server-1, ojp-server-2)
-- Each pod with its own external IP
-- Clients connecting directly to specific pods
 Use Kubernetes service architecture style with StatefulSet networking patterns
 Professional K8s networking guide showing per-pod service model
 
@@ -971,10 +951,6 @@ spec:
 
 ### Exposing OJP Servers with Individual Pod Services
 
-- Recommended approach: External traffic → Individual OJP Pod Services (StatefulSet) → Client-side load balancing
-- Show: StatefulSet pods (ojp-server-0, ojp-server-1, ojp-server-2) each with dedicated LoadBalancer/NodePort service
-- Illustrate JDBC driver connecting to all three endpoints simultaneously
-- Use Kubernetes architecture style with multinode connection visualization
 Professional K8s networking guide for OJP
 
 #### ⚠️ Why Ingress is Not Recommended for OJP
@@ -1334,10 +1310,6 @@ kubectl rollout undo statefulset ojp-server -n ojp --to-revision=2
 
 ### Monitoring and Logging in Kubernetes
 
-- Prometheus scraping OJP metrics
-- Grafana dashboards visualizing data
-- Logs flowing to centralized logging (Loki, ELK)
-- Alerts being sent to notification systems
 Use modern observability architecture style
 Professional monitoring guide
 
@@ -1406,12 +1378,6 @@ podAnnotations:
 
 ### Multi-Replica Deployments for High Availability
 
-- 3 OJP StatefulSet pods (ojp-server-0, ojp-server-1, ojp-server-2) with individual LoadBalancer services
-- Each pod with its own stable network identity and external IP
-- JDBC driver connecting to all three endpoints simultaneously via multi-host connection string
-- Client-side load balancing and failover arrows
-- Node failure scenario with automatic failover to remaining pods
-- Each replica connecting to the same database backend
 Use HA architecture diagram style emphasizing StatefulSet and per-pod services
 Professional high-availability guide with OJP multinode focus
 
@@ -1619,14 +1585,6 @@ graph TB
 
 ### Production Checklist
 
-- Resource limits configured ✓
-- Health probes configured ✓
-- Multiple replicas ✓
-- Monitoring enabled ✓
-- Logs centralized ✓
-- Network policies applied ✓
-- Security contexts set ✓
-- Backup strategy defined ✓
 Use checklist style with completion indicators
 Professional production readiness guide
 

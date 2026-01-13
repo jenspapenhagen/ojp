@@ -10,10 +10,6 @@ OJP Server includes built-in support for popular open-source databases, making i
 
 ### Included Databases
 
-- H2 (with logo) - Embedded/file-based
-- PostgreSQL (with logo) - Enterprise-grade
-- MySQL (with logo) - Widely-used
-- MariaDB (with logo) - MySQL-compatible
 Show each with a checkmark indicating "included by default"
 Use professional database vendor style with clean icons
 Modern "batteries included" theme
@@ -198,10 +194,6 @@ java -Dojp.libs.path=/opt/ojp/drivers -jar ojp-server.jar
 
 ### Driver Verification
 
-- Check files exist in ojp-libs
-- Check file sizes match expected
-- Check server logs for driver loading
-- Test connection to each database type
 Use checklist style with file icons and status indicators
 Professional verification guide style
 
@@ -493,11 +485,6 @@ OJP provides a flexible mechanism for adding any JAR file to the server classpat
 
 ### How It Works
 
-- ojp-libs directory on filesystem
-- OJP Server ClassLoader scanning directory
-- All JARs loaded at startup
-- Drivers registered with DriverManager
-- Additional libraries available to OJP
 Use technical architecture style with class loading visualization
 Professional Java ClassLoader guide
 
@@ -558,10 +545,6 @@ ojp-libs/
 
 ### Adding Custom Libraries
 
-- JDBC Drivers (database connectivity)
-- Connection Pools (Oracle UCP, HikariCP variants)
-- Monitoring/Telemetry (custom exporters)
-- Security Libraries (encryption, authentication)
 Show each category with example JARs
 Professional library management guide
 

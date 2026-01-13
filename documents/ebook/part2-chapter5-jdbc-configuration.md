@@ -185,10 +185,6 @@ These pools run on the OJP Server side, but you configure them from the client s
 
 ### Configuration File Location
 
-- Classpath root (src/main/resources)
-- ojp.properties file
-- Application loading configuration
-- Multiple datasource configs in one file
 Use file system and classpath visualization
 Professional configuration management guide
 

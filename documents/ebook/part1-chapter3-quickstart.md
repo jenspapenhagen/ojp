@@ -10,11 +10,6 @@ Before starting with OJP, ensure you have the following prerequisites in place.
 
 ### Java Version Requirements
 
-- OJP Server: Java 21+ (with Java logo)
-- OJP JDBC Driver: Java 11+ (with Java logo)
-- Maven 3.9+ or Gradle (with logos)
-- Docker (optional, with Docker logo)
-- Network access (ports 1059, 9159)
 Use clean, modern icon-based design with checkmarks
 Professional getting-started guide style
 
@@ -658,11 +653,6 @@ docker run --network ojp-network --name ojp-server rrobetti/ojp:0.3.1-beta
 
 ## Testing Your Setup
 
-- Server is running ✓
-- Port is accessible ✓
-- Driver dependency added ✓
-- URL format is correct ✓
-- First query successful ✓
 Use checkboxes and friendly icons
 Professional setup verification guide style
 

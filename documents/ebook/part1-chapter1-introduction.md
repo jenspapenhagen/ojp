@@ -10,9 +10,6 @@ Open J Proxy (OJP) is a **Type 3 JDBC Driver** and **Layer 7 Proxy Server** desi
 
 ### Understanding Type 3 JDBC Drivers
 
-- Type 1 (JDBC-ODBC Bridge): Shows application → JDBC → ODBC → Database
-- Type 2 (Native-API): Shows application → JDBC → Native Library → Database  
-- Type 3 (Network Protocol): Shows application → JDBC → Middleware Server → Database
 Highlight Type 3 with emphasis on the network protocol layer. Use professional technical style with clean lines and modern colors (blues and greens). Show OJP logo on the Type 3 middleware component.
 
 JDBC drivers come in different types, each with distinct characteristics. Type 1 drivers use the JDBC-ODBC Bridge to translate JDBC calls into ODBC calls, while Type 2 drivers convert JDBC calls directly to database-specific native calls. Type 4 drivers, the most common today, directly convert JDBC calls to the database-specific protocol in pure Java. But OJP takes a different approach: it's a **Type 3 driver**, meaning it communicates with a middleware server (the OJP Server) that then connects to the database.
@@ -34,7 +31,6 @@ graph LR
 The Type 3 architecture means all database connections are managed centrally by the OJP Server, not by individual applications. This enables efficient connection multiplexing over gRPC, allowing your applications to scale elastically without proportionally increasing database connections. The architecture also provides database independence—you can switch between databases without changing application code.
 
 ### Layer 7 Proxy Architecture
-
 
 OJP operates as a **Layer 7 (Application Layer) proxy**, which means it understands and operates on the application protocol itself—in this case, JDBC/SQL. Unlike lower-layer proxies (like Layer 4 TCP proxies), OJP can inspect SQL statements and make intelligent routing decisions. It can classify queries as fast or slow (enabling the slow query segregation feature), manage transactions at the application protocol level, and implement connection pooling with full awareness of JDBC semantics. This deep protocol understanding also enables OJP to provide detailed telemetry about query execution and performance.
 
@@ -270,12 +266,6 @@ stateDiagram-v2
 
 ### Multi-Database Support
 
-- PostgreSQL (with logo)
-- MySQL (with logo)
-- Oracle (with logo)
-- SQL Server (with logo)
-- MariaDB (with logo)
-- H2 (with logo)
 Show OJP managing separate connection pools for each database
 Use a hub-and-spoke layout with OJP as the central hub
 Professional enterprise architecture diagram style
@@ -377,7 +367,6 @@ Before adopting OJP, it's essential to understand whether it fits your use case.
 
 ### Ideal Workloads for OJP
 
-
 OJP excels in specific architectural patterns and workload types:
 
 #### ✅ Online Transaction Processing (OLTP)
@@ -425,7 +414,6 @@ OJP excels in specific architectural patterns and workload types:
 
 ### Workloads NOT Recommended for OJP
 
-
 Understanding when NOT to use OJP is as important as knowing when to use it:
 
 #### ❌ Ultra-Low Latency Requirements (Microseconds)
@@ -472,7 +460,6 @@ Understanding when NOT to use OJP is as important as knowing when to use it:
 
 ### Trade-Offs and Non-Guarantees
 
-
 OJP makes intentional trade-offs that may not suit every use case:
 
 #### ✅ What OJP Provides
@@ -494,7 +481,6 @@ OJP makes intentional trade-offs that may not suit every use case:
 - **Dependency vs. Efficiency**: Applications depend on OJP Server availability in exchange for efficient resource usage
 
 ### New Failure Modes Introduced
-
 
 Understanding new failure modes helps you prepare mitigation strategies:
 
@@ -554,7 +540,6 @@ Understanding new failure modes helps you prepare mitigation strategies:
 - Monitor per-application connection usage (Chapter 13)
 
 ### Decision Framework: Should You Adopt OJP?
-
 
 Use this framework to assess whether OJP reduces net risk for your team:
 
