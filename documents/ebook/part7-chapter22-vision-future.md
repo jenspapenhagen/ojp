@@ -12,6 +12,7 @@ OJP breaks this coupling by introducing a smart intermediary layer. Application 
 
 The "open-source" aspect of the vision is equally important. While commercial database proxies exist, they're typically tied to specific databases (Oracle-only, PostgreSQL-only) or specific cloud platforms. OJP's database-agnostic approach means the same solution works for H2, PostgreSQL, MySQL, Oracle, SQL Server, and any database with a JDBC driver. Organizations with heterogeneous database estates—common in enterprises managing legacy and modern systems—gain a consistent connection management layer across their entire infrastructure.
 
+**[IMAGE PROMPT: Vision Illustration - Decoupled Scaling]**
 Create a conceptual diagram showing OJP's vision. Top half labeled "Without OJP": Show 10 application instances (small boxes) each with arrows connecting to a database, creating 100 connections (10 per instance). Add a red warning symbol and text "100 connections from 10 instances". Bottom half labeled "With OJP": Show 10 application instances connecting through 1-2 OJP servers (shown as blue proxy layer), which then connect to the database with only 20-30 connections. Add a green checkmark and text "30 connections for 10 instances". Include scaling arrows showing applications can scale further without increasing database connections.
 
 The target architectures tell the story of where OJP provides maximum value:
@@ -61,6 +62,7 @@ graph TD
 
 Understanding these limitations helps set appropriate expectations. OJP isn't a universal solution for every database connectivity scenario. It shines in cloud-native environments with elastic scaling, variable load patterns, and heterogeneous database estates. It might be overkill for monolithic applications with stable instance counts and single databases. The key is matching the tool to the problem.
 
+**[IMAGE PROMPT: Limitations vs Solutions Matrix]**
 Create a table-style infographic showing current limitations and their solutions/mitigations. Four columns: "Limitation", "Impact", "Mitigation", "Roadmap Status". Rows include: Network Latency (Impact: 1-3ms, Mitigation: Accept for non-latency-critical apps, Status: Inherent trade-off), Single Point of Failure (Impact: Total outage, Mitigation: Deploy multinode, Status: Solved), Observability Gaps (Impact: Limited tracing, Mitigation: Use Prometheus metrics, Status: Planned), Manual Discovery (Impact: Manual updates, Mitigation: Use ConfigMaps, Status: Planned). Use color coding: red for high impact, yellow for medium, green for mitigated.
 
 ## 22.3 Future Enhancements and Roadmap
@@ -85,6 +87,7 @@ OJP's roadmap reflects both user requests and the maintainers' vision for enhanc
 
 **Query Result Caching**: For queries that fetch relatively static data (configuration tables, reference data), an optional caching layer could cache results directly in OJP. Subsequent identical queries would return cached results without hitting the database. This capability requires careful cache invalidation strategies but could dramatically reduce database load for certain access patterns.
 
+**[IMAGE PROMPT: Roadmap Timeline]**
 Create a roadmap visualization showing enhancement phases. Display a horizontal timeline with three phases: "Near Term (6-12 months)", "Mid Term (1-2 years)", "Long Term (2+ years)". Near Term shows: Distributed Tracing Export, Enhanced Health Checks. Mid Term shows: Dynamic Server Discovery, Configuration Sync, SQL-Level Instrumentation. Long Term shows: Read Replica Routing, Connection Pool Autoscaling, Query Caching. Use different colors for observability (blue), operational (green), and performance (orange) enhancements. Add icons representing each feature.
 
 The roadmap remains intentionally flexible. Community priorities help shape which enhancements arrive first. If multiple users request dynamic discovery, it jumps in priority. If distributed tracing emerges as a critical need, it accelerates. Open-source projects thrive on this feedback loop—users identifying needs, contributors implementing solutions, and the maintainers integrating improvements into the core.
@@ -105,6 +108,7 @@ OJP's future depends not just on code features but on building a vibrant communi
 
 The ecosystem will grow as adoption increases. Database vendors might contribute database-specific optimizations. Cloud platforms could offer managed OJP services. Training providers might develop certification programs. Consulting firms could build practices around OJP deployment. These ecosystem activities don't require core team involvement—they emerge organically as the project proves valuable in production environments.
 
+**[IMAGE PROMPT: Community and Ecosystem Map]**
 Create a visual ecosystem map placing "OJP Core" at the center. Surround it with connected circles representing: "Contributors" (developers, documentation writers, testers), "Partners" (JUG communities, tool providers), "Users" (enterprises, startups, individual developers), "Integrations" (Spring Boot, Quarkus, Kubernetes), "Distribution" (Maven Central, Docker Hub, Artifact Hub), and "Support" (Discord, GitHub Issues, Stack Overflow). Use connecting lines showing interactions. Use brand colors where applicable and icons representing each ecosystem participant.
 
 ## 22.5 Invitation to Participate

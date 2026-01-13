@@ -8,6 +8,8 @@ OJP's security model follows a defense-in-depth approach with multiple layers wo
 
 Understanding these layers and how they interact is crucial for designing a secure OJP deployment. Each layer addresses different threat models: IP whitelisting prevents unauthorized network access, TLS encryption protects against eavesdropping and man-in-the-middle attacks, mTLS provides strong authentication without passwords, and network segregation contains breaches. Together, they create a robust security posture that protects your most critical asset—your data.
 
+**[IMAGE PROMPT: Create a multi-layered security diagram showing OJP Server at the center with four concentric rings/shields: outermost ring labeled "Network Segregation" (showing isolated network zones), second ring "IP Whitelisting" (showing firewall rules), third ring "TLS Encryption" (showing encrypted tunnel), innermost ring "mTLS Authentication" (showing certificate exchange). Use blue/green color gradient from outer to inner rings. Show threat types blocked at each layer (network intrusion, unauthorized access, eavesdropping, impersonation). Style: Professional infographic with clear layer separation and security shield icons.]**
+
 ```mermaid
 graph TD
     A[Client Application] -->|1. Network Access| B{IP Whitelist?}
@@ -39,6 +41,8 @@ The first security boundary is between your OJP Server and backend databases. En
 Database connections carry your most sensitive information—user credentials, personal data, financial records, healthcare information. Without encryption, this data travels in plaintext across network cables, switches, and routers. Any compromise at the network level exposes everything. TLS encryption renders intercepted traffic unreadable, protecting confidentiality even if network security is breached.
 
 Beyond compliance requirements (GDPR, HIPAA, PCI-DSS typically mandate encryption in transit), encrypted connections provide integrity guarantees. TLS ensures that data isn't modified in transit, protecting against sophisticated attacks that alter data between application and database. This integrity protection is just as important as confidentiality.
+
+**[IMAGE PROMPT: Create a before/after comparison diagram. LEFT side shows "Without TLS" - OJP Server connected to Database with transparent pipe showing readable SQL queries, passwords, and data flowing (labeled "Plaintext - Vulnerable to Interception"). RIGHT side shows "With TLS" - same connection but with opaque encrypted tunnel, showing padlock icons and encrypted data symbols (labeled "Encrypted - Protected from Eavesdropping"). Include a hacker icon with X on the right side showing blocked attack. Use red for left, green for right. Style: Clear visual comparison with security indicators.]**
 
 ### PostgreSQL SSL Configuration
 
@@ -193,6 +197,8 @@ Mutual TLS (mTLS) provides the strongest authentication model for gRPC connectio
 gRPC is built on HTTP/2 over TLS, making it naturally suited for certificate-based authentication. With mTLS enabled, every connection undergoes a mutual handshake: the server presents its certificate to the client (proving server identity), and the client presents its certificate to the server (proving client identity). Both certificates must be signed by a trusted Certificate Authority (CA), and neither can be expired or revoked.
 
 This bidirectional trust model means compromising a single component doesn't grant access—an attacker needs both a valid client certificate and the server's trust. Combined with certificate rotation and revocation capabilities, mTLS provides enterprise-grade security suitable for sensitive production environments.
+
+**[IMAGE PROMPT: Create a sequence diagram showing mTLS handshake between Client Application and OJP Server. Show 6 steps: 1) Client initiates connection, 2) Server sends its certificate, 3) Client validates server certificate against CA, 4) Client sends its certificate, 5) Server validates client certificate against CA, 6) Encrypted channel established. Use different colors for client-to-server (blue) and server-to-client (green) messages. Show certificate icons and CA validation steps. Include padlock icon when channel is established. Style: Clear technical sequence diagram with labeled steps.]**
 
 ```mermaid
 sequenceDiagram
@@ -444,6 +450,8 @@ java -Dojp.client.tls.enabled=true \
      -jar test-app.jar
 ```
 
+**[IMAGE PROMPT: Create a certificate lifecycle flowchart showing: "Certificate Generation" (day 0) → "Deployment" (day 1) → "Active Use" (days 2-335) → "Expiration Warning" (day 335, yellow alert) → "Rotation Begins" (day 350, orange) → "New Certificate Active" (day 360) → "Old Certificate Removed" (day 365+30). Show calendar icons and color progression from green (early) to yellow (warning) to orange (critical). Include automation arrows for monitoring and rotation. Style: Process flowchart with time-based progression and alert indicators.]**
+
 ## 11.4 Network Segregation Patterns
 
 Network architecture determines your security posture as much as encryption and authentication. Where you place your OJP Server within your network topology affects attack surfaces, compliance requirements, and operational complexity. Let's explore the three primary patterns and when to use each.
@@ -484,6 +492,8 @@ In this pattern, OJP Server resides in the same network segment as your applicat
 - Microservices architectures with service mesh
 - Deployments prioritizing performance over maximum isolation
 
+**[IMAGE PROMPT: Create a network topology diagram showing three zones from top to bottom: "Internet" (cloud icon) → "Application Network" zone (containing 3 app servers and 1 OJP server in light blue box) → "Database Network" zone (containing 2 database servers in darker blue box). Show firewall icons between zones. Highlight the connection path from App Servers → OJP (local network, green) and OJP → Database (cross-zone, orange with firewall). Include latency indicators (~0.5ms local, ~2ms cross-zone). Style: Clean network diagram with zone separation and traffic flow indicators.]**
+
 ### Pattern 2: OJP in Database Network
 
 **Architecture:**
@@ -519,6 +529,8 @@ Here, OJP Server sits within the database network tier, fully isolated from the 
 - Compliance-driven architectures
 - Production systems handling sensitive data
 - Organizations with strict database access policies
+
+**[IMAGE PROMPT: Create a network topology diagram showing: "Application Network" zone (top, containing 4 app servers in light gray box) connected via firewall to "Database Network" zone (bottom, containing 1 OJP server and 3 database servers in dark blue box). Show firewall rules explicitly: "Allow gRPC :1059 from App Network" and "Deny All Other Traffic". Highlight App→OJP path (cross-boundary, orange with latency ~3ms) and OJP→DB path (local, green with latency <1ms). Show shield icons on Database Network. Style: Professional architecture diagram with security emphasis and clear zone boundaries.]**
 
 ### Pattern 3: OJP in Dedicated DMZ/Middleware Network
 
@@ -559,6 +571,8 @@ This pattern introduces a third network tier specifically for middleware compone
 - Multi-tenant SaaS platforms
 - Highly regulated industries requiring maximum separation
 - Organizations with dedicated network security teams
+
+**[IMAGE PROMPT: Create a three-tier network diagram showing: "Application Network" (top tier, light blue with app servers) → Firewall 1 → "Middleware Network" (middle tier, green with OJP servers) → Firewall 2 → "Database Network" (bottom tier, dark blue with databases). Show traffic flow vertically with latency annotations (~2ms per firewall hop). Include monitoring icons on each firewall. Show "Security Zone 1", "Security Zone 2", "Security Zone 3" labels. Highlight that app-to-database requires crossing two boundaries. Style: Enterprise architecture diagram with emphasis on defense in depth and zone isolation.]**
 
 ### Pattern Comparison Matrix
 
@@ -788,6 +802,10 @@ Different regulations have specific requirements:
 Security in OJP requires a holistic approach. Encrypt all connections—from applications to OJP, and from OJP to databases. Implement mTLS for strong authentication without password vulnerabilities. Design your network architecture to limit blast radius and satisfy compliance requirements. Use IP whitelisting as a first line of defense. And follow operational best practices for secrets management, audit logging, and regular assessments.
 
 The investment in proper security pays dividends in reduced risk, compliance confidence, and operational peace of mind. Start with the basics (TLS encryption and IP whitelisting), progress to mTLS for production systems, and evolve your network architecture as security requirements mature.
+
+**[IMAGE PROMPT: Create a comprehensive security checklist infographic with 5 main sections arranged vertically, each with icons and checkboxes: 1) "Transport Security" (padlock icon) - TLS encryption enabled, Certificates valid, Strong cipher suites; 2) "Authentication" (key icon) - mTLS configured, Client certificates issued, Certificate rotation scheduled; 3) "Network Security" (firewall icon) - IP whitelist configured, Network segregation implemented, Firewall rules tested; 4) "Operations" (gear icon) - Secrets in vault, Audit logging enabled, Monitoring configured; 5) "Compliance" (clipboard icon) - Regular assessments, Policies documented, Team trained. Use green checkmarks for completed items. Style: Professional checklist poster with clear hierarchy and actionable items.]**
+
+---
 
 ## Next Steps
 

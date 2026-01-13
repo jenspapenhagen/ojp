@@ -14,6 +14,7 @@ The implementation required careful handling of class loading and reflection. Th
 
 A simple bash script (`download-drivers.sh`) automates the process of retrieving drivers from Maven Central, making the setup as straightforward as running a single command. The script is idempotent, cross-platform compatible, and provides clear feedback about which drivers are present or missing.
 
+**[IMAGE PROMPT: Driver Externalization Architecture]**
 Create a diagram showing two side-by-side comparisons. Left side labeled "Before: Embedded Drivers" shows a large monolithic JAR (70MB) containing OJP Server + H2 + PostgreSQL + MySQL + MariaDB all bundled together, with arrows pointing to update/security challenges. Right side labeled "After: Externalized Drivers" shows a smaller OJP Server JAR (20MB) separate from an `ojp-libs` directory containing individual driver JARs, with arrows showing independent updates, selective inclusion, and flexible versions. Use distinct colors for the server (blue) vs drivers (green/yellow).
 
 The benefits extend beyond just file size. Security scanning became simpler because drivers can be analyzed separately from OJP's core code. Compliance teams can create minimal configurations containing only approved drivers. Development teams can test against specific driver versions without rebuilding the entire server. The architecture even enables organizations to use internal mirrors or proxies for driver distribution in air-gapped environments.
@@ -43,6 +44,7 @@ For Non-XA connections, disabling the pool through the `ojp.connection.pool.enab
 
 XA connections present additional complexity because they coordinate distributed transactions across multiple resource managers. The `ojp.xa.connection.pool.enabled` property governs XA pooling behavior. When disabled, OJP creates `XADataSource` instances directly and manages `XAConnection` lifecycles through the session mechanism. The XA operations—start, end, prepare, commit, rollback—work identically whether pooling is enabled or disabled, maintaining API consistency.
 
+**[IMAGE PROMPT: Pool Disable Configuration Options]**
 Create an infographic showing configuration hierarchy for pool disable feature. Display three tiers from top to bottom: 1) Environment Variables (shown as system-level config with UPPERCASE_NAMING), 2) System Properties (shown as Java process flags with -D notation), 3) Properties File (shown as ojp.properties file content). Each tier should show example syntax for both `ojp.connection.pool.enabled` and `ojp.xa.connection.pool.enabled`. Use arrows showing precedence from top to bottom. Include color coding: environment variables (green), system properties (yellow), properties file (blue).
 
 The configuration follows a clear precedence hierarchy. Environment variables take highest priority, allowing operations teams to override behavior without changing application code. System properties provide flexibility for testing and development scenarios. Finally, the `ojp.properties` file serves as the default configuration, easily version-controlled and deployed with the application.
@@ -63,6 +65,7 @@ This granular control enables sophisticated deployment patterns. A single applic
 
 The implementation required careful attention to resource management. Unpooled connections don't benefit from the pool's automatic cleanup and leak detection, so OJP tracks these connections explicitly and ensures proper closure. Error handling needed enhancement to provide clear guidance when pool-related properties are specified but pooling is disabled. The test suite expanded significantly to cover the matrix of pooling combinations across both Non-XA and XA scenarios.
 
+**[IMAGE PROMPT: Pooling Decision Flow]**
 Create a flowchart showing the connection acquisition decision process. Start with "Connection Request" splitting into "Non-XA" and "XA" paths. Each path then has a decision diamond "Pooling Enabled?" leading to either "Get from HikariCP Pool" or "Create via DriverManager" for Non-XA, and "Get from Backend Session Pool" or "Create XADataSource Directly" for XA. End both paths at "Connection Ready". Use consistent shapes: ovals for start/end, rectangles for processes, diamonds for decisions. Color code: Non-XA path (blue), XA path (purple).
 
 From a performance perspective, disabled pooling introduces additional overhead for each connection request but eliminates the pooling infrastructure entirely. For workloads dominated by long-lived connections, this trade-off makes sense. For high-frequency, short-lived operations, pooling remains the clear winner. The feature empowers users to make this decision based on their specific workload characteristics rather than forcing a one-size-fits-all approach.
@@ -105,6 +108,7 @@ public interface ConnectionPoolProvider {
 
 Configuration flexibility extends to pool tuning parameters. The `PoolConfiguration` class encapsulates common settings like maximum pool size, minimum idle connections, and timeout values. Providers interpret these settings according to their underlying implementation—Commons Pool maps them to its configuration model, while a UCP provider would translate them to UCP equivalents.
 
+**[IMAGE PROMPT: XA Pool SPI Architecture]**
 Create a layered architecture diagram showing the XA Pool SPI structure. Top layer: "Application Code" making XA transaction calls. Middle layer: "OJP XA Management" containing the ConnectionPoolProvider SPI interface (shown as a plug-point). Bottom layer: Three provider implementations side-by-side: "Commons Pool 2 Provider" (default), "Oracle UCP Provider" (example), and "Custom Provider" (extensibility). Beneath these, show the actual pool implementations connecting down to "Backend XA Sessions". Use different colors for each provider and arrows showing the plug-in relationship to the SPI interface.
 
 The SPI also facilitates testing and development. A `MockXAProvider` implementation can simulate various failure scenarios—connection timeouts, transaction failures, resource manager issues—without requiring actual database infrastructure. Development teams can validate error handling and recovery logic in isolation before progressing to integration testing against real databases.
@@ -113,6 +117,7 @@ Performance monitoring benefits from the SPI's `PoolStatistics` interface. Each 
 
 Migration between providers happens at configuration time without code changes. A team might start with Commons Pool during initial development, switch to Oracle UCP when deploying to production Oracle RAC clusters, and use a custom provider for specialized requirements. The application code remains unchanged—the provider swap happens transparently behind the SPI boundary.
 
+**[IMAGE PROMPT: Provider Selection and Configuration]**
 Create a decision tree diagram showing provider selection logic. Start with "XA Connection Pool Initialization" at the top. First decision: "Provider Specified in Config?" If yes, arrow to "Load Specified Provider". If no, arrow to "Database Type Detection". From "Database Type Detection", show branches for "Oracle?" leading to "Try Oracle UCP Provider", "PostgreSQL/MySQL/Others?" leading to "Use Commons Pool 2 Provider". All paths converge at "Provider Initialized". Include configuration snippets beside relevant nodes showing example properties: `ojp.xa.pool.provider=oracle-ucp` for explicit configuration, and automatic selection for implicit configuration.
 
 Looking forward, the SPI enables community contributions without requiring changes to OJP's core. An organization using Atomikos for transaction management could contribute an AtomikosXAProvider. A team leveraging HikariCP's XA support (if they extend it) could build a HikariXAProvider. The SPI creates an ecosystem where specialized implementations can coexist, each serving different use cases while maintaining API compatibility.

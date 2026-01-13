@@ -12,6 +12,7 @@ The blocking itself isn't inherently problematic; it's a standard backpressure m
 
 The investigation revealed multiple contributing factors. HikariCP's default maximum pool size of 10 connections was sized for modest concurrency, not the stress test scenario. The default connection timeout of 30 seconds was configured but proved ineffective under extreme contention—threads would block indefinitely despite this setting, suggesting an interaction problem between HikariCP's timeout mechanism and high concurrency.
 
+**[IMAGE PROMPT: Thread Blocking Visualization]**
 Create a diagram showing the progression of thread exhaustion. Top section shows "Normal Operation" with 10 gRPC threads, 10 pool connections, flowing smoothly between "Request" and "Response" with green arrows. Middle section shows "High Load Begins" with 50 threads trying to acquire connections from the 10-connection pool, some threads (yellow) waiting. Bottom section shows "System Locked" with 100+ threads all blocked (red) waiting for connections, no green arrows flowing, system completely deadlocked. Include a timeline arrow on the left showing progression over 5-10 seconds.
 
 The solution required a multi-layered approach, starting with enhanced timeout protection at the application level. A new `ConnectionAcquisitionManager` class wraps connection requests in a `CompletableFuture` with a strict 15-second timeout. If acquisition doesn't complete within this window, the future times out with a clear error message rather than blocking indefinitely. This pattern provides absolute guarantee against indefinite waits, regardless of pool configuration.
@@ -63,6 +64,7 @@ The lessons learned extend far beyond this specific issue. First, **timeout prot
 
 Fourth, **connection pool sizing is workload-dependent**. There's no universal "right" size; it depends on query duration, concurrency patterns, and system resources. Fifth, **observability must include error scenarios**. Monitoring connection pool metrics during normal operation is useful, but understanding behavior during exhaustion is critical. Finally, **graceful degradation beats cascading failure**. The fix allows the system to shed load gracefully under pressure rather than collapsing entirely.
 
+**[IMAGE PROMPT: Before and After Comparison]**
 Create a split-screen comparison showing system behavior under high load. Left side "Before Fix": Show a dashboard with all metrics flatlined or frozen, system status "UNRESPONSIVE", error log showing no new entries, and a timestamp showing "10+ minutes elapsed". Right side "After Fix": Show active metrics with some operations succeeding (green) and some failing with timeout errors (yellow), system status "RESPONSIVE", error log showing clear timeout messages, and timestamp showing "~8 seconds elapsed". Include visual metaphors: left side shows a completely blocked pipe, right side shows a pipe with controlled flow and pressure relief valve.
 
 ## 21.2 Multinode Connection Redistribution
@@ -79,6 +81,7 @@ The solution implemented server coordination logic during pool initialization an
 
 This automatic redistribution requires careful handling of edge cases. When a server joins or leaves the cluster, existing connections don't immediately close; instead, the pool adjusts its target size through natural attrition. As connections complete their current work and return to the pool, the pool either releases excess connections (scaling down) or creates additional connections (scaling up) to reach the new target.
 
+**[IMAGE PROMPT: Connection Redistribution Diagram]**
 Create a three-panel timeline showing connection redistribution. Panel 1 "Initial State": Three servers, each with 30 connections (boxes), total = 90. Panel 2 "Server 2 Fails": Two servers remain, each still showing 30 connections, total drops to 60, with red warning indicating capacity loss. Panel 3 "After Redistribution": Two servers, each now showing 45 connections, total restored to 90, with green checkmark indicating full capacity maintained. Use color coding: healthy connections (blue), connection redistribution (purple arrows), failed server (red X).
 
 Monitoring integration proved essential for operational confidence. The redistribution events generate log entries indicating the old and new pool sizes, helping operators understand system behavior during topology changes. Metrics exposed through Prometheus track actual pool sizes across the cluster, enabling alerts when redistribution completes or if servers maintain unexpected sizes.
@@ -101,6 +104,7 @@ Beyond specific issues, OJP's journey has revealed recurring patterns and insigh
 
 **Observability as First-Class Feature**: Initially, OJP provided basic logging. Production usage revealed that logs alone don't suffice—metrics, traces, and structured events all play crucial roles. OpenTelemetry integration wasn't an afterthought; it became fundamental to operating OJP reliably. The lesson: observability isn't a feature to bolt on later; it's architectural from the start.
 
+**[IMAGE PROMPT: Lessons Learned Infographic]**
 Create an infographic summarizing key lessons learned. Display five sections vertically: 1) "Timeout Protection" showing layered timeouts (library + application level), 2) "Fail Fast" showing explicit error vs silent failure, 3) "Cluster Thinking" showing individual server vs cluster-wide view, 4) "Gradual Adjustment" showing smooth scaling vs abrupt changes, 5) "Observable Everything" showing metrics/logs/traces coverage. Use icons and color coding consistently. Include a banner at top stating "Production Lessons from OJP" with project logo.
 
 **Testing Philosophy Evolution**: Early OJP testing focused on functional correctness—does the feature work? Production experience shifted emphasis toward non-functional testing—how does it behave under stress, during failures, when misconfigured? Integration tests now routinely include timeout scenarios, resource exhaustion, network partitions, and database failures. The lesson: testing the happy path is table stakes; testing failure modes is where reliability is proven.

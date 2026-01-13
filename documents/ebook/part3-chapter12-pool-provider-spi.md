@@ -16,6 +16,7 @@ The **ConnectionPoolProviderRegistry** serves as the discovery and factory mecha
 
 This architecture delivers powerful benefits. You gain **vendor flexibility** by easily switching between pool implementations based on performance characteristics, licensing requirements, or operational preferences. The design supports **operational isolation** through the ability to size pools independently for different databases or workloads within the same OJP instance. **Custom integrations** become straightforward when you need to integrate with proprietary connection management systems or implement specialized pooling logic. And you maintain **future compatibility** because new pool implementations can be added without modifying OJP's core code.
 
+**[IMAGE PROMPT: Connection Pool Abstraction Architecture]**
 Create a layered architecture diagram showing the abstraction stack from top to bottom. Top layer: "OJP Server (StatementServiceImpl)" in blue. Middle layer: "ConnectionPoolProviderRegistry" (discovery and factory) in purple. Third layer: "ConnectionPoolProvider SPI Interface" (with method signatures: createDataSource, closeDataSource, getStatistics) in orange. Bottom layer split into three sections showing "HikariCP Provider (Priority: 100, Default)", "DBCP Provider (Priority: 10, Alternative)", and "Custom Provider (Priority: 0, User-defined)" all in different colors connecting down to their respective implementations. Use arrows to show the flow from top to bottom, with a side note showing "ServiceLoader Discovery" pointing to the provider layer.
 
 The abstraction excels in Non-XA scenarios where traditional connection pooling applies. For XA distributed transactions, a specialized variation called the **XA Connection Pool Provider SPI** handles the unique requirements of XA session management. Chapter 10 explored this in depth, but the key difference lies in how XA connections maintain their association with transaction branches even after the application code releases them—a capability that requires custom pool logic beyond what standard connection pools provide.
@@ -81,6 +82,7 @@ The choice often comes down to your priorities. Choose **HikariCP** when perform
 
 Both providers are production-ready, well-maintained, and capable of handling demanding workloads. The SPI architecture means you can switch between them without application code changes—just modify the `ojp.datasource.provider` property or change the provider JAR on the classpath.
 
+**[IMAGE PROMPT: HikariCP vs DBCP Comparison Matrix]**
 Create a side-by-side comparison chart showing HikariCP on the left and DBCP on the right. Include these comparison dimensions as rows: Performance (HikariCP: Very High with speedometer icon, DBCP: High), Configurability (HikariCP: Streamlined/Essential, DBCP: Extensive/Granular), Maturity (HikariCP: Modern/Optimized, DBCP: Battle-Tested/Legacy), Use Cases (HikariCP: High-throughput APIs, Web apps, DBCP: Enterprise apps, Batch jobs), Learning Curve (HikariCP: Gentle, DBCP: Steeper), Monitoring Depth (HikariCP: JMX/Micrometer, DBCP: Detailed statistics). Use green for strengths, yellow for neutral, and provide icons to make it visually engaging.
 
 ## 12.3 Configuration and Discovery
@@ -181,6 +183,7 @@ PoolConfig config = PoolConfig.builder()
 
 The registry doesn't validate these properties—that responsibility lies with the provider. Invalid properties typically result in exceptions during DataSource creation, with error messages specific to the chosen provider's validation logic.
 
+**[IMAGE PROMPT: Configuration Flow Diagram]**
 Create a flowchart showing configuration flowing from left to right. Start with "ojp.properties" or "PoolConfig.builder()" on the left. Arrow to "Property Mapping" box showing standard properties (maxPoolSize, minIdle, timeouts). Split into two paths: upper path shows "Standard PoolConfig Fields" (blue) flowing to "Provider Translation", lower path shows "Provider-Specific Properties Map" (orange) bypassing translation. Both merge at "Selected Provider" (HikariCP or DBCP icon). Final arrow to "DataSource Creation" with checkmark. Add small icons for config files, translation gears, and datasource pool. Use clear colors to distinguish standard vs provider-specific flows.
 
 ## 12.4 Monitoring and Statistics
@@ -233,6 +236,7 @@ For HikariCP deployments, JMX beans provide real-time insight through tools like
 
 DBCP's statistics integrate naturally with Apache Commons Pool monitoring infrastructure. If you're already monitoring other Commons Pool instances in your environment, DBCP connection pools appear in the same tooling ecosystem.
 
+**[IMAGE PROMPT: Monitoring Dashboard Mockup]**
 Create a monitoring dashboard visualization showing 4 panels arranged in a grid. Top-left: Line graph "Connection Pool Utilization" showing active (green), idle (blue), and max (red dashed) over time. Top-right: Gauge "Current Pool Status" showing 18/30 connections used (60%) in yellow. Bottom-left: Bar chart "Connection Acquisition Latency" showing P50, P95, P99 percentiles in milliseconds. Bottom-right: Counter "Threads Awaiting Connection" showing "0" in green with checkmark. Add time range selector at top and provider name (HikariCP) in corner. Use professional dashboard styling like Grafana.
 
 ## 12.5 Building Custom Providers
@@ -547,6 +551,7 @@ class CustomPoolProviderTest {
 }
 ```
 
+**[IMAGE PROMPT: Custom Provider Development Workflow]**
 Create a workflow diagram showing 6 sequential steps from left to right with arrows connecting them. Step 1: "Implement ConnectionPoolProvider" (code icon). Step 2: "Create ServiceLoader Registration" (file icon with META-INF path). Step 3: "Map Configuration" (mapping arrows between boxes). Step 4: "Handle Lifecycle" (circular lifecycle arrows). Step 5: "Implement Statistics" (chart icon). Step 6: "Package as JAR" (JAR file icon with checkmark). Below the main flow, add a testing loop showing "Unit Tests" and "Integration Tests" feeding back to early steps. Use progressive colors from blue to green to show progress.
 
 ## 12.6 Real-World Custom Provider Examples
@@ -782,6 +787,7 @@ public class CircuitBreakerPoolProvider implements ConnectionPoolProvider {
 }
 ```
 
+**[IMAGE PROMPT: Circuit Breaker State Machine]**
 Create a state diagram showing three states: CLOSED (green circle), OPEN (red circle), and HALF_OPEN (yellow circle). CLOSED transitions to OPEN when "Failures >= Threshold" (5 failed attempts shown as X marks). OPEN transitions to HALF_OPEN after "Timeout Duration" (30s timer). HALF_OPEN transitions back to CLOSED on "Success" (checkmark) or to OPEN on "Failure" (X mark). Show connection icons flowing through in CLOSED state, blocked in OPEN state, and single test connection in HALF_OPEN state. Use bold arrows and clear labels.
 
 ## 12.7 Production Considerations
@@ -954,6 +960,7 @@ flowchart LR
     style F fill:#e1f5ff
 ```
 
+**[IMAGE PROMPT: SQL Enhancement Flow Diagram]**
 Create a detailed flowchart showing the SQL enhancement process. Start with "SQL Query" entering from the left, flowing to a "Cache Check" diamond. The cache hit path (marked "70-90% of queries") flows directly to execution with green highlighting and "<1ms" badge. The cache miss path (marked "10-30% of queries") flows through "Parse with Apache Calcite" (5-150ms in orange), then "Validate Structure" (with checkmark icon), then "Cache Result" (storing to cache with purple highlighting), and finally joins the main execution path. Show the cache as a cylinder labeled "XXHash Cache" with capacity notes. Use distinct colors for fast path (green), slow path (orange), and cache operations (purple). Include timing annotations and percentage badges to emphasize the performance characteristics.
 
 ### Performance Characteristics and Caching Strategy
@@ -1046,6 +1053,7 @@ For unexpected errors, WARN level logging captures the issue:
 
 This logging strategy keeps production logs clean while providing detailed diagnostic information when you enable DEBUG logging for troubleshooting. The enhancer never logs at ERROR level because all failures are handled gracefully with passthrough—there are no error conditions that prevent normal operation.
 
+**[IMAGE PROMPT: SQL Enhancer Monitoring Dashboard Concept]**
 Create a monitoring dashboard mockup showing SQL Enhancer metrics. Include four main panels: 1) "Cache Hit Rate" gauge showing 87% in green, 2) "Parse Performance" line graph showing parse times declining over time as cache warms up (starting at 50ms average, declining to 2ms average), 3) "Query Status" pie chart showing 87% cached (green), 11% parsed (yellow), 2% passthrough on error (orange), and 4) "Recent Activity" log showing last 5 queries with timestamps, SQL snippets, cache hit/miss status, and parse times. Use a modern dashboard style with purple/blue color scheme, clean typography, and status badges (Enabled, Healthy). Include a timestamp "2026-01-10 10:30:00" and total queries processed "1,247,892" in header.
 
 ### Use Cases and Benefits

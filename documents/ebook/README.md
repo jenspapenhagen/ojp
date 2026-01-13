@@ -6,9 +6,9 @@ This comprehensive e-book provides complete documentation for Open-J-Proxy (OJP)
 
 ## Content Overview
 
-**Total Content**: 1,043KB across 24 chapters + 6 appendices  
-**Visual Assets**: 139 AI-ready image prompts (centralized in Appendix F), 73 Mermaid diagrams  
-**Completion**: 100% (all 24 chapters written)
+**Total Content**: 822KB across 22 chapters + 4 appendices  
+**Visual Assets**: 227 AI-ready image prompts, 70 Mermaid diagrams  
+**Completion**: 100% (all 23 chapters written)
 
 ## Documentation Version
 
@@ -57,19 +57,16 @@ This e-book is fully synchronized with the latest features and implementations i
 - [Chapter 18: Testing Philosophy and Code Quality](part5-chapter18-testing-code-quality.md)
 - [Chapter 19: Contributor Recognition Program](part5-chapter19-contributor-recognition.md)
 
-### Part VI-VII: Advanced Topics & Vision (4 chapters)
+### Part VI-VII: Advanced Topics & Vision (3 chapters)
 - [Chapter 20: Implementation Analysis](part6-chapter20-implementation-analysis.md)
 - [Chapter 21: Fixed Issues and Lessons Learned](part6-chapter21-lessons-learned.md)
 - [Chapter 22: Project Vision and Future](part7-chapter22-vision-future.md)
-- [Chapter 23: Performance Engineering and Capacity Planning](part7-chapter23-performance-engineering.md)
 
-### Appendices (6 appendices)
+### Appendices (4 appendices)
 - [Appendix A: Command and Configuration Quick Reference](appendix-a-command-reference.md)
 - [Appendix B: Database-Specific Configuration Guides](appendix-b-database-guides.md)
 - [Appendix C: Glossary](appendix-c-glossary.md)
 - [Appendix D: Resources and References](appendix-d-resources.md)
-- [Appendix E: JDBC Compatibility Reference](appendix-e-jdbc-compatibility.md)
-- [Appendix F: Visual Asset Prompts](appendix-f-visual-assets.md)
 
 ## Reading Paths
 

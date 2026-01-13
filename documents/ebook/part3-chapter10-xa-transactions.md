@@ -24,6 +24,7 @@ In Phase 1 (the prepare phase), the manager asks each resource: "Can you commit 
 
 In Phase 2 (the commit or rollback phase), if all resources answered yes in Phase 1, the manager tells each one: "Commit your changes." If any resource said no, the manager instead tells everyone: "Roll back." This two-phase protocol ensures atomic commitment across all resources—either everyone commits, or everyone rolls back.
 
+**[IMAGE PROMPT: Two-Phase Commit Protocol Flow Diagram]**
 Create a professional infographic showing the 2PC protocol flow. Top section shows Transaction Manager in center with three database icons below (DB1, DB2, DB3). Phase 1 arrows show "Prepare?" flowing from manager to each database, with "XA_OK" responses flowing back. Phase 2 arrows show "Commit!" flowing from manager to each database. Use color coding: blue for Phase 1 (prepare), green for Phase 2 (commit), red dotted lines showing alternate rollback path. Include small icons showing "Write to disk" at each database during prepare phase. Style: Clean, modern, with clear visual separation between phases.
 
 ### XA in the JDBC World
@@ -133,6 +134,7 @@ The `OjpXAConnection` class wraps the server-side XA session and provides both t
 
 The `OjpXALogicalConnection` class is a crucial piece of the puzzle. This class wraps the actual `Connection` returned by `getConnection()` and enforces XA rules. It blocks direct calls to `commit()`, `rollback()`, and `setAutoCommit()` because these methods would bypass the XA protocol. In XA mode, only the `XAResource` can control transactions—applications must not interfere.
 
+**[IMAGE PROMPT: Client-Side XA Component Architecture]**
 Create a layered architecture diagram showing OJP XA client components. Top layer shows Application code icon. Second layer shows three boxes side-by-side: OjpXADataSource (labeled "Entry Point"), OjpXAConnection (labeled "Session Wrapper"), and OjpXAResource (labeled "TX Control"). Third layer shows OjpXALogicalConnection (labeled "SQL Execution" with a prohibition symbol for commit/rollback). Bottom layer shows gRPC channel icon connecting to server. Use arrows showing data flow: app -> XADataSource -> XAConnection, then splitting to XAResource (transaction operations) and LogicalConnection (SQL operations). Color code: blue for XA control path, green for SQL execution path. Style: Clean, technical, with clear layering.
 
 ### Server-Side Architecture
@@ -182,6 +184,7 @@ OJP's solution is elegant: backend sessions return to the pool only when BOTH of
 
 This approach provides several benefits. Applications can execute multiple sequential transactions on the same `XAConnection` without connection recreation overhead. Connection properties persist correctly across transaction boundaries, ensuring JDBC spec compliance. Most importantly, the physical PostgreSQL `XAConnection` stays open and ready, eliminating the 100-500ms connection establishment penalty that traditional XA implementations suffer.
 
+**[IMAGE PROMPT: Dual-Condition Lifecycle State Diagram]**
 Create a state diagram showing backend session lifecycle. Center shows large "Backend Session" box with three states: "In Pool" (green), "Active - Transaction Incomplete" (yellow), "Active - Transaction Complete" (orange). Show transitions: from Pool to Active (arrow labeled "borrow on getXAConnection()"), from Active-Incomplete to Active-Complete (arrow labeled "commit/rollback"), from Active-Complete back to Active-Incomplete (dotted arrow labeled "start new transaction"), from Active-Complete to Pool (arrow labeled "XAConnection.close()"). Add two condition badges: "Condition 1: Transaction Complete" (checkmark) and "Condition 2: XAConnection Closed" (checkmark). Both must be checked for return to pool transition. Style: Professional state diagram with clear color coding and annotations.
 
 Let me show you this lifecycle in action with a concrete example:
@@ -376,6 +379,7 @@ public class OrderService {
 }
 ```
 
+**[IMAGE PROMPT: Spring XA Transaction Flow]**
 Create a sequence diagram showing Spring transaction flow with multiple XADataSources. Left side shows Spring transaction manager icon. Middle section shows two parallel flows: one to "Orders Database" via OJP Server 1, another to "Inventory Database" via OJP Server 2. Show transaction phases: 1) @Transactional begins, 2) Execute SQL on both databases (parallel arrows), 3) Prepare phase (synchronization point), 4) Commit phase (parallel completion). Use Spring green color for framework layer, OJP blue for server layer, database gray for backends. Include timing indicators showing phases happen in sequence. Style: Technical sequence diagram with clear temporal ordering.
 
 ## Performance Characteristics
@@ -402,6 +406,7 @@ The two-phase commit protocol itself introduces some overhead that no amount of 
 
 However, this overhead is often acceptable given the guarantees XA provides. Moreover, OJP's efficient gRPC protocol and connection reuse minimize the per-operation cost of these round trips. In practice, well-designed applications can execute hundreds of XA transactions per second per OJP server, which is sufficient for most enterprise workloads.
 
+**[IMAGE PROMPT: Performance Comparison Chart]**
 Create a bar chart comparing transaction execution times. X-axis shows transaction type: "Traditional XA" (tallest bar, red, ~600ms), "OJP XA First TX" (medium bar, yellow, ~220ms), "OJP XA Subsequent TX" (shortest bar, green, ~120ms), "Local TX" (reference bar, blue, ~50ms). Break each bar into segments showing: Connection Establish (only in Traditional and First TX), 2PC Protocol Overhead (in all XA types), SQL Execution (in all types). Add annotations: "Connection reuse eliminates 80% of XA overhead" between Traditional and OJP bars. Include small database icons at top showing "New Connection" for Traditional, "Pooled Connection" for OJP. Style: Professional chart with clear labeling, color-coded segments, and data labels showing milliseconds.
 
 ## Monitoring and Troubleshooting
@@ -553,6 +558,7 @@ public void processOrderWithAllUpdates(Order order) {
 
 Each OJP server independently manages its backend session pool and delegates XA operations to its target database. The transaction manager (like Narayana or Bitronix) coordinates the two-phase commit protocol across all servers, ensuring atomicity across the entire distributed transaction.
 
+**[IMAGE PROMPT: Multinode XA Coordination Diagram]**
 Create a network topology diagram showing multinode XA coordination. Top shows Transaction Manager (circle, orange). Three branches below show OJP Server 1, 2, and 3 (rounded rectangles, blue). Below each server show corresponding databases: PostgreSQL, MySQL, and Oracle (cylinders, gray). Show bidirectional arrows between TM and each server (XA protocol, labeled "prepare/commit"). Show bidirectional arrows between each server and its database (SQL execution). Add cloud of client applications at very top connecting to TM. Include annotations: "Health Check" between servers (dotted lines), "Pool: 11 sessions" label on each server, "2PC Coordinator" label on TM. Show one server with red X (failed) and arrows showing remaining servers expanding to "Pool: 16 sessions". Style: Professional network diagram with clear layering and annotations.
 
 ## Best Practices
@@ -892,6 +898,7 @@ Frequent recycling isn't necessarily bad—it means the feature is working as de
 
 **Monitoring diagnostics** requires looking at trends rather than individual snapshots. Track utilization over time. A pool that consistently runs at 90% utilization is one server failure away from exhaustion. A pool with frequent waiter counts needs more capacity.
 
+**[IMAGE PROMPT: XA Pool Housekeeping Dashboard]**
 Create a monitoring dashboard visualization showing three panels. Top panel shows leak detection with a timeline of connections (some marked in red as "leaked" after 5min threshold), middle panel shows max lifetime with a connection lifecycle diagram (creation → active use → idle time → expiration after 30min), bottom panel shows diagnostics metrics (bar chart showing active/idle/waiters over time, line graph showing utilization percentage). Use green for healthy states, yellow for warning thresholds, red for critical states. Include timestamps and actual metric values. Style: Modern monitoring dashboard with dark background, bright colored metrics, clear visual hierarchy.
 
 ### Troubleshooting Common Issues
@@ -953,6 +960,7 @@ Always protect transactions. Remember that max lifetime never recycles active co
 
 Integrate with your monitoring systems. Parse log messages and track leak detection counts, max lifetime recycling frequency, and pool utilization over time. Set up alerts for repeated leak warnings (more than 5 per hour) and sustained high utilization (above 80% for extended periods).
 
+**[IMAGE PROMPT: Housekeeping Features Comparison Matrix]**
 Create a comparison table visualization with three rows (Leak Detection, Max Lifetime, Enhanced Diagnostics) and six columns (Purpose, Default State, CPU Overhead, Memory Overhead, Thread Requirement, When to Enable). Use icons for visual clarity: checkmark for "Enabled", X for "Disabled", speedometer for performance metrics, memory chip for memory, thread icon for threading. Color-code the overhead cells: green for <0.5%, yellow for 0.5-1%, red for >1%. Bottom shows summary: "Combined Impact: <1% overhead for production-grade connection health monitoring." Style: Professional comparison matrix with clear grid lines, icon-based visual language, color coding for quick scanning.
 
 ### Integration with Apache Commons Pool 2
@@ -1081,6 +1089,7 @@ For financial institutions implementing money transfers, use a dedicated XA coor
 
 For e-commerce platforms coordinating orders and inventory where rare inconsistencies can be manually resolved, use OJP's XA support—it provides excellent coordination with acceptable operational burden. For microservice architectures needing atomic multi-resource updates where short-term inconsistencies are tolerable, use OJP's XA—the performance and availability benefits outweigh the rare edge cases. For enterprise applications implementing business logic across multiple databases where operations teams can handle occasional manual recovery, use OJP's XA—it significantly reduces complexity while maintaining practical reliability.
 
+**[IMAGE PROMPT: XA Guarantees Spectrum Diagram]**
 Create a horizontal spectrum visualization showing the continuum of XA guarantees. Left side labeled "XA API Compliance" with checkmark and icons: JDBC interfaces (code icon), 2PC protocol (numbered circles 1→2), transaction coordination (organization chart). Center section labeled "OJP XA Support" with large green zone showing: normal operations (99.9%), common failures (network icon, server restart icon), rare edge cases (warning triangle with "manual recovery" label). Right side labeled "Strict XA Correctness" with icons crossed out: durable logs (database with X), crash recovery (broken server with X), zero heuristics (no ambiguity symbol with X). Bottom shows arrow labeled "Increasing Guarantee Strength" from left to right. Color coding: green for what OJP provides, yellow for boundary cases, red for what OJP cannot guarantee. Style: Professional spectrum diagram with clear zones, icon-based visual language, explicit boundary between supported and unsupported guarantees.
 
 ### Operational Recommendations
@@ -1137,6 +1146,7 @@ For applications requiring atomic updates across multiple databases or resources
 
 ---
 
+**[IMAGE PROMPT: Chapter Summary Infographic]**
 Create a visual summary showing OJP XA benefits vs. traditional XA. Left side shows "Traditional XA" with icons: new connection for each TX (stopwatch showing 500ms), complex manual pooling (confused person), single point of failure (broken link). Right side shows "OJP XA" with icons: pooled connections (swimming pool with stopwatch showing 50ms), automatic management (robot), high availability (interconnected servers). Center shows "80% Faster, 100% Reliable" in large text. Bottom shows mini timeline: Transaction 1 → Transaction 2 → Transaction 3, with line showing "Same Connection" underneath. Style: Modern infographic with icons, contrasting colors (red for traditional problems, green for OJP solutions), clear visual hierarchy.
 
 **Key Takeaways:**

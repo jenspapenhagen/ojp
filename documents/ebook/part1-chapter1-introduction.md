@@ -10,6 +10,10 @@ Open J Proxy (OJP) is a **Type 3 JDBC Driver** and **Layer 7 Proxy Server** desi
 
 ### Understanding Type 3 JDBC Drivers
 
+**[IMAGE PROMPT 1]**: Create a diagram showing the three types of JDBC drivers:
+- Type 1 (JDBC-ODBC Bridge): Shows application → JDBC → ODBC → Database
+- Type 2 (Native-API): Shows application → JDBC → Native Library → Database  
+- Type 3 (Network Protocol): Shows application → JDBC → Middleware Server → Database
 Highlight Type 3 with emphasis on the network protocol layer. Use professional technical style with clean lines and modern colors (blues and greens). Show OJP logo on the Type 3 middleware component.
 
 JDBC drivers come in different types, each with distinct characteristics. Type 1 drivers use the JDBC-ODBC Bridge to translate JDBC calls into ODBC calls, while Type 2 drivers convert JDBC calls directly to database-specific native calls. Type 4 drivers, the most common today, directly convert JDBC calls to the database-specific protocol in pure Java. But OJP takes a different approach: it's a **Type 3 driver**, meaning it communicates with a middleware server (the OJP Server) that then connects to the database.
@@ -32,6 +36,8 @@ The Type 3 architecture means all database connections are managed centrally by 
 
 ### Layer 7 Proxy Architecture
 
+**[IMAGE PROMPT 2]**: Create an illustration showing the OSI model layers (1-7) on the left side, with Layer 7 (Application Layer) highlighted. On the right, show OJP operating at Layer 7, intercepting JDBC/SQL operations and intelligently routing them to a database pool. Use professional network diagram style with clear layer separation. Include labels: "HTTP", "SQL", "JDBC" at Layer 7.
+
 OJP operates as a **Layer 7 (Application Layer) proxy**, which means it understands and operates on the application protocol itself—in this case, JDBC/SQL. Unlike lower-layer proxies (like Layer 4 TCP proxies), OJP can inspect SQL statements and make intelligent routing decisions. It can classify queries as fast or slow (enabling the slow query segregation feature), manage transactions at the application protocol level, and implement connection pooling with full awareness of JDBC semantics. This deep protocol understanding also enables OJP to provide detailed telemetry about query execution and performance.
 
 ### Core Definition
@@ -48,6 +54,7 @@ Modern software architectures—microservices, event-driven systems, and serverl
 
 ### The Connection Storm Problem
 
+**[IMAGE PROMPT 3]**: Create a dramatic "before and after" comparison:
 LEFT SIDE (Problem): Show multiple microservice instances (10-20 containers) each with 10-20 connections all pointing to a single database. The database should look overwhelmed with red warning indicators. Label: "Traditional Architecture: N instances × M connections = Database Overload"
 RIGHT SIDE (Solution): Show the same microservice instances connecting to OJP Server (shown as a smart gateway), which maintains a controlled pool of connections to the database. The database looks calm with green indicators. Label: "OJP Architecture: Controlled Connection Pool"
 Use a modern infographic style with icons for microservices, clear connection lines, and professional color scheme.
@@ -120,6 +127,7 @@ OJP solves the connection management problem through a clever architectural patt
 
 ### Virtual vs Real Connections
 
+**[IMAGE PROMPT 4]**: Create a detailed technical diagram:
 LEFT: Show application code with JDBC connection objects (labeled "Virtual Connections" - shown as lightweight, hollow circles in blue)
 CENTER: Show OJP Server as a gateway/bridge component
 RIGHT: Show database with actual connection pool (labeled "Real Connections" - shown as solid, filled circles in green)
@@ -170,6 +178,7 @@ sequenceDiagram
 
 ### Smart Backpressure Mechanism
 
+**[IMAGE PROMPT 5]**: Create an infographic showing a flow control system:
 Show traffic/load coming from left (multiple application instances)
 OJP Server in middle acting as a "smart valve" or "traffic controller" 
 Database on right with stable, controlled flow
@@ -266,6 +275,13 @@ stateDiagram-v2
 
 ### Multi-Database Support
 
+**[IMAGE PROMPT 6]**: Create a diagram showing OJP Server at the center connected to multiple different databases:
+- PostgreSQL (with logo)
+- MySQL (with logo)
+- Oracle (with logo)
+- SQL Server (with logo)
+- MariaDB (with logo)
+- H2 (with logo)
 Show OJP managing separate connection pools for each database
 Use a hub-and-spoke layout with OJP as the central hub
 Professional enterprise architecture diagram style
@@ -314,6 +330,7 @@ OJP implements centralized pooling where all applications share a single, effici
 
 With OJP, you can scale your application instances independently without increasing database connections. Consider the dramatic difference: with the traditional approach, 5 instances with 20 connections each require 100 database connections, 10 instances need 200, and 50 instances would demand 1,000 connections. With OJP, all scenarios use just 20 connections—the same pool size regardless of application scale.
 
+**[IMAGE PROMPT 7]**: Create a comparison chart/graph:
 X-axis: Number of application instances (5, 10, 20, 50)
 Y-axis: Database connections needed
 Two lines: "Traditional" (exponential growth) vs "OJP" (flat line)
@@ -367,6 +384,8 @@ Before adopting OJP, it's essential to understand whether it fits your use case.
 
 ### Ideal Workloads for OJP
 
+**[IMAGE PROMPT 16]**: Create a comparison matrix showing three workload types (OLTP, Mixed, Batch) rated across multiple dimensions: Connection Efficiency, Latency Sensitivity, Transaction Patterns, Scale Elasticity. Use traffic light colors (green/yellow/red) to show fit. OLTP and Mixed workloads should be mostly green, while Batch should show mixed results. Professional business matrix style.
+
 OJP excels in specific architectural patterns and workload types:
 
 #### ✅ Online Transaction Processing (OLTP)
@@ -414,6 +433,8 @@ OJP excels in specific architectural patterns and workload types:
 
 ### Workloads NOT Recommended for OJP
 
+**[IMAGE PROMPT 17]**: Create warning-style infographic showing anti-patterns: ultra-low latency trading (with clock icon showing microseconds), data warehousing (with large database icon), single monolithic app (one big server), embedded systems (small device icon). Use red/orange warning colors. Professional warning poster style.
+
 Understanding when NOT to use OJP is as important as knowing when to use it:
 
 #### ❌ Ultra-Low Latency Requirements (Microseconds)
@@ -460,6 +481,8 @@ Understanding when NOT to use OJP is as important as knowing when to use it:
 
 ### Trade-Offs and Non-Guarantees
 
+**[IMAGE PROMPT 18]**: Create a balanced scale diagram showing trade-offs: Left side "What You Gain" (scalability, centralization, backpressure), Right side "What You Accept" (latency overhead, complexity, dependency). Use professional illustration style with icons representing each concept.
+
 OJP makes intentional trade-offs that may not suit every use case:
 
 #### ✅ What OJP Provides
@@ -481,6 +504,8 @@ OJP makes intentional trade-offs that may not suit every use case:
 - **Dependency vs. Efficiency**: Applications depend on OJP Server availability in exchange for efficient resource usage
 
 ### New Failure Modes Introduced
+
+**[IMAGE PROMPT 19]**: Create a fault-tree diagram showing new failure scenarios: OJP Server down, network partition, gRPC issues, pool exhaustion. Use red indicators for failure points and yellow for degraded states. Include mitigation strategies in green boxes. Professional risk assessment diagram style.
 
 Understanding new failure modes helps you prepare mitigation strategies:
 
@@ -540,6 +565,8 @@ Understanding new failure modes helps you prepare mitigation strategies:
 - Monitor per-application connection usage (Chapter 13)
 
 ### Decision Framework: Should You Adopt OJP?
+
+**[IMAGE PROMPT 20]**: Create a decision tree flowchart starting with "Considering OJP?" and branching through key questions: "Multiple app instances?", "OLTP workload?", "Can accept 1-3ms latency?", "Need elastic scaling?". Green paths lead to "OJP is a good fit", red paths lead to "Consider alternatives". Professional flowchart style with clear yes/no branches.
 
 Use this framework to assess whether OJP reduces net risk for your team:
 

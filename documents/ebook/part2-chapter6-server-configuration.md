@@ -8,6 +8,8 @@ Before diving into specific settings, it's important to understand how OJP handl
 
 This hierarchy becomes particularly valuable in containerized environments. You might set production defaults through environment variables in your Docker or Kubernetes configuration, then override specific settings for troubleshooting or testing without modifying your deployment files. The server reads both configuration sources at startup and merges them intelligently, ensuring you always get the behavior you expect.
 
+**[IMAGE PROMPT: Create a layered diagram showing configuration hierarchy with three levels: "JVM System Properties" at the top (highest priority, shown in bold color), "Environment Variables" in the middle (medium priority), and "Default Values" at the bottom (lowest priority, shown in faded color). Use arrows flowing upward labeled "Overrides" to show precedence. Include example values at each level like `-Dojp.server.port=8080`, `OJP_SERVER_PORT=1059`, and `default: 1059`. Style: Clean, hierarchical infographic with color-coded priority levels.]**
+
 ```mermaid
 graph TD
     A[Configuration Request] --> B{JVM Property Set?}
@@ -27,6 +29,8 @@ Let's start with the foundational settings that control how your OJP server oper
 The server also exposes a separate Prometheus metrics endpoint on port 9159 by default. This separation is intentional—it allows you to apply different network policies and access controls to your operational metrics versus your database traffic. In production, you might expose the gRPC port only to your application network while making the Prometheus endpoint available to your monitoring infrastructure on a separate network segment.
 
 Performance tuning starts with the thread pool size, which defaults to 200 threads. This setting controls how many concurrent client requests the server can handle. The right value depends on your workload characteristics and server resources. A CPU-intensive workload might benefit from fewer threads (closer to the number of CPU cores), while I/O-bound workloads can often handle more threads. Start with the default and adjust based on your monitoring data.
+
+**[IMAGE PROMPT: Create a technical server architecture diagram showing OJP Server as a central component with two network interfaces: one labeled "gRPC Port :1059" (shown with database connection icons) and another labeled "Prometheus Port :9159" (shown with metrics/monitoring icons). Include a thread pool visualization showing multiple worker threads (default: 200) handling concurrent requests. Use professional blue and gray color scheme with clear labels and connection lines. Style: Modern technical architecture diagram.]**
 
 The maximum request size setting provides protection against oversized requests that could impact server stability. The default of 4MB is generous for typical JDBC operations, but you might increase it if you're working with very large result sets or binary data. Just remember that larger request sizes consume more memory, so balance this against your available resources.
 
@@ -87,6 +91,8 @@ IP whitelisting gives you fine-grained control over who can connect to your serv
 
 By default, both endpoints accept connections from anywhere (0.0.0.0/0), which is perfect for development but inappropriate for production. In production environments, you'll want to lock down access to specific networks or IP addresses. The server supports multiple formats for defining allowed addresses, including individual IPs, CIDR notation for network ranges, and comma-separated lists for multiple rules.
 
+**[IMAGE PROMPT: Create a network security diagram showing OJP Server at the center with two separate firewalls/shields. The left shield guards "gRPC Endpoint" with rules like "192.168.1.0/24" and "10.0.0.0/8" (labeled "Application Network"). The right shield guards "Prometheus Endpoint" with rules like "192.168.100.0/24" (labeled "Monitoring Network"). Show blocked connections (red X) and allowed connections (green checkmark) from different IP ranges. Style: Professional security diagram with red, green, and blue color coding.]**
+
 A common pattern is to allow gRPC connections from your application network while restricting Prometheus access to your monitoring infrastructure. This separation of concerns reflects the principle of least privilege—applications need database access, but they don't need access to operational metrics.
 
 ```bash
@@ -114,6 +120,8 @@ The IP whitelist supports several formats to match your network topology. You ca
 ```
 
 Remember that security configuration is checked on every connection attempt. The server performs efficient CIDR matching, so even with complex rulesets, the performance impact is negligible. However, overly permissive rules can't be fixed with monitoring—start restrictive and open up as needed.
+
+**[IMAGE PROMPT: Create a flowchart diagram showing IP access control decision process. Start with "Incoming Connection" at top, flow through "Extract Client IP", then "Check Against Whitelist Rules" (shown as a list icon with CIDR rules), then a diamond decision "Match Found?". On "Yes" path: "Allow Connection" (green box), on "No" path: "Reject Connection" (red box) with "Log Security Event" beneath it. Style: Clean technical flowchart with green/red color coding for accept/reject paths.]**
 
 ## 6.4 Logging and Debugging
 
@@ -151,6 +159,8 @@ DEBUG level adds request routing decisions, connection acquisition and release e
 
 TRACE level includes everything from DEBUG plus gRPC message contents, thread scheduling details, raw protocol events, and internal state transitions. This is your "show me everything" level for deep debugging sessions.
 
+**[IMAGE PROMPT: Create a layered visualization showing three log level views of the same event. Top layer labeled "INFO" shows a single line: "Connection established to PostgreSQL". Middle layer labeled "DEBUG" shows INFO plus 3-4 additional lines with connection details. Bottom layer labeled "TRACE" shows DEBUG plus many detailed lines including raw protocol messages and timestamps. Use different background shades (light, medium, dark) to distinguish layers. Style: Code editor-style display with monospace font and subtle line numbers.]**
+
 The log format is designed for both human readability and machine parsing. Each log entry includes a timestamp, thread ID, log level, logger name, and message. This structured format works well with log aggregation tools like Splunk, ELK Stack, or CloudWatch Logs.
 
 ```mermaid
@@ -171,6 +181,8 @@ graph LR
 Modern observability goes beyond logs. OJP integrates with OpenTelemetry, providing distributed tracing and metrics that help you understand your application's behavior across service boundaries. The server generates detailed telemetry data about request processing, database operations, and internal performance metrics.
 
 OpenTelemetry support is enabled by default, making OJP immediately compatible with observability platforms like Jaeger, Zipkin, and Grafana Tempo. The server automatically instruments all key operations, creating spans for connection acquisition, query execution, and result processing. These spans carry contextual information that helps you correlate database operations with application requests.
+
+**[IMAGE PROMPT: Create a distributed tracing visualization showing a waterfall diagram of nested spans. Start with "HTTP Request" span at top, followed by nested "JDBC Query" span, then "OJP Server Processing" span (highlighted), then "Database Query" span at bottom. Show timing bars for each span with duration labels. Include trace ID and span IDs. Use different colors for each service layer (blue for app, orange for OJP, green for database). Style: Modern APM tool waterfall display with timing metrics.]**
 
 The default configuration works with OpenTelemetry's standard environment variables and auto-discovery mechanisms. If you're using the OpenTelemetry Java agent, it will automatically detect and configure OJP's telemetry export. For custom configurations, you can specify an explicit endpoint:
 
@@ -212,6 +224,8 @@ sequenceDiagram
 Resilience patterns are built into OJP, starting with the circuit breaker. When database connections consistently fail, the circuit breaker prevents your applications from overwhelming the database with retry attempts. Instead, it fails fast after a configured threshold, giving the database time to recover while protecting your application threads from hanging on impossible operations.
 
 The circuit breaker operates in three states: closed (normal operation), open (failing fast), and half-open (testing recovery). When connection attempts fail repeatedly, the breaker trips to the open state and rejects new requests immediately. After a timeout period, it enters half-open state to test if the database has recovered. If test requests succeed, it closes again; if they fail, it remains open for another timeout period.
+
+**[IMAGE PROMPT: Create a state machine diagram showing circuit breaker states. Three circles labeled "CLOSED" (green), "OPEN" (red), and "HALF-OPEN" (yellow). Arrows between states: "CLOSED to OPEN" labeled "3 failures" (configurable threshold), "OPEN to HALF-OPEN" labeled "60s timeout", "HALF-OPEN to CLOSED" labeled "Success", "HALF-OPEN to OPEN" labeled "Failure". Include small icons: green checkmark for CLOSED, red X for OPEN, yellow caution symbol for HALF-OPEN. Style: Clean state diagram with color-coded states and clear transition labels.]**
 
 The failure threshold defaults to 3 consecutive failures, which strikes a balance between resilience and responsiveness. If you're experiencing intermittent network issues, you might increase this threshold to avoid unnecessary circuit trips. In environments where database downtime is rare but catastrophic, a lower threshold helps protect application resources more aggressively.
 
@@ -265,6 +279,8 @@ One of OJP's most powerful features is slow query segregation, which prevents lo
 
 The feature works by monitoring operation execution times and building a statistical model of each operation's performance characteristics. When an operation consistently takes longer than average, the server classifies it as slow and routes it to the slow slot pool. Fast operations continue using the fast slot pool, maintaining their responsiveness even under mixed workload pressure.
 
+**[IMAGE PROMPT: Create a side-by-side comparison showing connection pool behavior. Left side labeled "Without Segregation": single queue with fast queries (lightning bolt icons) blocked behind slow queries (turtle icons), showing red warning indicators. Right side labeled "With Segregation": two separate queues, top queue "Fast Slots (80%)" with lightning bolts flowing freely, bottom queue "Slow Slots (20%)" with turtle icons, showing green success indicators. Style: Before/after comparison with color-coded performance indicators.]**
+
 Slow query segregation is enabled by default because it provides significant benefits with minimal configuration. The percentage of slots reserved for slow operations defaults to 20%, which accommodates most workload patterns. You might increase this if you have many legitimate long-running queries, or decrease it if your workload is predominantly fast transactional operations.
 
 ```bash
@@ -285,6 +301,8 @@ Slow query segregation is enabled by default because it provides significant ben
 The idle timeout setting controls when slots can borrow from the other pool. If the fast pool is empty but slow slots sit idle, fast operations can temporarily borrow those slots. This prevents resource waste while maintaining the segregation benefits when both pools are active. The default 10-second timeout means slots must be idle briefly before lending—preventing constant oscillation.
 
 Timeout settings for acquiring slots provide backpressure when pools are exhausted. Fast operations wait up to 60 seconds by default, while slow operations get more generous 120-second timeouts. These asymmetric timeouts reflect the different expectations: fast operations should complete quickly or fail, while slow operations naturally take longer and deserve more patience.
+
+**[IMAGE PROMPT: Create a dynamic allocation diagram showing how idle slots can be borrowed between pools. Show two pools: "Fast Slots" (4 boxes, 3 active, 1 idle) and "Slow Slots" (2 boxes, 1 active, 1 idle). Draw a curved arrow labeled "Temporary Borrow (if idle >10s)" from the idle slow slot to fast pool. Include a timer icon and "Returns when fast demand drops" annotation. Use green for active, gray for idle, and dotted lines for temporary borrowing. Style: Technical system diagram with clear state visualization.]**
 
 The classification algorithm adapts to your workload patterns over time. An operation that starts fast but becomes slow under load will gradually migrate to slow slot management. This dynamic behavior means you don't need to manually categorize your queries—the server learns from observation.
 
@@ -346,6 +364,8 @@ export OJP_OPENTELEMETRY_ENDPOINT=http://jaeger:4317
 export OJP_SERVER_SLOWQUERYSEGREGATION_ENABLED=true
 ```
 
+**[IMAGE PROMPT: Create a comparison table visualization showing recommended configurations for three environments. Three columns labeled "Development", "Staging", and "Production". Rows for key settings like Log Level (DEBUG/INFO/INFO), Security (Open/Restricted/Locked Down), Telemetry (Optional/Enabled/Required), Thread Pool (Low/Medium/High), Circuit Breaker (Tolerant/Balanced/Strict). Use color coding: green for development-friendly, yellow for balanced, red for production-strict. Style: Professional configuration matrix with clear visual hierarchy.]**
+
 Monitor your configuration's effectiveness through the Prometheus metrics endpoint. Watch for circuit breaker trips, connection pool saturation, slow query segregation balance, and request latencies. These metrics tell you if your configuration matches your workload or needs adjustment.
 
 Remember that configuration is not set-and-forget. As your application evolves and workload patterns change, revisit your OJP server configuration. What worked for 1000 requests per second might not work for 10000. Continuous monitoring and periodic tuning keep your server running optimally.
@@ -369,6 +389,8 @@ When things don't work as expected, configuration issues are often the culprit. 
 Common configuration mistakes include conflicting port assignments, invalid IP whitelist formats, out-of-range percentage values, and mismatched property names. The startup logs show exactly which configuration values were loaded and from which sources, making it easy to verify your settings took effect.
 
 If you're experiencing unexpected behavior, enable DEBUG logging temporarily and watch the startup sequence. You'll see each configuration property being loaded, any validation errors, and the final active configuration. This diagnostic information usually points directly to the problem.
+
+**[IMAGE PROMPT: Create a troubleshooting flowchart for common configuration issues. Start with "Server Won't Start" diamond. Branch to "Check Logs" which shows code snippet of startup logs. From there, multiple paths: "Port Conflict?" leads to "Change Port", "Invalid IP Format?" leads to "Fix CIDR Syntax", "Missing Required Value?" leads to "Set Property". Each resolution path leads back to "Restart Server" then "Verify Success" (green checkmark). Style: Decision tree flowchart with code snippets and clear resolution paths.]**
 
 For Docker deployments, remember that environment variables must use the `OJP_` prefix and uppercase with underscores. JVM system properties use the `ojp.` prefix with lowercase and dots. Mixing these formats is a common mistake that results in configuration being silently ignored.
 
@@ -395,3 +417,5 @@ OJP server configuration gives you precise control over server behavior, securit
 Key configuration areas include core server settings for network and threading, security controls through IP whitelisting, logging levels for operational visibility, OpenTelemetry integration for observability, circuit breakers for resilience, and slow query segregation for performance under mixed workloads. Each area offers sensible defaults that you can refine based on monitoring data.
 
 Start simple, monitor closely, and adjust based on observed behavior. Good configuration emerges from understanding your workload and using OJP's flexibility to match it, not from cargo-culting settings from other environments.
+
+**[IMAGE PROMPT: Create a summary mind map with "OJP Server Configuration" at the center. Six main branches radiating outward: "Core Settings" (server icon), "Security" (lock icon), "Logging" (document icon), "Telemetry" (graph icon), "Circuit Breaker" (shield icon), and "Slow Query Segregation" (speedometer icon). Each branch has 2-3 sub-branches with key points. Use colors to group related concepts and make it visually hierarchical. Style: Modern mind map with icons and color coding.]**
