@@ -354,8 +354,8 @@ Create a custom `values.yaml` file to override defaults:
 replicaCount: 3
 
 server:
-  # Custom server port
-  port: 8080
+  # Custom server port (avoid 8080 as it's Tomcat's default)
+  port: 9059
   
   # Increase thread pool for higher concurrency
   threadPoolSize: 500
@@ -380,13 +380,6 @@ resources:
   requests:
     cpu: "500m"
     memory: "1Gi"
-
-# Enable autoscaling (see note below about OJP multinode considerations)
-autoscaling:
-  enabled: false  # Disabled by default - see architectural note
-  minReplicas: 2
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 70
 
 # Use NodePort for external access
 service:
@@ -441,26 +434,42 @@ helm upgrade ojp-server ojp/ojp-server \
     --values my-values.yaml
 ```
 
-**Rolling Update Behavior**:
+**Rolling Update Behavior with StatefulSet**:
+
+Rolling updates are possible with the StatefulSet architecture, and OJP will automatically redirect traffic to remaining servers when one goes down. However, **there is an important trade-off to understand**:
+
+⚠️ **In-Flight Transaction Risk**: During rolling upgrades, in-flight transactions on the terminating pod **will fail**. This is because:
+- OJP does not currently provide connection draining functionality
+- StatefulSet pods are terminated without graceful shutdown period for active transactions
+- The pod termination is immediate once Kubernetes sends the SIGTERM signal
+
+**Mitigation Strategies**:
+
+1. **Application-Side Request Flow Control**: If zero transaction loss is critical, temporarily pause or drain request flow at the application level before initiating the upgrade
+2. **Accept Limited Failures**: For most use cases, the small number of failed transactions during the brief pod restart is acceptable and will be retried by the application
+3. **Low-Traffic Window**: Schedule upgrades during maintenance windows or low-traffic periods
+4. **Transaction Idempotency**: Ensure your application logic can safely retry failed operations
 
 ```mermaid
 sequenceDiagram
     participant H as Helm
     participant K as Kubernetes
-    participant P1 as Old Pod
-    participant P2 as New Pod
+    participant P1 as Old Pod (ojp-server-0)
+    participant P2 as New Pod (ojp-server-0)
     participant S as Service
+    participant A as Applications
 
     H->>K: Upgrade command
-    K->>P2: Create new pod
+    K->>P2: Create new pod with updated image
     P2->>P2: Start & Health Check
-    P2->>K: Ready
-    K->>S: Add new pod to service
-    K->>P1: Terminate old pod
+    P2->>K: Ready signal
+    K->>S: Update service endpoint
+    K->>P1: SIGTERM (immediate)
+    P1->>A: In-flight transactions FAIL
+    P1->>P1: Process terminates
     P1->>S: Remove from service
-    P1->>P1: Graceful shutdown
     
-    Note over K,S: Zero-downtime upgrade
+    Note over K,A: In-flight transactions lost<br/>New connections route to new pod
 ```
 
 **Rollback if needed**:
@@ -720,14 +729,16 @@ resources:
 | Production | 500m | 1Gi | 2000m | 2Gi |
 | High Load | 1000m | 2Gi | 4000m | 4Gi |
 
-#### Autoscaling Configuration
+#### Resource Sizing Guidelines
 
-⚠️ **Important Note on Autoscaling**: OJP's current multinode architecture does **not support dynamic autoscaling** in Kubernetes without additional infrastructure for service discovery. The JDBC driver must be configured with explicit server addresses, so when pods are added or removed, clients require reconfiguration.
+Choose resource allocations based on your workload profile. The table below shows recommended CPU and memory values using Kubernetes resource notation:
 
-```yaml
-# Autoscaling is disabled by default for OJP
-autoscaling:
-  enabled: false                             # Not recommended without dynamic discovery
+**Kubernetes Resource Notation**:
+- **m** = millicores (1000m = 1 CPU core)
+- **Mi** = Mebibytes (1024 MiB = 1 GiB)  
+- **Gi** = Gibibytes (1024 GiB = 1 TiB)
+
+
   
 # Instead, use a fixed replica count sized for peak load
 replicaCount: 3                              # Static count based on capacity planning

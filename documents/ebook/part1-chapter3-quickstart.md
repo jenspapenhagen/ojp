@@ -538,17 +538,17 @@ graph TD
 **Spring Boot Example**:
 
 ```yaml
-# application.yml - DISABLE Spring's HikariCP
+# application.yml - Use SimpleDataSource (NO pooling)
 spring:
   datasource:
     url: jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb
     username: myuser
     password: mypassword
-    # IMPORTANT: Disable HikariCP
-    type: org.openjproxy.jdbc.OjpDataSource  # If you have a custom DataSource
-    hikari:
-      maximum-pool-size: 0  # Or remove hikari configuration entirely
+    # IMPORTANT: Use SimpleDataSource instead of HikariCP
+    type: org.openjproxy.jdbc.SimpleDataSource
 ```
+
+**Note**: For best results, remove HikariCP entirely from your Maven/Gradle dependencies when using OJP. This prevents any accidental pooling configuration and ensures clean integration with OJP's server-side pooling.
 
 **Quarkus Example**:
 

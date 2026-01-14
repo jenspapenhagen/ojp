@@ -465,9 +465,36 @@ Performance benchmarks tell the story clearly. HikariCP achieves approximately 4
 
 **[IMAGE PROMPT 9]**: Create an infographic showing optimal pool sizing:
 Show relationship between: # of cores, # of concurrent queries, optimal pool size
-Include the formula: connections = ((core_count * 2) + effective_spindle_count)
+Include modern formulas for SSD/cloud storage and traditional spinning disk scenarios
 Visualize with server icons, CPU cores, and database connections
 Professional technical infographic style
+
+#### Modern Pool Sizing Formula
+
+For modern cloud and SSD-based deployments, the traditional spindle-count formula is outdated. Here's a more practical approach:
+
+**Modern Formula** (recommended for SSD/cloud databases):
+```
+pool_size = (target_concurrency * 2) + extra_buffer
+```
+
+Where:
+- `target_concurrency` = number of queries you expect to run simultaneously
+- `extra_buffer` = 2-5 connections for overhead (monitoring, health checks)
+
+**Example**: If you expect 20 concurrent queries at peak load, set pool size to `(20 * 2) + 5 = 45 connections`
+
+**Why This Works Better**:
+- SSDs and cloud storage don't have spindle contention
+- Modern databases use connection pooling internally
+- Focuses on actual concurrency needs, not hardware mechanics
+- Simpler to understand and tune
+
+**Traditional Formula** (for spinning disk legacy systems):
+```
+connections = ((core_count * 2) + effective_spindle_count)
+```
+This formula is still valid for traditional on-premise databases with spinning disks, where disk I/O is the bottleneck.
 
 OJP Server manages separate HikariCP pools for each database:
 
