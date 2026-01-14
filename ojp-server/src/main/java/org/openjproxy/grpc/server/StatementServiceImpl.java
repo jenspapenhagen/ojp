@@ -137,10 +137,6 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
 
     private final static String RESULT_SET_METADATA_ATTR_PREFIX = "rsMetadata|";
 
-    static {
-        DriverUtils.registerDrivers();
-    }
-
     // ActionContext for refactored actions
     private final org.openjproxy.grpc.server.action.ActionContext actionContext;
     
