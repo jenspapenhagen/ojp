@@ -2300,33 +2300,8 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
     @Override
     public void xaSetTransactionTimeout(com.openjproxy.grpc.XaSetTransactionTimeoutRequest request, 
                                         StreamObserver<com.openjproxy.grpc.XaSetTransactionTimeoutResponse> responseObserver) {
-        log.debug("xaSetTransactionTimeout: session={}, seconds={}", 
-                request.getSession().getSessionUUID(), request.getSeconds());
-        
-        try {
-            Session session = sessionManager.getSession(request.getSession());
-            if (session == null || !session.isXA() || session.getXaResource() == null) {
-                throw new SQLException("Session is not an XA session");
-            }
-            
-            boolean success = session.getXaResource().setTransactionTimeout(request.getSeconds());
-            if (success) {
-                session.setTransactionTimeout(request.getSeconds());
-            }
-            
-            com.openjproxy.grpc.XaSetTransactionTimeoutResponse response = 
-                    com.openjproxy.grpc.XaSetTransactionTimeoutResponse.newBuilder()
-                    .setSession(session.getSessionInfo())
-                    .setSuccess(success)
-                    .build();
-            responseObserver.onNext(response);
-            responseObserver.onCompleted();
-
-        } catch (Exception e) {
-            log.error("Error in xaSetTransactionTimeout", e);
-            SQLException sqlException = (e instanceof SQLException) ? (SQLException) e : new SQLException(e);
-            sendSQLExceptionMetadata(sqlException, responseObserver);
-        }
+        new org.openjproxy.grpc.server.action.transaction.XaSetTransactionTimeoutAction(sessionManager)
+                .execute(request, responseObserver);
     }
 
     @Override
