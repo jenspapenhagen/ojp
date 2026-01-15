@@ -13,6 +13,7 @@ public class SqlEnhancerConfigurationTest {
     
     private static final String MODE_PROPERTY = "ojp.sql.enhancer.mode";
     private static final String DIALECT_PROPERTY = "ojp.sql.enhancer.dialect";
+    private static final String TARGET_DIALECT_PROPERTY = "ojp.sql.enhancer.targetDialect";
     private static final String RULES_PROPERTY = "ojp.sql.enhancer.rules";
     private static final String OPTIMIZATION_TIMEOUT_PROPERTY = "ojp.sql.enhancer.optimizationTimeout";
     private static final String LOG_OPTIMIZATIONS_PROPERTY = "ojp.sql.enhancer.logOptimizations";
@@ -25,6 +26,7 @@ public class SqlEnhancerConfigurationTest {
         // Clear any existing properties
         System.clearProperty(MODE_PROPERTY);
         System.clearProperty(DIALECT_PROPERTY);
+        System.clearProperty(TARGET_DIALECT_PROPERTY);
         System.clearProperty(RULES_PROPERTY);
         System.clearProperty(OPTIMIZATION_TIMEOUT_PROPERTY);
         System.clearProperty(LOG_OPTIMIZATIONS_PROPERTY);
@@ -38,6 +40,7 @@ public class SqlEnhancerConfigurationTest {
         // Clean up
         System.clearProperty(MODE_PROPERTY);
         System.clearProperty(DIALECT_PROPERTY);
+        System.clearProperty(TARGET_DIALECT_PROPERTY);
         System.clearProperty(RULES_PROPERTY);
         System.clearProperty(OPTIMIZATION_TIMEOUT_PROPERTY);
         System.clearProperty(LOG_OPTIMIZATIONS_PROPERTY);
@@ -53,6 +56,7 @@ public class SqlEnhancerConfigurationTest {
         // Verify defaults
         assertEquals("VALIDATE", config.getSqlEnhancerMode());
         assertEquals("GENERIC", config.getSqlEnhancerDialect());
+        assertEquals("", config.getSqlEnhancerTargetDialect());
         assertEquals("", config.getSqlEnhancerRules());
         assertEquals(100, config.getSqlEnhancerOptimizationTimeout());
         assertTrue(config.isSqlEnhancerLogOptimizations());
@@ -75,6 +79,14 @@ public class SqlEnhancerConfigurationTest {
         ServerConfiguration config = new ServerConfiguration();
         
         assertEquals("POSTGRESQL", config.getSqlEnhancerDialect());
+    }
+    
+    @Test
+    public void testCustomTargetDialectConfiguration() {
+        System.setProperty(TARGET_DIALECT_PROPERTY, "MYSQL");
+        ServerConfiguration config = new ServerConfiguration();
+        
+        assertEquals("MYSQL", config.getSqlEnhancerTargetDialect());
     }
     
     @Test
@@ -123,6 +135,7 @@ public class SqlEnhancerConfigurationTest {
     public void testAllCustomConfiguration() {
         System.setProperty(MODE_PROPERTY, "TRANSLATE");
         System.setProperty(DIALECT_PROPERTY, "MYSQL");
+        System.setProperty(TARGET_DIALECT_PROPERTY, "POSTGRESQL");
         System.setProperty(RULES_PROPERTY, "FILTER_REDUCE,PROJECT_REDUCE,FILTER_MERGE");
         System.setProperty(OPTIMIZATION_TIMEOUT_PROPERTY, "150");
         System.setProperty(LOG_OPTIMIZATIONS_PROPERTY, "false");
@@ -134,6 +147,7 @@ public class SqlEnhancerConfigurationTest {
         
         assertEquals("TRANSLATE", config.getSqlEnhancerMode());
         assertEquals("MYSQL", config.getSqlEnhancerDialect());
+        assertEquals("POSTGRESQL", config.getSqlEnhancerTargetDialect());
         assertEquals("FILTER_REDUCE,PROJECT_REDUCE,FILTER_MERGE", config.getSqlEnhancerRules());
         assertEquals(150, config.getSqlEnhancerOptimizationTimeout());
         assertFalse(config.isSqlEnhancerLogOptimizations());

@@ -38,6 +38,7 @@ public class ServerConfiguration {
     private static final String SQL_ENHANCER_ENABLED_KEY = "ojp.sql.enhancer.enabled";
     private static final String SQL_ENHANCER_MODE_KEY = "ojp.sql.enhancer.mode";
     private static final String SQL_ENHANCER_DIALECT_KEY = "ojp.sql.enhancer.dialect";
+    private static final String SQL_ENHANCER_TARGET_DIALECT_KEY = "ojp.sql.enhancer.targetDialect";
     private static final String SQL_ENHANCER_LOG_OPTIMIZATIONS_KEY = "ojp.sql.enhancer.logOptimizations";
     private static final String SQL_ENHANCER_RULES_KEY = "ojp.sql.enhancer.rules";
     private static final String SQL_ENHANCER_OPTIMIZATION_TIMEOUT_KEY = "ojp.sql.enhancer.optimizationTimeout";
@@ -78,6 +79,7 @@ public class ServerConfiguration {
     public static final boolean DEFAULT_SQL_ENHANCER_ENABLED = false; // Disabled by default, opt-in
     public static final String DEFAULT_SQL_ENHANCER_MODE = "VALIDATE"; // VALIDATE, OPTIMIZE, TRANSLATE, ANALYZE
     public static final String DEFAULT_SQL_ENHANCER_DIALECT = "GENERIC"; // GENERIC, POSTGRESQL, MYSQL, ORACLE, SQL_SERVER, H2
+    public static final String DEFAULT_SQL_ENHANCER_TARGET_DIALECT = ""; // Empty = no translation
     public static final boolean DEFAULT_SQL_ENHANCER_LOG_OPTIMIZATIONS = true;
     public static final String DEFAULT_SQL_ENHANCER_RULES = ""; // Empty = use safe defaults
     public static final int DEFAULT_SQL_ENHANCER_OPTIMIZATION_TIMEOUT = 100; // milliseconds
@@ -122,6 +124,7 @@ public class ServerConfiguration {
     private final boolean sqlEnhancerEnabled;
     private final String sqlEnhancerMode;
     private final String sqlEnhancerDialect;
+    private final String sqlEnhancerTargetDialect;
     private final boolean sqlEnhancerLogOptimizations;
     private final String sqlEnhancerRules;
     private final int sqlEnhancerOptimizationTimeout;
@@ -159,6 +162,7 @@ public class ServerConfiguration {
         this.sqlEnhancerEnabled = getBooleanProperty(SQL_ENHANCER_ENABLED_KEY, DEFAULT_SQL_ENHANCER_ENABLED);
         this.sqlEnhancerMode = getStringProperty(SQL_ENHANCER_MODE_KEY, DEFAULT_SQL_ENHANCER_MODE);
         this.sqlEnhancerDialect = getStringProperty(SQL_ENHANCER_DIALECT_KEY, DEFAULT_SQL_ENHANCER_DIALECT);
+        this.sqlEnhancerTargetDialect = getStringProperty(SQL_ENHANCER_TARGET_DIALECT_KEY, DEFAULT_SQL_ENHANCER_TARGET_DIALECT);
         this.sqlEnhancerLogOptimizations = getBooleanProperty(SQL_ENHANCER_LOG_OPTIMIZATIONS_KEY, DEFAULT_SQL_ENHANCER_LOG_OPTIMIZATIONS);
         this.sqlEnhancerRules = getStringProperty(SQL_ENHANCER_RULES_KEY, DEFAULT_SQL_ENHANCER_RULES);
         this.sqlEnhancerOptimizationTimeout = getIntProperty(SQL_ENHANCER_OPTIMIZATION_TIMEOUT_KEY, DEFAULT_SQL_ENHANCER_OPTIMIZATION_TIMEOUT);
@@ -274,6 +278,7 @@ public class ServerConfiguration {
         logger.info("  SQL Enhancer Enabled: {}", sqlEnhancerEnabled);
         logger.info("  SQL Enhancer Mode: {}", sqlEnhancerMode);
         logger.info("  SQL Enhancer Dialect: {}", sqlEnhancerDialect);
+        logger.info("  SQL Enhancer Target Dialect: {}", sqlEnhancerTargetDialect.isEmpty() ? "none (no translation)" : sqlEnhancerTargetDialect);
         logger.info("  SQL Enhancer Log Optimizations: {}", sqlEnhancerLogOptimizations);
         logger.info("  SQL Enhancer Rules: {}", sqlEnhancerRules.isEmpty() ? "default (safe rules)" : sqlEnhancerRules);
         logger.info("  SQL Enhancer Optimization Timeout: {} ms", sqlEnhancerOptimizationTimeout);
@@ -369,6 +374,10 @@ public class ServerConfiguration {
     
     public String getSqlEnhancerDialect() {
         return sqlEnhancerDialect;
+    }
+    
+    public String getSqlEnhancerTargetDialect() {
+        return sqlEnhancerTargetDialect;
     }
     
     public boolean isSqlEnhancerLogOptimizations() {

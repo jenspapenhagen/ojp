@@ -193,10 +193,11 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
                 .collect(java.util.stream.Collectors.toList());
         }
         
-        // Create engine with full configuration
+        // Create engine with full configuration including targetDialect
         return new org.openjproxy.grpc.server.sql.SqlEnhancerEngine(
             config.isSqlEnhancerEnabled(),
             config.getSqlEnhancerDialect(),
+            config.getSqlEnhancerTargetDialect(),
             mode.isConversionEnabled(),
             mode.isOptimizationEnabled(),
             enabledRules
