@@ -334,8 +334,8 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
 
     @Override
     public void connect(ConnectionDetails connectionDetails, StreamObserver<SessionInfo> responseObserver) {
-        new org.openjproxy.grpc.server.action.connection.ConnectAction(actionContext)
-            .execute(connectionDetails, responseObserver);
+        org.openjproxy.grpc.server.action.connection.ConnectAction.getInstance()
+            .execute(actionContext, connectionDetails, responseObserver);
     }
     
     /**

@@ -171,7 +171,10 @@ sequenceDiagram
 
 ### Action Interfaces
 
-Choose the right interface for your method:
+**Note**: The following interfaces are part of the original action pattern design. However, when implementing actions as **singletons**, actions should NOT implement these interfaces. Instead, singleton actions have their own execute method that accepts ActionContext as the first parameter.
+
+For reference, here are the original interfaces (used by non-singleton actions):
+
 #### 1. Action<TRequest, TResponse>
 For standard RPC methods (20 of 21 methods).
 
@@ -182,6 +185,8 @@ public interface Action<TRequest, TResponse> {
 ```
 
 **Examples**: connect, executeUpdate, executeQuery, transactions, XA operations, etc.
+
+**Limitation**: This interface doesn't support passing ActionContext, so singleton actions should use a custom execute method signature instead.
 
 #### 2. StreamingAction<TRequest, TResponse>
 For bidirectional streaming (1 method: createLob).
@@ -220,33 +225,59 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
 ```
 
 ### After: Action Pattern (3 lines + focused action)
+
+**⚠️ IMPORTANT: All actions MUST be implemented as singletons for thread-safety and memory efficiency.**
+
+Actions are stateless and receive the ActionContext as a parameter, making them thread-safe and reusable.
+
 ```java
 // StatementServiceImpl - thin delegator
 public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceImplBase {
     private final ActionContext actionContext;
     
     public void connect(ConnectionDetails details, StreamObserver<SessionInfo> observer) {
-        new ConnectAction(actionContext).execute(details, observer);
+        ConnectAction.getInstance().execute(actionContext, details, observer);
     }
 }
 
-// ConnectAction - focused logic (~150 lines)
+// ConnectAction - focused logic (~150 lines) - SINGLETON PATTERN
 @Slf4j
-public class ConnectAction implements Action<ConnectionDetails, SessionInfo> {
-    private final ActionContext context;
+public class ConnectAction {
+    private static final ConnectAction INSTANCE = new ConnectAction();
     
-    public ConnectAction(ActionContext context) {
-        this.context = context;
+    private ConnectAction() {
+        // Private constructor prevents external instantiation
     }
     
-    @Override
-    public void execute(ConnectionDetails request, StreamObserver<SessionInfo> responseObserver) {
+    public static ConnectAction getInstance() {
+        return INSTANCE;
+    }
+    
+    /**
+     * Execute the connect action.
+     * Note: This action is stateless - context is passed as a parameter, not stored as a field.
+     */
+    public void execute(ActionContext context, ConnectionDetails request, StreamObserver<SessionInfo> responseObserver) {
         // Connection handling logic
         // Access: context.getDatasourceMap(), context.getSessionManager(), etc.
-        // Delegate to helper actions: new HandleXAConnectionAction(context).execute(...)
+        // Delegate to helper actions: HandleXAConnectionAction.getInstance().execute(context, ...)
     }
 }
 ```
+
+### Why Singletons?
+
+All action classes MUST be implemented as singletons for the following reasons:
+
+1. **Thread-Safety**: Actions are stateless - they receive all necessary state via parameters (ActionContext, request). This makes them inherently thread-safe and reusable across concurrent requests.
+
+2. **Memory Efficiency**: Creating new action instances for every request would generate millions of short-lived objects per day in production. Singletons eliminate this overhead.
+
+3. **Performance**: Singleton pattern avoids object allocation and garbage collection overhead on the hot path.
+
+4. **Consistency**: All actions follow the same pattern, making the codebase easier to understand and maintain.
+
+**Note**: Actions do NOT store ActionContext as an instance field. Instead, they receive it as a parameter to their execute() method, ensuring they remain truly stateless and thread-safe.
 
 ## Quick Start for Contributors
 
@@ -261,28 +292,58 @@ Choose any of the 20 remaining public methods in `StatementServiceImpl`:
 
 ### 3. Implementation Steps
 1. **Create action class** in appropriate package (e.g., `org.openjproxy.grpc.server.action.transaction`)
-2. **Implement interface** (usually `Action<TRequest, TResponse>`)
-3. **Copy method logic** from `StatementServiceImpl` to action's `execute()` method
-4. **Replace field access** with `context.getXxx()` calls
-5. **Update StatementServiceImpl** to delegate: `new YourAction(actionContext).execute(request, observer);`
-6. **Test** - ensure compilation and existing tests pass
-7. **Submit PR** with clear description
+2. **Implement singleton pattern**:
+   - Add private constructor
+   - Add `private static final YourAction INSTANCE = new YourAction();`
+   - Add `public static YourAction getInstance() { return INSTANCE; }`
+3. **Create execute method** with signature: `public void execute(ActionContext context, RequestType request, StreamObserver<ResponseType> observer)`
+4. **Copy method logic** from `StatementServiceImpl` to action's `execute()` method
+5. **Use context parameter** instead of instance fields - e.g., `context.getDatasourceMap()`, `context.getSessionManager()`
+6. **Update StatementServiceImpl** to delegate: `YourAction.getInstance().execute(actionContext, request, observer);`
+7. **Test** - ensure compilation and existing tests pass
+8. **Submit PR** with clear description
+
+**Important**: Actions should NOT implement the `Action<TRequest, TResponse>` interface if they use the singleton pattern, as the interface doesn't include ActionContext as a parameter. The action is stateless and receives context via the execute method parameter.
 
 ### Common Patterns
 
-#### Simple Delegation
+#### Simple Delegation (Singleton Pattern)
 ```java
 // In StatementServiceImpl
 public void methodName(Request request, StreamObserver<Response> observer) {
-    new MethodNameAction(actionContext).execute(request, observer);
+    MethodNameAction.getInstance().execute(actionContext, request, observer);
+}
+
+// In Action class (Singleton)
+public class MethodNameAction {
+    private static final MethodNameAction INSTANCE = new MethodNameAction();
+    
+    private MethodNameAction() {}
+    
+    public static MethodNameAction getInstance() {
+        return INSTANCE;
+    }
+    
+    public void execute(ActionContext context, Request request, StreamObserver<Response> observer) {
+        // Action logic here
+    }
 }
 ```
 
 #### Accessing Shared State
 ```java
-// In Action class
-DataSource ds = context.getDatasourceMap().get(connHash);
-SessionManager sessionManager = context.getSessionManager();
+// In Action class - context is passed as parameter
+public void execute(ActionContext context, Request request, StreamObserver<Response> observer) {
+    DataSource ds = context.getDatasourceMap().get(connHash);
+    SessionManager sessionManager = context.getSessionManager();
+}
+```
+
+#### Delegating to Other Actions
+```java
+// Singleton actions delegate to other singleton actions
+HandleXAConnectionAction.getInstance().execute(context, connectionDetails, observer);
+CreateSlowQuerySegregationManagerAction.getInstance().execute(context, connHash, maxPoolSize);
 ```
 
 #### Error Handling
