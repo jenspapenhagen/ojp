@@ -27,19 +27,29 @@ import static org.openjproxy.grpc.server.action.transaction.XidHelper.convertXid
  * <p>
  * This action validates that the session is an XA session with an available
  * XA resource before performing the forget operation.
+ * <p>
+ * This action is implemented as a singleton for thread-safety and memory efficiency.
+ * It is stateless and receives all necessary context via parameters.
  */
 @Slf4j
 public class XaForgetAction implements Action<XaForgetRequest, XaResponse> {
 
-    private final SessionManager sessionManager;
+    private static final XaForgetAction INSTANCE = new XaForgetAction();
 
     /**
-     * Creates a new XaForgetAction with the specified session manager.
-     *
-     * @param sessionManager the session manager used to retrieve XA sessions
+     * Private constructor prevents external instantiation.
      */
-    public XaForgetAction(SessionManager sessionManager) {
-        this.sessionManager = sessionManager;
+    private XaForgetAction() {
+        // Private constructor for singleton pattern
+    }
+
+    /**
+     * Returns the singleton instance of XaForgetAction.
+     *
+     * @return the singleton instance
+     */
+    public static XaForgetAction getInstance() {
+        return INSTANCE;
     }
 
     /**
@@ -50,7 +60,7 @@ public class XaForgetAction implements Action<XaForgetRequest, XaResponse> {
      * protobuf XID to a javax.transaction.xa.Xid, and calls forget on the
      * XA resource.
      *
-     * @param context          the action context (not used by this action)
+     * @param context          the action context containing the session manager
      * @param request          the XA forget request containing the session and XID
      * @param responseObserver the response observer for sending the result
      */
@@ -60,6 +70,7 @@ public class XaForgetAction implements Action<XaForgetRequest, XaResponse> {
                 request.getSession().getSessionUUID(), request.getXid());
 
         try {
+            SessionManager sessionManager = context.getSessionManager();
             Session session = sessionManager.getSession(request.getSession());
             if (session == null || !session.isXA() || session.getXaResource() == null) {
                 throw new SQLException("Session is not an XA session");

@@ -2325,7 +2325,7 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
 
     @Override
     public void xaForget(com.openjproxy.grpc.XaForgetRequest request, StreamObserver<com.openjproxy.grpc.XaResponse> responseObserver) {
-        new org.openjproxy.grpc.server.action.transaction.XaForgetAction(sessionManager)
+        org.openjproxy.grpc.server.action.transaction.XaForgetAction.getInstance()
                 .execute(actionContext, request, responseObserver);
     }
 
