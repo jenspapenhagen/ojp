@@ -37,7 +37,10 @@
    bash ojp-server/download-drivers.sh /path/to/custom/directory
    ```
    
-   **Note:** For proprietary databases (Oracle, SQL Server, DB2), you'll need to manually download and place their JDBC drivers in the ojp-libs directory. See the [Oracle Testing Guide](../../documents/environment-setup/oracle-testing-guide.md), [SQL Server Testing Guide](../../documents/environment-setup/sqlserver-testing-guide.md), and [DB2 Testing Guide](../../documents/environment-setup/db2-testing-guide.md) for specific instructions.
+   **Note:** For proprietary databases (Oracle, SQL Server, DB2), you'll need to manually download and place their JDBC drivers in the ojp-libs directory. 
+   See the [Oracle Testing Guide](../../documents/environment-setup/oracle-testing-guide.md), 
+   [SQL Server Testing Guide](../../documents/environment-setup/sqlserver-testing-guide.md), 
+   and [DB2 Testing Guide](../../documents/environment-setup/db2-testing-guide.md) for specific instructions.
 
 4. **Start OJP server** (required for running tests)
    ```bash
