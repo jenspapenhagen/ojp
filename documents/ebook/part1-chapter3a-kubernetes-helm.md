@@ -354,7 +354,7 @@ Create a custom `values.yaml` file to override defaults:
 replicaCount: 3
 
 server:
-  # Custom server port (avoid 8080 as it's Tomcat's default)
+  # Custom server port (avoid 9059 as it's Tomcat's default)
   port: 9059
   
   # Increase thread pool for higher concurrency

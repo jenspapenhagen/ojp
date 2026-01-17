@@ -12,7 +12,7 @@ PostgreSQL drivers are included by default in OJP. No additional setup is requir
 
 **JDBC URL Format:**
 ```
-jdbc:ojp://localhost:8080/postgres?user=myuser&password=mypass
+jdbc:ojp://localhost:9059/postgres?user=myuser&password=mypass
 ```
 
 ### Recommended Pool Settings
@@ -43,7 +43,7 @@ validationTimeout=5000
 When connecting to PostgreSQL with SSL:
 
 ```
-jdbc:ojp://localhost:8080/postgres?user=myuser&password=mypass&ssl=true&sslmode=require
+jdbc:ojp://localhost:9059/postgres?user=myuser&password=mypass&ssl=true&sslmode=require
 ```
 
 Available SSL modes: `disable`, `allow`, `prefer`, `require`, `verify-ca`, `verify-full`
@@ -61,7 +61,7 @@ On the client side, use `PGXADataSource`:
 
 ```java
 PGXADataSource xaDS = new PGXADataSource();
-xaDS.setUrl("jdbc:ojp://localhost:8080/postgres");
+xaDS.setUrl("jdbc:ojp://localhost:9059/postgres");
 xaDS.setUser("myuser");
 xaDS.setPassword("mypass");
 ```
@@ -126,12 +126,12 @@ MySQL and MariaDB drivers are included by default. Use the appropriate driver fo
 
 **MySQL URL:**
 ```
-jdbc:ojp://localhost:8080/mydb?user=root&password=secret
+jdbc:ojp://localhost:9059/mydb?user=root&password=secret
 ```
 
 **MariaDB URL:**
 ```
-jdbc:ojp://localhost:8080/mariadb?user=root&password=secret
+jdbc:ojp://localhost:9059/mariadb?user=root&password=secret
 ```
 
 ### Recommended Pool Settings
@@ -162,12 +162,12 @@ validationTimeout=3000
 Enable SSL for MySQL connections:
 
 ```
-jdbc:ojp://localhost:8080/mydb?user=root&password=secret&useSSL=true&requireSSL=true
+jdbc:ojp://localhost:9059/mydb?user=root&password=secret&useSSL=true&requireSSL=true
 ```
 
 For MariaDB:
 ```
-jdbc:ojp://localhost:8080/mariadb?user=root&password=secret&useSsl=true
+jdbc:ojp://localhost:9059/mariadb?user=root&password=secret&useSsl=true
 ```
 
 ### Character Encoding
@@ -175,7 +175,7 @@ jdbc:ojp://localhost:8080/mariadb?user=root&password=secret&useSsl=true
 Always specify UTF-8 encoding explicitly:
 
 ```
-jdbc:ojp://localhost:8080/mydb?user=root&password=secret&characterEncoding=utf8mb4&connectionCollation=utf8mb4_unicode_ci
+jdbc:ojp://localhost:9059/mydb?user=root&password=secret&characterEncoding=utf8mb4&connectionCollation=utf8mb4_unicode_ci
 ```
 
 ### XA Transaction Support
@@ -184,7 +184,7 @@ Both MySQL and MariaDB support XA transactions:
 
 ```java
 MysqlXADataSource xaDS = new MysqlXADataSource();
-xaDS.setUrl("jdbc:ojp://localhost:8080/mydb");
+xaDS.setUrl("jdbc:ojp://localhost:9059/mydb");
 xaDS.setUser("root");
 xaDS.setPassword("secret");
 ```
@@ -259,12 +259,12 @@ Or download manually from Oracle Technology Network and place `ojdb8.jar` (or ap
 
 **JDBC URL Format:**
 ```
-jdbc:ojp://localhost:8080/ORCL?user=system&password=oracle
+jdbc:ojp://localhost:9059/ORCL?user=system&password=oracle
 ```
 
 For service name instead of SID:
 ```
-jdbc:ojp://localhost:8080/orcl.example.com?user=system&password=oracle
+jdbc:ojp://localhost:9059/orcl.example.com?user=system&password=oracle
 ```
 
 ### Recommended Pool Settings
@@ -300,7 +300,7 @@ Oracle has robust XA support with its `OracleXADataSource`:
 
 ```java
 OracleXADataSource xaDS = new OracleXADataSource();
-xaDS.setURL("jdbc:ojp://localhost:8080/ORCL");
+xaDS.setURL("jdbc:ojp://localhost:9059/ORCL");
 xaDS.setUser("system");
 xaDS.setPassword("oracle");
 ```
@@ -380,12 +380,12 @@ Or download `mssql-jdbc-<version>.jre8.jar` from Microsoft and place in `ojp-lib
 
 **JDBC URL Format:**
 ```
-jdbc:ojp://localhost:8080/master?user=sa&password=YourStrong!Passw0rd
+jdbc:ojp://localhost:9059/master?user=sa&password=YourStrong!Passw0rd
 ```
 
 With instance name:
 ```
-jdbc:ojp://localhost:8080/master;instanceName=SQLEXPRESS?user=sa&password=YourStrong!Passw0rd
+jdbc:ojp://localhost:9059/master;instanceName=SQLEXPRESS?user=sa&password=YourStrong!Passw0rd
 ```
 
 ### Recommended Pool Settings
@@ -414,12 +414,12 @@ validationTimeout=5000
 Enable encryption for SQL Server:
 
 ```
-jdbc:ojp://localhost:8080/master?user=sa&password=pass&encrypt=true&trustServerCertificate=true
+jdbc:ojp://localhost:9059/master?user=sa&password=pass&encrypt=true&trustServerCertificate=true
 ```
 
 For production, use proper certificates:
 ```
-jdbc:ojp://localhost:8080/master?user=sa&password=pass&encrypt=true&trustServerCertificate=false&hostNameInCertificate=sqlserver.example.com
+jdbc:ojp://localhost:9059/master?user=sa&password=pass&encrypt=true&trustServerCertificate=false&hostNameInCertificate=sqlserver.example.com
 ```
 
 ### XA Transaction Support
@@ -428,7 +428,7 @@ SQL Server supports XA transactions:
 
 ```java
 SQLServerXADataSource xaDS = new SQLServerXADataSource();
-xaDS.setURL("jdbc:ojp://localhost:8080/master");
+xaDS.setURL("jdbc:ojp://localhost:9059/master");
 xaDS.setUser("sa");
 xaDS.setPassword("YourStrong!Passw0rd");
 ```
@@ -485,12 +485,12 @@ H2 driver is included, no additional setup needed.
 
 **In-Memory Database:**
 ```
-jdbc:ojp://localhost:8080/mem:testdb?user=sa&password=
+jdbc:ojp://localhost:9059/mem:testdb?user=sa&password=
 ```
 
 **File-Based Database:**
 ```
-jdbc:ojp://localhost:8080/~/testdb?user=sa&password=
+jdbc:ojp://localhost:9059/~/testdb?user=sa&password=
 ```
 
 ### Recommended Pool Settings
@@ -508,15 +508,15 @@ connectionTimeout=10000
 **Compatibility Mode:** Emulate other databases:
 
 ```
-jdbc:ojp://localhost:8080/mem:testdb;MODE=PostgreSQL
-jdbc:ojp://localhost:8080/mem:testdb;MODE=MySQL
-jdbc:ojp://localhost:8080/mem:testdb;MODE=Oracle
+jdbc:ojp://localhost:9059/mem:testdb;MODE=PostgreSQL
+jdbc:ojp://localhost:9059/mem:testdb;MODE=MySQL
+jdbc:ojp://localhost:9059/mem:testdb;MODE=Oracle
 ```
 
 **In-Memory Performance:** For tests, disable durability:
 
 ```
-jdbc:ojp://localhost:8080/mem:testdb;DB_CLOSE_DELAY=-1
+jdbc:ojp://localhost:9059/mem:testdb;DB_CLOSE_DELAY=-1
 ```
 
 ---

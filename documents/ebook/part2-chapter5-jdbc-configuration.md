@@ -523,7 +523,7 @@ graph TB
     style DB2 fill:#4caf50
 ```
 
-Double pooling creates several serious problems. It wastes connections through multiplication—N applications times M pool size times P OJP pool size equals N×M×P database connections, far more than needed. This defeats OJP's core purpose of providing centralized connection control. Resource exhaustion becomes inevitable as database connection limits are reached quickly. Finally, performance degrades because multiple pool layers add unnecessary overhead at each level.
+Double pooling creates a serious problem: application-side connection pools don't call close() on connections, preventing OJP from knowing when a connection has been released by a thread or transaction. This defeats OJP's core purpose of providing centralized connection control and breaks the intelligent connection management that OJP provides.
 
 ### Spring Boot Integration
 

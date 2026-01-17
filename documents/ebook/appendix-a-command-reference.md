@@ -15,7 +15,7 @@ java -jar ojp-server-0.3.0.jar
 For development with custom configuration, you can specify properties:
 
 ```bash
-java -Dojp.server.port=8080 \
+java -Dojp.server.port=9059 \
      -Dojp.telemetry.enabled=true \
      -Dojp.telemetry.prometheus.enabled=true \
      -jar ojp-server-0.3.0.jar
@@ -34,14 +34,14 @@ Pull and run the official Docker image:
 
 ```bash
 docker pull ghcr.io/open-j-proxy/ojp-server:latest
-docker run -p 8080:8080 ghcr.io/open-j-proxy/ojp-server:latest
+docker run -p 9059:9059 ghcr.io/open-j-proxy/ojp-server:latest
 ```
 
 With custom configuration:
 
 ```bash
-docker run -p 8080:8080 \
-  -e OJP_SERVER_PORT=8080 \
+docker run -p 9059:9059 \
+  -e OJP_SERVER_PORT=9059 \
   -e OJP_TELEMETRY_ENABLED=true \
   -e OJP_TELEMETRY_PROMETHEUS_ENABLED=true \
   ghcr.io/open-j-proxy/ojp-server:latest
@@ -75,7 +75,7 @@ helm upgrade my-ojp ojp/ojp-server --reuse-values
 
 | Property | Default | Description |
 |----------|---------|-------------|
-| `ojp.server.port` | `8080` | gRPC server listening port |
+| `ojp.server.port` | `9059` | gRPC server listening port |
 | `ojp.server.max-inbound-message-size` | `4194304` (4MB) | Maximum request message size |
 | `ojp.server.max-connection-idle` | `PT30M` | Maximum connection idle time |
 | `ojp.server.max-connection-age` | `PT24H` | Maximum connection age |
@@ -154,27 +154,27 @@ jdbc:ojp://host1:port1,host2:port2,host3:port3/database
 
 **PostgreSQL:**
 ```
-jdbc:ojp://localhost:8080/postgres?user=dbuser&password=dbpass
+jdbc:ojp://localhost:9059/postgres?user=dbuser&password=dbpass
 ```
 
 **MySQL:**
 ```
-jdbc:ojp://localhost:8080/mydb?user=root&password=secret
+jdbc:ojp://localhost:9059/mydb?user=root&password=secret
 ```
 
 **Oracle:**
 ```
-jdbc:ojp://localhost:8080/ORCL?user=system&password=oracle
+jdbc:ojp://localhost:9059/ORCL?user=system&password=oracle
 ```
 
 **SQL Server:**
 ```
-jdbc:ojp://localhost:8080/master?user=sa&password=YourStrong!Passw0rd
+jdbc:ojp://localhost:9059/master?user=sa&password=YourStrong!Passw0rd
 ```
 
 **H2 (In-Memory):**
 ```
-jdbc:ojp://localhost:8080/mem:testdb?user=sa&password=
+jdbc:ojp://localhost:9059/mem:testdb?user=sa&password=
 ```
 
 ### Client-Side Pool Configuration (ojp.properties)
@@ -231,7 +231,7 @@ connectionTestQuery=SELECT 1
 ```yaml
 spring:
   datasource:
-    url: jdbc:ojp://localhost:8080/mydb
+    url: jdbc:ojp://localhost:9059/mydb
     username: dbuser
     password: dbpass
     driver-class-name: io.openjproxy.jdbc.Driver
@@ -256,7 +256,7 @@ spring:
 
 **application.properties:**
 ```properties
-quarkus.datasource.jdbc.url=jdbc:ojp://localhost:8080/mydb
+quarkus.datasource.jdbc.url=jdbc:ojp://localhost:9059/mydb
 quarkus.datasource.username=dbuser
 quarkus.datasource.password=dbpass
 quarkus.datasource.driver=io.openjproxy.jdbc.Driver
@@ -272,7 +272,7 @@ quarkus.datasource.jdbc.min-size=1
 ```yaml
 datasources:
   default:
-    url: jdbc:ojp://localhost:8080/mydb
+    url: jdbc:ojp://localhost:9059/mydb
     username: dbuser
     password: dbpass
     driverClassName: io.openjproxy.jdbc.Driver
@@ -332,7 +332,7 @@ services:
   ojp-server:
     image: ghcr.io/open-j-proxy/ojp-server:latest
     ports:
-      - "8080:8080"
+      - "9059:9059"
       - "9090:9090"
     environment:
       - OJP_TELEMETRY_ENABLED=true
@@ -407,7 +407,7 @@ Import the OJP dashboard (ID: coming soon) or use this query for a simple panel:
 
 **Check server is running:**
 ```bash
-nc -zv localhost 8080
+nc -zv localhost 9059
 ```
 
 **Check server logs:**
@@ -444,7 +444,7 @@ ojp.pool.leak-detection-threshold=30000
 **Verify all servers are reachable:**
 ```bash
 for host in host1 host2 host3; do
-  nc -zv $host 8080
+  nc -zv $host 9059
 done
 ```
 
@@ -460,7 +460,7 @@ curl http://host3:9090/metrics | grep grpc_server_handled_total
 All configuration properties can be set via environment variables using this pattern:
 
 ```bash
-OJP_SERVER_PORT=8080
+OJP_SERVER_PORT=9059
 OJP_POOL_MAXIMUM_POOL_SIZE=20
 OJP_TELEMETRY_ENABLED=true
 OJP_SLOW_QUERY_ENABLED=true

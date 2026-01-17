@@ -8,7 +8,7 @@ Before diving into specific settings, it's important to understand how OJP handl
 
 This hierarchy becomes particularly valuable in containerized environments. You might set production defaults through environment variables in your Docker or Kubernetes configuration, then override specific settings for troubleshooting or testing without modifying your deployment files. The server reads both configuration sources at startup and merges them intelligently, ensuring you always get the behavior you expect.
 
-**[IMAGE PROMPT: Create a layered diagram showing configuration hierarchy with three levels: "JVM System Properties" at the top (highest priority, shown in bold color), "Environment Variables" in the middle (medium priority), and "Default Values" at the bottom (lowest priority, shown in faded color). Use arrows flowing upward labeled "Overrides" to show precedence. Include example values at each level like `-Dojp.server.port=8080`, `OJP_SERVER_PORT=1059`, and `default: 1059`. Style: Clean, hierarchical infographic with color-coded priority levels.]**
+**[IMAGE PROMPT: Create a layered diagram showing configuration hierarchy with three levels: "JVM System Properties" at the top (highest priority, shown in bold color), "Environment Variables" in the middle (medium priority), and "Default Values" at the bottom (lowest priority, shown in faded color). Use arrows flowing upward labeled "Overrides" to show precedence. Include example values at each level like `-Dojp.server.port=9059`, `OJP_SERVER_PORT=1059`, and `default: 1059`. Style: Clean, hierarchical infographic with color-coded priority levels.]**
 
 ```mermaid
 graph TD
@@ -34,17 +34,17 @@ Performance tuning starts with the thread pool size, which defaults to 200 threa
 
 The maximum request size setting provides protection against oversized requests that could impact server stability. The default of 4MB is generous for typical JDBC operations, but you might increase it if you're working with very large result sets or binary data. Just remember that larger request sizes consume more memory, so balance this against your available resources.
 
-Connection idle timeout controls how long the server waits before closing inactive **gRPC connections** from clients. The default of 30 seconds strikes a balance between resource conservation and connection overhead. 
+Connection idle timeout controls how long the server waits before closing inactive **gRPC connections** from clients. The default of 30 seconds strikes a balance between resource conservation and connection overhead. When a gRPC connection times out due to inactivity, the client automatically reconnects on demand when the next JDBC operation is requested, so there's no need for manual reconnection handling.
 
 **Important**: These are gRPC connection timeouts, not database connection timeouts. Each gRPC connection uses HTTP/2 multiplexing, allowing many virtual JDBC connections to share a single gRPC connection. This multiplexed architecture means one gRPC connection can handle hundreds of `getConnection()` calls from the client side.
 
-For most deployments, the default 30-second timeout works well. However, consider increasing this timeout (or even disabling it with a very high value) for environments with consistent traffic patterns, as maintaining the gRPC connection reduces overhead. The gRPC connection reestablishment is relatively lightweight, but avoiding it entirely is even better for performance.
+For most deployments, the default 30-second timeout works well. However, if you want to avoid frequent reconnections, consider increasing this timeout (or even disabling it with a very high value like 3600000 for 1 hour) for environments with consistent traffic patterns. The gRPC connection reestablishment is relatively lightweight, but avoiding it entirely is even better for performance.
 
 Here's how you configure these core settings:
 
 ```bash
 # Using JVM system properties
-java -Dojp.server.port=8080 \
+java -Dojp.server.port=9059 \
      -Dojp.prometheus.port=9091 \
      -Dojp.server.threadPoolSize=100 \
      -Dojp.server.maxRequestSize=8388608 \
@@ -55,7 +55,7 @@ java -Dojp.server.port=8080 \
 Or using environment variables for container deployments:
 
 ```bash
-export OJP_SERVER_PORT=8080
+export OJP_SERVER_PORT=9059
 export OJP_PROMETHEUS_PORT=9091
 export OJP_SERVER_THREADPOOLSIZE=100
 export OJP_SERVER_MAXREQUESTSIZE=8388608
@@ -70,7 +70,7 @@ sequenceDiagram
     participant ThreadPool
     participant Database
     
-    Client->>Server: Connect to :8080
+    Client->>Server: Connect to :9059
     Server->>ThreadPool: Acquire Thread
     ThreadPool->>Server: Thread Assigned
     Client->>Server: JDBC Request (< 4MB)
@@ -178,50 +178,45 @@ graph LR
 
 ## 6.5 OpenTelemetry Integration
 
-Modern observability goes beyond logs. OJP integrates with OpenTelemetry, providing distributed tracing and metrics that help you understand your application's behavior across service boundaries. The server generates detailed telemetry data about request processing, database operations, and internal performance metrics.
+Modern observability goes beyond logs. OJP integrates with OpenTelemetry to provide metrics through Prometheus. The server automatically instruments gRPC operations, providing insights into request processing and server performance.
 
-OpenTelemetry support is enabled by default, making OJP immediately compatible with observability platforms like Jaeger, Zipkin, and Grafana Tempo. The server automatically instruments all key operations, creating spans for connection acquisition, query execution, and result processing. These spans carry contextual information that helps you correlate database operations with application requests.
+**Note**: Currently, OJP exports metrics via Prometheus but does not export distributed traces. The OpenTelemetry integration focuses on providing operational metrics such as request rates, error rates, and latency through the Prometheus endpoint.
 
-**[IMAGE PROMPT: Create a distributed tracing visualization showing a waterfall diagram of nested spans. Start with "HTTP Request" span at top, followed by nested "JDBC Query" span, then "OJP Server Processing" span (highlighted), then "Database Query" span at bottom. Show timing bars for each span with duration labels. Include trace ID and span IDs. Use different colors for each service layer (blue for app, orange for OJP, green for database). Style: Modern APM tool waterfall display with timing metrics.]**
+OpenTelemetry support is enabled by default, making the Prometheus metrics endpoint available at the configured port (default 9159). The server automatically instruments all gRPC operations, creating metrics for connection acquisition, query execution, and server resource usage.
 
-The default configuration works with OpenTelemetry's standard environment variables and auto-discovery mechanisms. If you're using the OpenTelemetry Java agent, it will automatically detect and configure OJP's telemetry export. For custom configurations, you can specify an explicit endpoint:
+**[IMAGE PROMPT: Create a metrics dashboard visualization showing Prometheus metrics from OJP Server. Display panels for: "Request Rate" (line graph), "Connection Pool Usage" (gauge), "Query Latency p95/p99" (histogram), "Error Rate" (area chart). Use modern Grafana-style UI with dark theme, multiple time series, and clear metric labels. Style: Modern observability dashboard with color-coded metrics and real-time graphs.]**
+
+The default configuration provides metrics through the Prometheus HTTP endpoint. You can enable or disable OpenTelemetry as needed:
 
 ```bash
-# Use default OpenTelemetry auto-configuration
+# Enable OpenTelemetry (default)
 -Dojp.opentelemetry.enabled=true
-
-# Specify custom OTLP endpoint
--Dojp.opentelemetry.enabled=true
--Dojp.opentelemetry.endpoint=http://jaeger:4317
 
 # Disable telemetry for performance-critical scenarios
 -Dojp.opentelemetry.enabled=false
 ```
 
-The telemetry data includes operation timings, connection pool statistics, slow query events, and circuit breaker state transitions. When combined with your application's traces, this creates a complete picture of request flow from HTTP endpoint through OJP to the database and back.
-
-In high-throughput scenarios, you might want to adjust your sampling rate through OpenTelemetry configuration. The OJP server respects sampling decisions made upstream, ensuring consistent trace sampling across your service mesh. This prevents partial traces where some services record data while others skip it.
+The metrics available through Prometheus include standard gRPC instrumentation metrics such as request counts, request durations, and error rates. These metrics integrate well with Prometheus-based monitoring stacks and can be visualized in Grafana or other observability platforms.
 
 ```mermaid
 sequenceDiagram
     participant App
     participant OJP
-    participant OTEL as OpenTelemetry Collector
-    participant Backend as Tracing Backend
+    participant Prometheus
     
-    App->>OJP: Execute Query (trace context)
-    OJP->>OJP: Create OJP span
-    OJP->>Database: Database Query (propagated context)
+    App->>OJP: Execute Query
+    OJP->>OJP: Record Metrics
+    OJP->>Database: Database Query
     Database-->>OJP: Result
     OJP-->>App: Complete Response
-    OJP->>OTEL: Export Span
-    OTEL->>Backend: Forward Traces
-    Backend->>Backend: Store & Index
+    Prometheus->>OJP: Scrape :9159/metrics
+    OJP-->>Prometheus: Metrics Data
+    Prometheus->>Prometheus: Store & Index
 ```
 
 ## 6.6 Circuit Breaker Configuration
 
-Resilience patterns are built into OJP, starting with the circuit breaker. When database connections consistently fail, the circuit breaker prevents your applications from overwhelming the database with retry attempts. Instead, it fails fast after a configured threshold, giving the database time to recover while protecting your application threads from hanging on impossible operations.
+Resilience patterns are built into OJP, starting with the circuit breaker. When database operations consistently fail, the circuit breaker prevents your applications from overwhelming the database with retry attempts. Instead, it fails fast after a configured threshold, giving the database time to recover while protecting your application threads from hanging on impossible operations.
 
 The circuit breaker operates in three states: closed (normal operation), open (failing fast), and half-open (testing recovery). When connection attempts fail repeatedly, the breaker trips to the open state and rejects new requests immediately. After a timeout period, it enters half-open state to test if the database has recovered. If test requests succeed, it closes again; if they fail, it remains open for another timeout period.
 
@@ -275,13 +270,13 @@ stateDiagram-v2
 
 ## 6.7 Slow Query Segregation
 
-One of OJP's most powerful features is slow query segregation, which prevents long-running queries from starving fast operations. The server dynamically classifies operations as fast or slow based on historical patterns, then manages separate connection slots for each category. This ensures that a heavy analytical query running for minutes doesn't prevent your quick transaction processing from getting database connections.
+One of OJP's useful features is slow query segregation, which can help prevent long-running queries from starving fast operations in certain workload scenarios. The server dynamically classifies operations as fast or slow based on historical patterns, then manages separate connection slots for each category. This can be beneficial when you have a mixed workload where a heavy analytical query running for minutes might otherwise prevent your quick transaction processing from getting database connections.
 
 The feature works by monitoring operation execution times and building a statistical model of each operation's performance characteristics. When an operation consistently takes longer than average, the server classifies it as slow and routes it to the slow slot pool. Fast operations continue using the fast slot pool, maintaining their responsiveness even under mixed workload pressure.
 
 **[IMAGE PROMPT: Create a side-by-side comparison showing connection pool behavior. Left side labeled "Without Segregation": single queue with fast queries (lightning bolt icons) blocked behind slow queries (turtle icons), showing red warning indicators. Right side labeled "With Segregation": two separate queues, top queue "Fast Slots (80%)" with lightning bolts flowing freely, bottom queue "Slow Slots (20%)" with turtle icons, showing green success indicators. Style: Before/after comparison with color-coded performance indicators.]**
 
-Slow query segregation is enabled by default because it provides significant benefits with minimal configuration. The percentage of slots reserved for slow operations defaults to 20%, which accommodates most workload patterns. You might increase this if you have many legitimate long-running queries, or decrease it if your workload is predominantly fast transactional operations.
+Slow query segregation can be beneficial because it provides advantages with minimal configuration when you have a mixed workload of fast and slow queries. The percentage of slots reserved for slow operations defaults to 20%, which accommodates most workload patterns. You might increase this if you have many legitimate long-running queries, or decrease it if your workload is predominantly fast transactional operations.
 
 ```bash
 # Enable with default 20% slow slots
@@ -323,8 +318,8 @@ graph TD
     J -->|No| N[Wait for Fast Slot]
     L -->|Yes| O[Borrow from Fast Pool]
     L -->|No| P[Wait for Slow Slot]
-    M --> I
-    O --> K
+    M --> K
+    O --> I
     I --> Q[Update Statistics]
     K --> Q
     Q --> R[Adjust Classification]
@@ -396,16 +391,16 @@ For Docker deployments, remember that environment variables must use the `OJP_` 
 
 ```bash
 # Correct environment variable format
-export OJP_SERVER_PORT=8080
+export OJP_SERVER_PORT=9059
 
 # Incorrect: will be ignored
-export ojp.server.port=8080
+export ojp.server.port=9059
 
 # Correct JVM property format
--Dojp.server.port=8080
+-Dojp.server.port=9059
 
 # Incorrect: will cause error
--DOJP_SERVER_PORT=8080
+-DOJP_SERVER_PORT=9059
 ```
 
 The server logs its active configuration at INFO level during startup. Review this output to confirm your settings were applied correctly. If you see unexpected defaults, it means your configuration wasn't recognized—check for typos, case sensitivity, and format issues.
