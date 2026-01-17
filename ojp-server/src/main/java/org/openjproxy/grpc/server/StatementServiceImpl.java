@@ -51,7 +51,7 @@ import org.openjproxy.xa.pool.XABackendSession;
 import org.openjproxy.xa.pool.XATransactionRegistry;
 import org.openjproxy.xa.pool.XidKey;
 import org.openjproxy.xa.pool.spi.XAConnectionPoolProvider;
-
+import org.openjproxy.grpc.server.action.transaction.RollbackTransactionAction;
 import javax.sql.DataSource;
 import javax.sql.XAConnection;
 import javax.sql.XADataSource;
@@ -1306,31 +1306,8 @@ public class StatementServiceImpl extends StatementServiceGrpc.StatementServiceI
 
     @Override
     public void rollbackTransaction(SessionInfo sessionInfo, StreamObserver<SessionInfo> responseObserver) {
-        log.info("Rollback transaction");
-
-        // Process cluster health from the request
-        processClusterHealth(sessionInfo);
-
-        try {
-            Connection conn = sessionManager.getConnection(sessionInfo);
-            conn.rollback();
-
-            TransactionInfo transactionInfo = TransactionInfo.newBuilder()
-                    .setTransactionStatus(TransactionStatus.TRX_ROLLBACK)
-                    .setTransactionUUID(sessionInfo.getTransactionInfo().getTransactionUUID())
-                    .build();
-
-            SessionInfo.Builder sessionInfoBuilder = SessionInfoUtils.newBuilderFrom(sessionInfo);
-            sessionInfoBuilder.setTransactionInfo(transactionInfo);
-            // Server echoes back targetServer from incoming request (preserved by newBuilderFrom)
-
-            responseObserver.onNext(sessionInfoBuilder.build());
-            responseObserver.onCompleted();
-        } catch (SQLException se) {
-            sendSQLExceptionMetadata(se, responseObserver);
-        } catch (Exception e) {
-            sendSQLExceptionMetadata(new SQLException("Unable to rollback transaction: " + e.getMessage()), responseObserver);
-        }
+        RollbackTransactionAction.getInstance()
+                .execute(actionContext, sessionInfo, responseObserver);
     }
 
     @Override
