@@ -86,6 +86,23 @@ public void testWithManualContainer() {
 }
 ```
 
+### Using a Custom Docker Image
+
+If you want to use a custom Docker image (e.g., from a private registry or with a different name):
+
+```java
+DockerImageName customImage = DockerImageName.parse("myregistry.com/my-ojp:1.0.0")
+        .asCompatibleSubstituteFor("rrobetti/ojp:0.3.1-beta");
+        
+OjpContainer ojpContainer = new OjpContainer(customImage);
+```
+
+### Using a Specific Version
+
+```java
+OjpContainer ojpContainer = new OjpContainer("rrobetti/ojp:0.3.0-beta");
+```
+
 ## API Methods
 
 The `OjpContainer` class provides the following methods:
