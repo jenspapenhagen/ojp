@@ -119,7 +119,7 @@ Expected log output:
 docker run --rm -d \
   --name ojp-server \
   --network host \
-  -e OJP_SERVER_PORT=8080 \
+  -e OJP_SERVER_PORT=9059 \
   -e OJP_PROMETHEUS_PORT=9090 \
   -e OJP_SERVER_LOGLEVEL=DEBUG \
   rrobetti/ojp:0.3.1-beta
@@ -182,7 +182,7 @@ java -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar
 
 ```bash
 java \
-  -Dojp.server.port=8080 \
+  -Dojp.server.port=9059 \
   -Dojp.prometheus.port=9090 \
   -Dojp.server.logLevel=DEBUG \
   -jar ojp-server/target/ojp-server-0.3.2-snapshot-shaded.jar
@@ -584,13 +584,13 @@ kill <PID>
 
 # Option 2: Use different ports
 # Docker
-docker run -e OJP_SERVER_PORT=8080 -e OJP_PROMETHEUS_PORT=9090 ...
+docker run -e OJP_SERVER_PORT=9059 -e OJP_PROMETHEUS_PORT=9090 ...
 
 # JAR
-java -Dojp.server.port=8080 -Dojp.prometheus.port=9090 -jar ojp-server.jar
+java -Dojp.server.port=9059 -Dojp.prometheus.port=9090 -jar ojp-server.jar
 
 # Then update your JDBC URL
-jdbc:ojp[localhost:8080]_postgresql://...
+jdbc:ojp[localhost:9059]_postgresql://...
 ```
 
 ### Issue #4: Connection Refused
