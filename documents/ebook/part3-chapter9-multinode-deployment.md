@@ -100,6 +100,7 @@ The gRPC connection to each OJP Server is established once when the driver first
 sequenceDiagram
     participant App
     participant Driver
+    participant SessionTracker
     participant Server1
     participant Server2
     participant Server3
@@ -108,17 +109,14 @@ sequenceDiagram
     
     App->>Driver: getConnection()
     Driver->>Driver: Parse multinode URL
-    Driver->>Server1: Check load (via gRPC)
-    Server1-->>Driver: 5 active connections
-    Driver->>Server2: Check load (via gRPC)
-    Server2-->>Driver: 3 active connections
-    Driver->>Server3: Check load (via gRPC)
-    Server3--xDriver: Timeout (unhealthy)
+    Driver->>SessionTracker: Get session counts (local)
+    SessionTracker-->>Driver: Server1: 5, Server2: 3, Server3: timeout
     
-    Note over Driver: Select Server2 (least loaded)
+    Note over Driver: Select Server2 (least loaded, 3 sessions)
     
     Driver->>Server2: Request DB connection (via existing gRPC pipe)
     Server2-->>Driver: Connection handle returned
+    Driver->>SessionTracker: Register session to Server2
     Driver-->>App: Return connection
 ```
 
@@ -171,10 +169,10 @@ The selection happens at connection request time, not at URL parse time. This me
 
 ```mermaid
 graph TD
-    A[New Connection Request] --> B[Query All Servers]
-    B --> C[Server 1: 12 active]
-    B --> D[Server 2: 8 active]
-    B --> E[Server 3: 4 active]
+    A[New Connection Request] --> B[Check Local Session Counts]
+    B --> C[Server 1: 12 sessions]
+    B --> D[Server 2: 8 sessions]
+    B --> E[Server 3: 4 sessions]
     
     C & D & E --> F{Select Minimum}
     F --> G[Route to Server 3]
