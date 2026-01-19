@@ -124,11 +124,11 @@ sequenceDiagram
 
 Once a session is established—identified by a unique session UUID—all subsequent operations for that specific connection must go to the same OJP Server. This session stickiness is crucial for maintaining consistency, especially for operations that involve server-side state like active transactions.
 
-When you open a connection and it gets assigned to, say, Server 2, that connection's session UUID is associated with Server 2 in the driver's state. All operations on that specific connection handle are routed to Server 2.
+When you open a virtual connection and it gets assigned to, say, Server 2, that virtual connection's session UUID is associated with Server 2 in the driver's state. All operations on that specific connection handle are routed to Server 2.
 
 This stickiness extends to transaction boundaries. If you start a transaction on Server 2, all operations within that transaction must execute on Server 2. The driver understands transaction semantics and enforces this routing transparently. You don't need to do anything special in your application code—just use normal JDBC transaction methods like `setAutoCommit(false)`, `commit()`, and `rollback()`.
 
-**Note on Temporary Tables and Session Variables**: Features like temporary tables and session variables are session-specific database features. Currently, OJP routes each connection independently, which means temporary tables created on one connection won't be visible to another connection even from the same application. To use temporary tables with OJP multinode deployment, you would need to ensure all related operations use the same connection handle, keeping it open for the duration of the temporary table's lifetime. Session stickiness through explicit connection affinity is a potential future enhancement.
+**Note on Temporary Tables and Session Variables**: Features like temporary tables and session variables are session-specific database features. Support for these features in multinode deployments is currently in development and is expected from version 0.4.0-beta. In the current version, temporary tables created on one connection handle won't be automatically visible to another connection handle even from the same application.
 
 > **AI Image Prompt**: Create a diagram illustrating session stickiness. Show an application making three database requests (labeled "Request 1", "Request 2", "Request 3") all with the same "Session UUID: abc-123". Draw arrows showing all three requests being routed to "Server 2" while "Server 1" and "Server 3" are visible but not used. Add a small inset showing a temporary table icon and transaction symbol to illustrate session-specific operations.
 
@@ -157,9 +157,9 @@ The heart of multinode's intelligent behavior is its load-aware server selection
 
 ### How Load-Aware Selection Works
 
-The JDBC driver tracks how many active connections each OJP Server is handling from the client's perspective. This is client-side tracking—the driver maintains a count of connections it has open to each server. When establishing a new connection, the driver consults its local view of each server's load and routes the new operation to the server with the fewest active connections from this client's viewpoint.
+The JDBC driver maintains client-side session tracking for each OJP Server. When establishing a new connection, the driver consults these local session counts and routes the request to the server with the fewest active sessions.
 
-This approach has several advantages over round-robin. If one server is handling longer-running queries, it naturally accumulates more active connections. The driver detects this and routes new connections to less-loaded servers. This prevents the situation where round-robin might continue sending connections to an already-overloaded server simply because it's "next in line."
+This approach has several advantages over round-robin. Servers handling longer-running queries naturally accumulate more sessions, and the driver automatically directs new requests to less-loaded servers. This prevents round-robin from continuing to send connections to an already-overloaded server simply because it's "next in line."
 
 Load-aware selection also adapts automatically when servers are added or removed. If you add a fourth server to a three-server cluster, it immediately starts receiving connections because it has zero active connections. The driver doesn't need any special configuration—it just starts using the new server naturally.
 
@@ -373,8 +373,6 @@ ojp.loadaware.selection.enabled=true
 
 Servers in a multinode cluster should be configured identically. They share the same operational settings and feature flags. The only differences might be infrastructure-related like server hostnames or ports.
 
-**Important Note**: Database connection details (JDBC URL, username, password) are provided by the client in the JDBC connection string and ojp.properties file, not in the OJP Server configuration. The server receives these details from client requests and uses them to establish database connections dynamically.
-
 Each server's configuration file (ojp-server.properties) should specify identical settings for:
 
 ```properties
@@ -548,7 +546,7 @@ Based on our experience, here are best practices for deploying and operating OJP
 
 **Set appropriate retry delays**: The default 5-second retry delay balances recovery speed with infrastructure protection. Too short (like 1 second) can hammer failed servers unnecessarily; too long (like 30 seconds) means slow recovery from transient failures.
 
-**Size pools appropriately**: The pool size is set on the OJP JDBC client side and communicated to OJP Servers along with cluster health information. Each OJP Server uses this information to calculate how many connections it should maintain by dividing the configured pool size by the number of healthy servers in the cluster. If you need 30 total connections and plan to run 3 servers, configure `maximumPoolSize=30` in the client—each of the 3 servers will maintain approximately 10 connections.
+**Size pools appropriately**: The pool size is set on the OJP JDBC client side and communicated to OJP Servers along with cluster health information. Each OJP Server uses this information to calculate how many connections it should maintain by dividing the configured pool size by the number of healthy servers in the cluster. If you need 30 total connections and plan to run 3 servers, configure `maximumPoolSize=30` in the client—each of the 3 servers will maintain a maximum of 10 connections.
 
 **Plan capacity for N-1 scenarios**: Ensure that any N-1 servers (your cluster minus one) can handle your full load. This means each server should be capable of handling more than its normal share of traffic to accommodate failover situations.
 
