@@ -357,6 +357,110 @@ These metrics track OJP's gRPC API—the interface applications use to communica
 
 `grpc_server_msg_received_total` and `grpc_server_msg_sent_total` track message volume. Large message counts relative to RPC counts might indicate applications sending batch operations or receiving large result sets.
 
+### Enhanced Performance Metrics (PostgreSQL Stress Tests)
+
+**Added in January 2026**, OJP's stress test infrastructure gained comprehensive performance metrics collection, providing deeper insights into proxy behavior under load. These metrics help validate OJP's performance characteristics and guide optimization efforts.
+
+The enhanced metrics system, implemented in the `PerformanceMetrics` utility class, captures detailed performance data during stress testing:
+
+**Latency Percentiles**: Beyond simple averages, the system now tracks:
+- **p50 (Median)**: The typical experience for half of all requests
+- **p75**: Performance for 75% of requests
+- **p90**: Indicates the worst case for 90% of requests  
+- **p95**: Critical threshold for identifying outliers
+- **p99**: Extreme tail latency affecting 1% of requests
+- **Maximum Latency**: Absolute worst-case scenario observed
+
+**Example Output from Stress Test**:
+```
+=== PostgreSQL Stress Test - Performance Metrics ===
+Total Queries:        10,000
+Duration:             42.3 seconds
+Throughput:           236.4 queries/second
+
+Latency Distribution:
+  Min:                2.1 ms
+  p50 (median):       12.4 ms
+  p75:                18.7 ms
+  p90:                24.3 ms
+  p95:                29.1 ms
+  p99:                45.6 ms
+  Max:                127.8 ms
+  Mean:               15.2 ms
+  Std Dev:            8.9 ms
+
+JVM Metrics (End of Test):
+  Heap Used:          384 MB / 2048 MB (18.8%)
+  Non-Heap Used:      92 MB / 512 MB (18.0%)
+  GC Collections:     12 (minor), 0 (major)
+  GC Time:            245 ms total
+  Thread Count:       47 active threads
+```
+
+**Throughput Measurements**: The system calculates queries per second, accounting for:
+- Connection establishment overhead
+- Query execution time  
+- Result set processing
+- Connection cleanup
+
+This provides a realistic throughput figure for production capacity planning.
+
+**JVM Resource Tracking**: At test completion, the metrics include:
+- **Heap Memory**: Current usage vs maximum, indicating memory efficiency
+- **Non-Heap Memory**: Tracking metaspace and thread stacks
+- **Garbage Collection**: Count and duration of collections (minor/major)
+- **Thread Count**: Active threads during peak load
+
+**Implementation Benefits**:
+
+The enhanced metrics provide several advantages for OJP development and operations:
+
+1. **Performance Regression Detection**: Automated stress tests can detect if code changes degrade performance by comparing percentile latencies across builds
+
+2. **Capacity Planning**: Throughput and latency distributions help size OJP deployments for expected load
+
+3. **Bottleneck Identification**: Tail latencies (p95, p99) reveal outlier behavior worth investigating
+
+4. **Memory Profiling**: JVM metrics show if the proxy efficiently manages memory under sustained load
+
+5. **Comparison Testing**: When evaluating different configurations (connection pool sizes, threading models, caching strategies), the detailed metrics enable objective comparison
+
+**Test Coverage**: The enhanced metrics are captured by PostgreSQL integration tests including:
+- `PostgresMiniStressTest`: Validates basic throughput and latency characteristics
+- `PostgresSlowQuerySegregationTest`: Tests segregation effectiveness under mixed workloads
+- Connection pool stress tests: Validates pool behavior at saturation points
+
+**Accessing Metrics in Tests**: The `PerformanceMetrics` class is JVM version-compatible and designed for ease of use:
+
+```java
+// Create metrics collector
+PerformanceMetrics metrics = new PerformanceMetrics();
+
+// Record each query execution
+for (int i = 0; i < queryCount; i++) {
+    long start = System.nanoTime();
+    executeQuery(connection, sql);
+    long duration = System.nanoTime() - start;
+    metrics.recordLatency(duration);
+}
+
+// Get comprehensive report
+String report = metrics.generateReport(testDuration);
+System.out.println(report);
+
+// Access individual metrics programmatically
+System.out.println("p95 latency: " + metrics.getP95() + " ms");
+System.out.println("Throughput: " + metrics.getThroughput(testDuration) + " q/s");
+```
+
+**Future Enhancements**: The performance metrics infrastructure enables several planned improvements:
+- Real-time metric streaming to Prometheus during stress tests
+- Historical trend analysis comparing performance across releases
+- Automated performance regression testing in CI/CD pipelines
+- Load testing scenarios with configurable patterns (sustained, burst, ramp-up)
+
+These enhanced metrics represent a significant step toward data-driven optimization of OJP's performance characteristics, ensuring the proxy can handle production workloads efficiently.
+
 ### Connection Pool Metrics
 
 Connection pool behavior directly impacts how well OJP performs. These metrics help you understand pool utilization and identify capacity issues.
