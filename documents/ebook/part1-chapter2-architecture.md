@@ -953,6 +953,211 @@ graph LR
 
 ---
 
+## 2.5 Action Pattern Architecture (Server-Side)
+
+**[IMAGE PROMPT 15]**: Create a modern architectural diagram showing the Action Pattern transformation:
+LEFT: "Before" - Large StatementServiceImpl monolith box (2500+ lines)
+RIGHT: "After" - Multiple focused Action class boxes (ConnectAction, CommitTransactionAction, ExecuteQueryAction, XaStartAction, etc.)
+Show transformation arrow in the middle labeled "Action Pattern Refactoring (2026-01)"
+Use clean, professional style with color coding: monolith in red, actions in green
+Include metrics: "1 class → 20+ Actions", "Better testability", "Reduced complexity"
+
+The OJP server underwent a significant architectural evolution in January 2026, transitioning from a monolithic service implementation to a modern Action Pattern architecture. This refactoring transformed the StatementServiceImpl class from a 2,500+ line monolith into a collection of focused, testable Action classes, dramatically improving code maintainability, testability, and scalability.
+
+### The Challenge: Monolithic StatementServiceImpl
+
+Prior to this refactoring, the StatementServiceImpl class handled all server-side operations—connection management, transaction handling, query execution, XA operations, and LOB processing—within a single massive class. While functional, this approach created several challenges:
+
+- **Testing Complexity**: Unit testing required extensive mocking of dependencies, making tests brittle and hard to maintain
+- **Code Navigation**: Finding specific functionality within thousands of lines proved time-consuming
+- **Parallel Development**: Multiple developers working on different features frequently encountered merge conflicts
+- **Memory Overhead**: New object instances created for each operation increased memory pressure
+- **Code Reuse**: Common patterns were duplicated rather than abstracted
+
+### The Solution: Action Pattern with Singleton Implementation
+
+The refactoring introduced a clean Action Pattern architecture where each logical operation is encapsulated in its own Action class. The pattern follows three key interfaces:
+
+```java
+// Base action interface - all actions are stateless singletons
+public interface Action<T> {
+    T execute(ActionContext context) throws SQLException;
+}
+
+// For actions returning single values
+public interface ValueAction<T> extends Action<T> {
+    T execute(ActionContext context) throws SQLException;
+}
+
+// For streaming operations (ResultSets, LOBs)
+public interface StreamingAction<T> extends Action<Stream<T>> {
+    Stream<T> execute(ActionContext context) throws SQLException;
+}
+
+// For initialization operations
+public interface InitAction extends Action<Void> {
+    Void execute(ActionContext context) throws SQLException;
+}
+```
+
+The ActionContext serves as a data transfer object, carrying all necessary state:
+
+```java
+public class ActionContext {
+    private final Session session;
+    private final Connection connection;
+    private final StatementRequest request;
+    private final SlowQuerySegregationManager slowQueryManager;
+    private final QueryPerformanceMonitor performanceMonitor;
+    // ... other dependencies
+    
+    // Immutable builder pattern for construction
+}
+```
+
+### Singleton Pattern for Memory Efficiency
+
+All Action classes implement the singleton pattern, eliminating object creation overhead:
+
+```java
+public class ConnectAction implements InitAction {
+    private static final ConnectAction INSTANCE = new ConnectAction();
+    
+    private ConnectAction() {} // Private constructor
+    
+    public static ConnectAction getInstance() {
+        return INSTANCE;
+    }
+    
+    @Override
+    public Void execute(ActionContext context) throws SQLException {
+        // Connection logic using context state
+        Session session = context.getSession();
+        Connection conn = context.getConnection();
+        // ... implementation
+        return null;
+    }
+}
+```
+
+This approach provides significant benefits:
+- **Zero allocation overhead**: Single instance per JVM, reused across all requests
+- **Thread-safe by design**: Stateless actions have no shared mutable state
+- **Simplified testing**: Easy to mock dependencies in ActionContext
+- **Clear contracts**: Each action has one responsibility
+
+### Core Action Categories
+
+The refactoring organized operations into logical categories:
+
+**Connection Management Actions**:
+- `ConnectAction`: Establishes new sessions and database connections
+- `CreateSlowQuerySegregationManagerAction`: Initializes slow query segregation per connection
+- `HandleXAConnectionWithPoolingAction`: Manages XA connection lifecycle with pooling
+- `HandleUnpooledXAConnectionAction`: Handles XA connections without pooling
+
+**Transaction Actions**:
+- `CommitTransactionAction`: Commits active transactions
+- `RollbackTransactionAction`: Rolls back transactions
+- `TerminateSessionAction`: Cleans up session resources
+
+**XA Transaction Actions** (Distributed Transactions):
+- `XaStartAction`: Begins XA transaction branch
+- `XaEndAction`: Ends XA transaction branch
+- `XaPrepareAction`: Prepares XA transaction for commit
+- `XaCommitAction`: Commits prepared XA transaction
+- `XaRollbackAction`: Rolls back XA transaction
+- `XaRecoverAction`: Recovers in-doubt XA transactions
+- `XaForgetAction`: Removes heuristically completed XA transaction
+- `XaSetTransactionTimeoutAction`: Configures XA timeout
+- `XaGetTransactionTimeoutAction`: Retrieves XA timeout
+- `XaIsSameRMAction`: Checks if two XA resources are the same
+
+**LOB Actions**:
+- `CreateLobAction`: Creates new LOB (BLOB/CLOB) objects
+- `ReadLobAction`: Streams LOB data to clients
+
+**Utility Actions**:
+- `CallResourceAction`: Invokes database-specific operations
+- `ProcessClusterHealthAction`: Updates cluster topology for multinode deployments
+
+### Benefits Realized
+
+The Action Pattern refactoring delivered measurable improvements:
+
+**Code Quality**:
+- **Reduced class size**: From one 2,500-line class to 20+ focused classes averaging 100-150 lines each
+- **Improved cohesion**: Each action has a single, well-defined responsibility
+- **Better organization**: Related actions grouped in `org.openjproxy.grpc.server.action` package structure
+
+**Testability**:
+- **Isolated testing**: Each action can be unit tested independently
+- **Simplified mocking**: ActionContext provides clear dependency injection point
+- **Faster test execution**: Smaller test scope reduces setup complexity
+
+**Performance**:
+- **Memory efficiency**: Singleton pattern eliminates 20+ object allocations per request
+- **Reduced GC pressure**: Fewer short-lived objects means less garbage collection overhead
+- **Thread safety**: Stateless singletons eliminate synchronization needs
+
+**Developer Experience**:
+- **Easier navigation**: Finding code for specific operations is straightforward
+- **Reduced merge conflicts**: Separate files mean parallel development rarely conflicts
+- **Clear extension points**: Adding new operations follows established pattern
+
+### Implementation Example
+
+Here's how a typical action is invoked in StatementServiceImpl:
+
+```java
+// Before (monolithic)
+public ConnectResponse connect(ConnectRequest request) {
+    // 100+ lines of connection logic inline
+    Session session = createSession();
+    Connection conn = getConnection(request);
+    // ... complex setup
+    return buildResponse();
+}
+
+// After (Action Pattern)
+public ConnectResponse connect(ConnectRequest request) {
+    ActionContext context = ActionContext.builder()
+        .request(request)
+        .sessionManager(sessionManager)
+        .build();
+        
+    ConnectAction.getInstance().execute(context);
+    return buildResponse(context);
+}
+```
+
+The refactoring maintains full backward compatibility—all gRPC service methods work exactly as before, but the internal implementation is now modular, testable, and maintainable.
+
+### Evolution Timeline
+
+The Action Pattern refactoring occurred in phases throughout January 2026:
+
+- **January 11-15, 2026**: Initial framework and XA operations refactoring (PRs #261, #265, #266)
+- **January 16-17, 2026**: Core transaction operations (PRs #267, #270, #271, #272)
+- **January 18, 2026**: Remaining XA operations completed (PR #278)
+- **January 19, 2026**: LOB operations and session management (PRs #279, #284)
+
+This phased approach ensured continuous integration without disrupting ongoing development, with each phase adding 3-5 new Action classes and maintaining 100% test coverage.
+
+### Future Enhancements
+
+The Action Pattern architecture opens possibilities for future improvements:
+
+- **Dynamic action loading**: Plugin-style architecture for custom database operations
+- **Action composition**: Combining multiple actions into complex workflows
+- **Async action execution**: Non-blocking operations for improved throughput
+- **Action metrics**: Per-action performance monitoring and alerting
+- **Action validation**: Pre-execution validation rules for request integrity
+
+The Action Pattern represents a significant maturation of OJP's server-side architecture, positioning the project for continued growth and enterprise adoption.
+
+---
+
 ## Summary
 
 OJP's architecture is built on three core components working in harmony:
