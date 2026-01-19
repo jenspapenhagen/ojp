@@ -184,7 +184,7 @@ ojp.server.slowQuerySegregation.fastSlotTimeout=60000
 
 The default slow slot timeout is 120 seconds (2 minutes), reflecting the expectation that slow operations might take a while. The fast slot timeout defaults to 60 seconds (1 minute), which is generous for operations that should complete quickly. If a timeout occurs, the client receives an exception indicating that no slot was available within the timeout period.
 
-You might adjust these based on your SLAs and expected query durations. For example, if your fast queries take around 5 seconds to complete, you probably want a timeout of at least 5 seconds to avoid false positives.
+You might adjust these based on your SLAs and expected query durations. Consider your actual performance characteristics when setting timeouts—the goal is to catch genuine problems without false positives.
 
 ### Idle Timeout for Borrowing
 
@@ -282,8 +282,6 @@ graph LR
     A[OJP Server] --> B[Performance Tracker]
     B --> C[Log Output]
     C --> D[Monitoring Tools]
-```
-    G --> I[Admin UI]
 ```
 
 ## Practical Use Cases
