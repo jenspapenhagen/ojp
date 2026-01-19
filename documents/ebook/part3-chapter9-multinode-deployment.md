@@ -90,9 +90,9 @@ First, the driver parses the URL and extracts the list of server addresses. It m
 
 When establishing a new connection, the driver evaluates which servers are currently available. It pings each server (or uses cached health information from recent requests) to determine if it's responsive. Servers that fail health checks are temporarily marked as unhealthy and bypassed for new connections.
 
-Among the healthy servers, the driver selects one based on its load-aware selection algorithm. By default (and you should use this default), new connections go to the server with the fewest active connections. This approach naturally balances load across servers and prevents any single server from becoming a hotspot.
+Among the healthy servers, the driver selects one based on its load-aware selection algorithm. By default (and you should use this default), operations are sent to the server with the fewest active connections. This approach naturally balances load across servers and prevents any single server from becoming a hotspot.
 
-Once a server is selected, the driver establishes a gRPC connection to that server and requests a database connection. If this step fails—perhaps the server went down between the health check and the connection request—the driver automatically retries with another healthy server. This retry logic happens transparently; your application simply sees a successful connection (after a slight delay) or an error if all servers are unavailable.
+The gRPC connection to each OJP Server is established once when the driver first connects, creating a multiplexed pipe that handles multiple virtual connections (connection handles) on the client side. When a server is selected for a database operation, the driver sends the operation request over the existing gRPC connection to that server. The load-aware selection decides which server's gRPC pipe receives each operation, not which gRPC connection to establish. If an operation fails—perhaps the server went down between the health check and the request—the driver automatically retries with another healthy server. This retry logic happens transparently; your application simply sees a successful connection (after a slight delay) or an error if all servers are unavailable.
 
 > **AI Image Prompt**: Create a flowchart showing the connection establishment decision process. Start with "Connection Request", flow through "Parse URL", "Check Server Health", "Select Server (Least Loaded)", "Establish gRPC Connection", with decision diamonds for "Servers Available?" and "Connection Successful?". Show retry loops and final outcomes. Use green paths for success and red paths for failure scenarios.
 
@@ -100,35 +100,35 @@ Once a server is selected, the driver establishes a gRPC connection to that serv
 sequenceDiagram
     participant App
     participant Driver
+    participant SessionTracker
     participant Server1
     participant Server2
     participant Server3
     
+    Note over Driver,Server3: gRPC connections already established (multiplexed pipes)
+    
     App->>Driver: getConnection()
     Driver->>Driver: Parse multinode URL
-    Driver->>Server1: Health check (ping)
-    Server1-->>Driver: Healthy (5 connections)
-    Driver->>Server2: Health check (ping)
-    Server2-->>Driver: Healthy (3 connections)
-    Driver->>Server3: Health check (ping)
-    Server3--xDriver: Timeout (unhealthy)
+    Driver->>SessionTracker: Get session counts (local)
+    SessionTracker-->>Driver: Server1: 5, Server2: 3, Server3: timeout
     
-    Note over Driver: Select Server2 (least loaded)
+    Note over Driver: Select Server2 (least loaded, 3 sessions)
     
-    Driver->>Server2: Request connection
-    Server2-->>Driver: Connection established
+    Driver->>Server2: Request DB connection (via existing gRPC pipe)
+    Server2-->>Driver: Connection handle returned
+    Driver->>SessionTracker: Register session to Server2
     Driver-->>App: Return connection
 ```
 
 ### Session Stickiness and Affinity
 
-Once a session is established—identified by a unique session UUID—all subsequent operations for that session must go to the same OJP Server. This session stickiness is crucial for maintaining consistency, especially for operations that involve server-side state like temporary tables, session variables, or active transactions.
+Once a session is established—identified by a unique session UUID—all subsequent operations for that specific connection must go to the same OJP Server. This session stickiness is crucial for maintaining consistency, especially for operations that involve server-side state like active transactions.
 
-When you open a connection and it gets assigned to, say, Server 2, that connection's session UUID is associated with Server 2 in the driver's state. If your application later requests another connection within the same session context (which happens in certain pooled scenarios), the driver routes it to Server 2 automatically.
+When you open a virtual connection and it gets assigned to, say, Server 2, that virtual connection's session UUID is associated with Server 2 in the driver's state. All operations on that specific connection handle are routed to Server 2.
 
 This stickiness extends to transaction boundaries. If you start a transaction on Server 2, all operations within that transaction must execute on Server 2. The driver understands transaction semantics and enforces this routing transparently. You don't need to do anything special in your application code—just use normal JDBC transaction methods like `setAutoCommit(false)`, `commit()`, and `rollback()`.
 
-The session stickiness also applies to operations like creating temporary tables or setting session variables. These database features are inherently session-specific, so they need to execute on the same server consistently. The driver handles this automatically by routing based on session identity.
+**Note on Temporary Tables and Session Variables**: Features like temporary tables and session variables are session-specific database features. Support for these features in multinode deployments is currently in development and is expected from version 0.4.0-beta. In the current version, temporary tables created on one connection handle won't be automatically visible to another connection handle even from the same application.
 
 > **AI Image Prompt**: Create a diagram illustrating session stickiness. Show an application making three database requests (labeled "Request 1", "Request 2", "Request 3") all with the same "Session UUID: abc-123". Draw arrows showing all three requests being routed to "Server 2" while "Server 1" and "Server 3" are visible but not used. Add a small inset showing a temporary table icon and transaction symbol to illustrate session-specific operations.
 
@@ -157,9 +157,9 @@ The heart of multinode's intelligent behavior is its load-aware server selection
 
 ### How Load-Aware Selection Works
 
-Each OJP Server tracks how many connections it currently has active. When the JDBC driver queries servers during connection establishment, each server reports its current connection count. The driver then routes the new connection to the server with the fewest active connections.
+The JDBC driver maintains client-side session tracking for each OJP Server. When establishing a new connection, the driver consults these local session counts and routes the request to the server with the fewest active sessions.
 
-This approach has several advantages over round-robin. If one server is handling longer-running queries, it naturally accumulates more active connections. The driver detects this and routes new connections to less-loaded servers. This prevents the situation where round-robin might continue sending connections to an already-overloaded server simply because it's "next in line."
+This approach has several advantages over round-robin. Servers handling longer-running queries naturally accumulate more sessions, and the driver automatically directs new requests to less-loaded servers. This prevents round-robin from continuing to send connections to an already-overloaded server simply because it's "next in line."
 
 Load-aware selection also adapts automatically when servers are added or removed. If you add a fourth server to a three-server cluster, it immediately starts receiving connections because it has zero active connections. The driver doesn't need any special configuration—it just starts using the new server naturally.
 
@@ -169,10 +169,10 @@ The selection happens at connection request time, not at URL parse time. This me
 
 ```mermaid
 graph TD
-    A[New Connection Request] --> B[Query All Servers]
-    B --> C[Server 1: 12 active]
-    B --> D[Server 2: 8 active]
-    B --> E[Server 3: 4 active]
+    A[New Connection Request] --> B[Check Local Session Counts]
+    B --> C[Server 1: 12 sessions]
+    B --> D[Server 2: 8 sessions]
+    B --> E[Server 3: 4 sessions]
     
     C & D & E --> F{Select Minimum}
     F --> G[Route to Server 3]
@@ -269,7 +269,7 @@ When a failed server recovers and comes back online, the driver detects this thr
 
 If the recovered server is less loaded than others (which it typically is, since it wasn't receiving traffic while down), it gets more new connections until load balances across all servers. This gradual recovery prevents overwhelming a server that might have just recovered from an issue.
 
-For applications using connection pools, recovery is especially smooth. The pool maintains connections to healthy servers throughout the failure. When the failed server recovers, new connections gradually migrate to it as old connections expire and are replaced. The application experiences no disruption—just a gradual rebalancing of load.
+Applications should not use connection pools on the client side when using OJP, as OJP Server controls connection pooling on the server side. If a server recovers, the JDBC driver's load-aware selection automatically starts routing new connection requests to it, and the distribution rebalances naturally over time as operations are executed.
 
 ## Server Coordination and Pool Management
 
@@ -279,7 +279,7 @@ When you deploy multiple OJP Servers in a cluster, they need to coordinate on co
 
 Consider your OJP client configuration: you specify a maximum pool size, let's say 30 connections. When you connect to three OJP Servers, you don't want each server creating 30 connections to the database—that would give you 90 total, which might exceed your database's connection limit or licensing.
 
-Instead, OJP divides the configured pool size by the number of healthy servers. With 30 configured and 3 healthy servers, each server's pool allows maximum 10 connections. The driver doesn't need to tell servers about each other—each server discovers other servers through the client's connection distribution and adjusts its pool sizing accordingly.
+OJP Servers do not connect to each other directly. Instead, they use client relay information about cluster health to make decisions about pool sizing. When the JDBC driver connects to an OJP Server, it provides information about the cluster configuration (which servers exist) and health status (which servers are currently available). Each OJP Server uses this information from its clients to understand how many other healthy servers are in the cluster and adjusts its connection pool sizing accordingly.
 
 This division happens dynamically. If a server fails and you're down to two healthy servers, each server increases its pool size to 15 to maintain the total capacity of 30. When the third server recovers, all three rebalance back to 10 each. Your total database connection count remains roughly constant regardless of server failures.
 
@@ -289,19 +289,19 @@ The coordination applies to both regular connection pools and XA backend session
 
 ```mermaid
 graph TD
-    A[Client Config: maxPoolSize=30] --> B{3 Servers Available}
-    B --> C[Server 1: maxSize=10]
-    B --> D[Server 2: maxSize=10]
-    B --> E[Server 3: maxSize=10]
+    A[Client Config: maxPoolSize=30, minPoolSize=10] --> B{3 Servers Available}
+    B --> C[Server 1: max=10, min=3]
+    B --> D[Server 2: max=10, min=3]
+    B --> E[Server 3: max=10, min=3]
     
     F[Server 2 Fails] --> G{2 Servers Available}
-    G --> H[Server 1: maxSize=15]
-    G --> I[Server 3: maxSize=15]
+    G --> H[Server 1: max=15, min=5]
+    G --> I[Server 3: max=15, min=5]
     
     J[Server 2 Recovers] --> K{3 Servers Available Again}
-    K --> L[Server 1: maxSize=10]
-    K --> M[Server 2: maxSize=10]
-    K --> N[Server 3: maxSize=10]
+    K --> L[Server 1: max=10, min=3]
+    K --> M[Server 2: max=10, min=3]
+    K --> N[Server 3: max=10, min=3]
     
     style E fill:#FFB6C1
     style F fill:#FF0000
@@ -371,19 +371,19 @@ ojp.loadaware.selection.enabled=true
 
 ### Server-Side Configuration
 
-Servers in a multinode cluster should be configured identically. They share the same database connection details, the same feature flags, and the same operational settings. The only differences might be infrastructure-related like hostnames or ports.
+Servers in a multinode cluster should be configured identically. They share the same operational settings and feature flags. The only differences might be infrastructure-related like server hostnames or ports.
 
-Each server's configuration file should specify:
+Each server's configuration file (ojp-server.properties) should specify identical settings for:
 
 ```properties
-# Server connection details (same database for all servers)
-ojp.datasource.url=jdbc:postgresql://db-host:5432/mydb
-ojp.datasource.username=dbuser
-ojp.datasource.password=dbpassword
+# Server settings  
+ojp.server.port=1059
+ojp.server.threadPoolSize=200
+ojp.server.logLevel=ERROR
 
-# HikariCP pool configuration (same for all servers)
-ojp.datasource.hikari.maximumPoolSize=100
-ojp.datasource.hikari.minimumIdle=10
+# Circuit breaker
+ojp.server.circuitBreakerTimeout=60000
+ojp.server.circuitBreakerThreshold=3
 
 # Feature flags (same for all servers)
 ojp.server.slowQuerySegregation.enabled=true
@@ -466,9 +466,9 @@ graph TB
         S1 & S2 & S3 --> DB[(Database<br/>Primary in AZ1)]
     end
     
-    APP1[App Instance] -.->|Prefers local| S1
-    APP2[App Instance] -.->|Prefers local| S2
-    APP3[App Instance] -.->|Prefers local| S3
+    APP1[App Instance] -.->|Load balanced| S1
+    APP2[App Instance] -.->|Load balanced| S2
+    APP3[App Instance] -.->|Load balanced| S3
     
     APP1 -.->|Failover| S2
     APP1 -.->|Failover| S3
@@ -476,11 +476,11 @@ graph TB
 
 ## Monitoring and Observability
 
-Understanding your multinode cluster's behavior is essential for operations. OJP provides several mechanisms for monitoring cluster health and performance.
+Understanding your multinode cluster's behavior is essential for operations. OJP provides gRPC metrics through its standard telemetry integration, which includes basic connection and request metrics.
 
 ### Connection Distribution Metrics
 
-OJP exposes metrics showing how connections are distributed across servers. You can see the number of active connections per server, which helps verify that load balancing is working as expected. If one server consistently has many more connections than others, it might indicate a problem with that server (making it slow and causing connection accumulation).
+OJP exposes gRPC metrics that can help you understand cluster behavior. While comprehensive multinode-specific metrics are under development, you can monitor basic connection activity through standard gRPC observability.
 
 These metrics integrate with standard observability platforms. If you're using OpenTelemetry (covered in Chapter 13), connection distribution metrics flow through your existing telemetry pipeline. In Prometheus, you might query:
 
@@ -530,7 +530,7 @@ graph TD
 
 ## Best Practices
 
-Drawing from production experience, here are best practices for deploying and operating OJP in multinode configuration.
+Based on our experience, here are best practices for deploying and operating OJP in multinode configuration.
 
 **Use at least three servers**: While two servers provide failover capability, three is the minimum for robust high availability. With three servers, you can lose one and still have redundancy. Two servers means losing one leaves you with a single point of failure until recovery.
 
@@ -540,13 +540,13 @@ Drawing from production experience, here are best practices for deploying and op
 
 **Monitor connection distribution**: Set up dashboards showing connections per server. Verify that load balances as expected. Significant imbalances might indicate performance issues with particular servers.
 
-**Test failover scenarios**: Periodically test failover by deliberately taking servers offline. Verify that applications continue working and that connection distribution rebalances correctly. This testing builds confidence in your high availability setup.
+**Test failover scenarios**: Periodically test failover by deliberately taking servers offline. Verify that applications continue working and that connection distribution rebalances correctly. **Important**: When an OJP Server node goes down, in-flight operations on that server will fail. If this is not acceptable in production (e.g., during critical business operations), perform failover testing in pre-production or test environments, or schedule tests during low-traffic maintenance windows.
 
 **Use infinite retry for production**: The default `retryAttempts=-1` is appropriate for most production deployments. It ensures your application survives transient failures without manual intervention. Only use bounded retry if you have specific requirements for failing fast.
 
 **Set appropriate retry delays**: The default 5-second retry delay balances recovery speed with infrastructure protection. Too short (like 1 second) can hammer failed servers unnecessarily; too long (like 30 seconds) means slow recovery from transient failures.
 
-**Size pools appropriately**: Remember that your pool size configuration is divided among servers. If you need 30 total connections and plan to run 3 servers, configure `maximumPoolSize=30`, not `maximumPoolSize=10`. The division happens automatically.
+**Size pools appropriately**: The pool size is set on the OJP JDBC client side and communicated to OJP Servers along with cluster health information. Each OJP Server uses this information to calculate how many connections it should maintain by dividing the configured pool size by the number of healthy servers in the cluster. If you need 30 total connections and plan to run 3 servers, configure `maximumPoolSize=30` in the client—each of the 3 servers will maintain a maximum of 10 connections.
 
 **Plan capacity for N-1 scenarios**: Ensure that any N-1 servers (your cluster minus one) can handle your full load. This means each server should be capable of handling more than its normal share of traffic to accommodate failover situations.
 
@@ -594,9 +594,11 @@ String url = "jdbc:ojp[server1:1059]_postgresql://localhost:5432/mydb";
 String url = "jdbc:ojp[server1:1059,server2:1059,server3:1059]_postgresql://localhost:5432/mydb";
 ```
 
-Notice that the original server (`server1`) is included in the multinode URL. This allows a gradual rollout where some application instances use the old URL (single-node) and some use the new URL (multinode) during the transition. Both work simultaneously.
+Notice that the original server (`server1`) is included in the multinode URL. 
 
-You can deploy the URL change gradually using feature flags, canary deployments, or rolling updates. This reduces risk by allowing you to verify multinode behavior with a small percentage of traffic before full rollout.
+**Important**: All applications connecting to the same OJP cluster should use the same cluster configuration in their connection URLs. Having different applications report different cluster configurations (e.g., some seeing 1 server, others seeing 3 servers) will confuse the cluster health assessment. Each OJP Server relies on consistent cluster information from clients to properly coordinate pool sizing. 
+
+During migration, update all application instances to use the multinode URL simultaneously, or use a phased approach where you fully migrate one application/service at a time. Avoid having some instances of the same application using single-node URLs while others use multinode URLs for extended periods.
 
 ### Rollback Plan
 
