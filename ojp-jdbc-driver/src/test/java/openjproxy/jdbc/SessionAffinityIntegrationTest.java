@@ -13,6 +13,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * Integration tests for SQL session affinity feature.
@@ -135,9 +136,7 @@ public class SessionAffinityIntegrationTest {
         skipTestIfDisabled(url);
 
         // Session variables are mainly MySQL/MariaDB feature, skip for H2
-        if (url.toLowerCase().contains("_h2:")) {
-            assumeFalse(true, "Skipping session variable test for H2 (not supported)");
-        }
+        assumeFalse(url.toLowerCase().contains("_h2:"), "Skipping session variable test for H2 (not supported)");
 
         log.info("Testing session variable affinity for url: {}", url);
 
@@ -176,9 +175,7 @@ public class SessionAffinityIntegrationTest {
         skipTestIfDisabled(url);
 
         // Skip H2
-        if (url.toLowerCase().contains("_h2:")) {
-            assumeFalse(true, "Skipping PostgreSQL session variable test for H2");
-        }
+        assumeFalse(url.toLowerCase().contains("_h2:"), "Skipping PostgreSQL session variable test for H2");
 
         log.info("Testing PostgreSQL session variable affinity for url: {}", url);
 
@@ -199,7 +196,7 @@ public class SessionAffinityIntegrationTest {
                 // Verify variable value was preserved
                 Assert.assertTrue("Should return session variable value", rs.next());
                 String workMem = rs.getString(1);
-                Assert.assertTrue("work_mem should be 4MB", workMem.contains("4MB") || workMem.contains("4096"));
+                Assert.assertTrue("work_mem should be 4MB or 4096kB format", workMem.contains("4MB") || workMem.contains("4096"));
                 
                 rs.close();
                 
@@ -366,27 +363,13 @@ public class SessionAffinityIntegrationTest {
     // Helper methods
 
     private void skipTestIfDisabled(String url) {
-        if (url.toLowerCase().contains("_h2:") && !isH2TestEnabled) {
-            assumeFalse(true, "Skipping H2 tests");
-        }
-        if (url.toLowerCase().contains("postgresql") && !isPostgresTestEnabled) {
-            assumeFalse(true, "Skipping PostgreSQL tests");
-        }
-        if (url.toLowerCase().contains("mysql") && !isMySQLTestEnabled) {
-            assumeFalse(true, "Skipping MySQL tests");
-        }
-        if (url.toLowerCase().contains("mariadb") && !isMariaDBTestEnabled) {
-            assumeFalse(true, "Skipping MariaDB tests");
-        }
-        if (url.toLowerCase().contains("oracle") && !isOracleTestEnabled) {
-            assumeFalse(true, "Skipping Oracle tests");
-        }
-        if (url.toLowerCase().contains("sqlserver") && !isSqlServerTestEnabled) {
-            assumeFalse(true, "Skipping SQL Server tests");
-        }
-        if (url.toLowerCase().contains("db2") && !isDb2TestEnabled) {
-            assumeFalse(true, "Skipping DB2 tests");
-        }
+        assumeTrue(isH2TestEnabled || !url.toLowerCase().contains("_h2:"), "Skipping H2 tests");
+        assumeTrue(isPostgresTestEnabled || !url.toLowerCase().contains("postgresql"), "Skipping PostgreSQL tests");
+        assumeTrue(isMySQLTestEnabled || !url.toLowerCase().contains("mysql"), "Skipping MySQL tests");
+        assumeTrue(isMariaDBTestEnabled || !url.toLowerCase().contains("mariadb"), "Skipping MariaDB tests");
+        assumeTrue(isOracleTestEnabled || !url.toLowerCase().contains("oracle"), "Skipping Oracle tests");
+        assumeTrue(isSqlServerTestEnabled || !url.toLowerCase().contains("sqlserver"), "Skipping SQL Server tests");
+        assumeTrue(isDb2TestEnabled || !url.toLowerCase().contains("db2"), "Skipping DB2 tests");
     }
 
     private String getCreateTempTableSQL(String url) {
@@ -405,7 +388,7 @@ public class SessionAffinityIntegrationTest {
         } else if (url.toLowerCase().contains("db2")) {
             return "DECLARE GLOBAL TEMPORARY TABLE temp_session_test (id INT, value VARCHAR(100)) ON COMMIT PRESERVE ROWS";
         }
-        throw new IllegalArgumentException("Unsupported database URL: " + url);
+        throw new UnsupportedOperationException("Unsupported database URL: " + url);
     }
 
     private String getInsertSQL(String url) {
@@ -442,7 +425,7 @@ public class SessionAffinityIntegrationTest {
         } else if (url.toLowerCase().contains("db2")) {
             return "DECLARE GLOBAL TEMPORARY TABLE temp_complex (id INT PRIMARY KEY, name VARCHAR(100), amount DECIMAL(10,2)) ON COMMIT PRESERVE ROWS";
         }
-        throw new IllegalArgumentException("Unsupported database URL: " + url);
+        throw new UnsupportedOperationException("Unsupported database URL: " + url);
     }
 
     private String getInsertComplexSQL(String url, int id, String name, double amount) {
