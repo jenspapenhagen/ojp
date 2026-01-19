@@ -26,6 +26,27 @@ This e-book is fully synchronized with the latest features and implementations i
 - Query Optimization with rule-based optimization
 - Technical accuracy improvements and documentation corrections (PR #282)
 
+## Recent Updates
+
+### 2026-01-19 Update (Commit c0b37ae - PR #282)
+
+This update incorporates technical accuracy improvements and documentation corrections from PR #282:
+
+**Chapters Updated:**
+- **Chapter 7 (Framework Integration)**: Clarified connection lifecycle management - updated language to accurately describe how local connection pools break OJP's lifecycle by never closing connections, rather than causing "double-pooling". This correction ensures readers understand the actual technical issue.
+  
+- **Chapter 8 (Slow Query Segregation)**: Enhanced scenario realism by updating from a single slow query example to a concurrent load scenario (25 reporting queries consuming a 30-connection pool), providing a more accurate representation of real-world performance challenges.
+
+- **Chapter 13 (Telemetry and Monitoring)**: Simplified monitoring capability claims to match actual implementation - documentation now accurately reflects log-based monitoring rather than referencing unimplemented Prometheus/OpenTelemetry segregation metrics.
+
+**Content Refinements:**
+- Improved product neutrality by using generic terminology ("connection pool", "maxPoolSize") instead of specific brand names where appropriate
+- Calibrated tone to reflect beta product status ("our experience" vs "production experience")
+- Removed documentation for unsupported time-based configuration features
+- Eliminated inconsistent timing references and orphaned diagram nodes
+
+For detailed technical changes, see [REVISION_NOTE.md](REVISION_NOTE.md).
+
 ## Table of Contents
 
 ### Part I: Foundation (4 chapters)
