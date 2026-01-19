@@ -385,6 +385,165 @@ This ensures tests are isolated and don't interfere with each other.
 
 **[IMAGE_PROMPT_6]**: Create a technical diagram showing the test configuration flow. Show a CSV file icon labeled "h2_postgres_connections.csv" with sample rows visible. Draw an arrow from the CSV to a "Test Framework" box that reads and parses the configuration. From the test framework, draw multiple arrows to different "Test Execution" boxes, one for each connection ID in the CSV. Each execution box should connect to its respective database (H2 or PostgreSQL). Use a clean, architectural diagram style with clear labels and color-coding for different database types.
 
+### 16.7.5 OJP TestContainers Module
+
+**Added in January 2026**, OJP now provides a dedicated `ojp-testcontainers` module that simplifies integration testing by providing a standardized TestContainers-based `OjpContainer` implementation. This module makes it trivial to spin up complete OJP server instances in your tests, eliminating manual server management.
+
+**What is TestContainers?** TestContainers is a Java library that provides lightweight, throwaway Docker containers for integration testing. It handles container lifecycle, port mapping, and cleanup automatically, making tests reproducible across different environments.
+
+**The OjpContainer Implementation**: The `ojp-testcontainers` module provides an `OjpContainer` class that extends TestContainers' `GenericContainer`, offering a fluent API for OJP-specific configuration:
+
+```java
+import org.openjproxy.testcontainers.OjpContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+@Testcontainers
+public class MyIntegrationTest {
+    
+    @Container
+    private static final OjpContainer ojpContainer = new OjpContainer()
+        .withDatabaseUrl("jdbc:h2:mem:testdb")
+        .withDatabaseDriver("org.h2.Driver")
+        .withDatabaseUsername("sa")
+        .withDatabasePassword("")
+        .withExposedPrometheusPort(); // Optional: expose metrics
+    
+    @Test
+    void testWithOjp() {
+        // Container is automatically started before tests
+        String ojpJdbcUrl = ojpContainer.getOjpJdbcUrl();
+        
+        try (Connection conn = DriverManager.getConnection(ojpJdbcUrl)) {
+            // Execute queries through OJP
+            Statement stmt = conn.createStatement();
+            ResultSet rs = stmt.executeQuery("SELECT 1");
+            assertTrue(rs.next());
+            assertEquals(1, rs.getInt(1));
+        }
+        // Container automatically stops after tests
+    }
+}
+```
+
+**Key Features**:
+
+1. **Automatic Lifecycle Management**: The container starts before tests and stops after, with no manual setup required
+
+2. **Dynamic Port Mapping**: TestContainers assigns random available ports, preventing conflicts in parallel test execution
+
+3. **Database Integration**: Easily configure any JDBC-compatible database for OJP to proxy
+
+4. **Custom Docker Images**: Support for both default OJP images and custom-built images with proprietary drivers:
+   ```java
+   OjpContainer ojp = new OjpContainer("my-registry/ojp-oracle:latest")
+       .withDatabaseUrl("jdbc:oracle:thin:@//oracle-host:1521/ORCL")
+       .withDatabaseDriver("oracle.jdbc.OracleDriver");
+   ```
+
+5. **Metrics Access**: Expose Prometheus metrics port for monitoring tests:
+   ```java
+   int metricsPort = ojpContainer.getPrometheusPort();
+   String metricsUrl = "http://localhost:" + metricsPort + "/metrics";
+   ```
+
+**Module Structure**: The `ojp-testcontainers` module is published to Maven Central alongside other OJP artifacts:
+
+```xml
+<dependency>
+    <groupId>org.openjproxy</groupId>
+    <artifactId>ojp-testcontainers</artifactId>
+    <version>0.3.1-beta</version>
+    <scope>test</scope>
+</dependency>
+```
+
+It includes:
+- `OjpContainer` class with fluent configuration API
+- Helper methods for common setup patterns
+- Integration with JUnit 5 via TestContainers annotations
+- Complete JavaDoc documentation
+
+**Example Test Using OjpContainer**: The `ojp-jdbc-driver` module includes an example integration test:
+
+```java
+@Testcontainers
+class H2IntegrationWithContainerTest {
+    
+    @Container
+    static OjpContainer ojp = new OjpContainer()
+        .withDatabaseUrl("jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1")
+        .withDatabaseDriver("org.h2.Driver");
+    
+    @Test
+    void shouldExecuteQueriesThroughOjp() throws SQLException {
+        try (Connection conn = DriverManager.getConnection(ojp.getOjpJdbcUrl())) {
+            // Create table
+            conn.createStatement().execute(
+                "CREATE TABLE users (id INT PRIMARY KEY, name VARCHAR(100))"
+            );
+            
+            // Insert data
+            PreparedStatement pstmt = conn.prepareStatement(
+                "INSERT INTO users VALUES (?, ?)"
+            );
+            pstmt.setInt(1, 1);
+            pstmt.setString(2, "Alice");
+            assertEquals(1, pstmt.executeUpdate());
+            
+            // Query data
+            ResultSet rs = conn.createStatement().executeQuery(
+                "SELECT name FROM users WHERE id = 1"
+            );
+            assertTrue(rs.next());
+            assertEquals("Alice", rs.getString(1));
+        }
+    }
+}
+```
+
+**Benefits for Contributors**:
+
+1. **Lower Barrier to Entry**: New contributors don't need to manually start OJP servers—tests handle it automatically
+
+2. **Isolation**: Each test class can use its own OJP container with independent configuration
+
+3. **Parallel Execution**: Random port assignment enables running multiple test classes concurrently
+
+4. **Reproducibility**: Docker ensures consistent environment across development machines and CI
+
+5. **Quick Iteration**: Containers start in seconds, accelerating the development cycle
+
+**Development Workflow**: When developing new OJP features, the workflow becomes:
+
+```bash
+# 1. Make code changes
+vi ojp-server/src/main/java/...
+
+# 2. Build
+mvn clean install -DskipTests
+
+# 3. Run integration tests (no manual server startup needed!)
+cd ojp-jdbc-driver
+mvn test -Dtest=H2IntegrationWithContainerTest
+
+# TestContainers automatically:
+# - Pulls OJP Docker image (if not cached)
+# - Starts container with random ports
+# - Runs tests
+# - Stops and removes container
+```
+
+**CI/CD Integration**: The `ojp-testcontainers` module works seamlessly in CI pipelines. GitHub Actions, GitLab CI, and other CI systems with Docker support can run these tests without additional configuration. The module includes example GitHub Actions workflows showing dual-server setup for testing SQL Enhancer features.
+
+**Future Enhancements**: Planned improvements include:
+- Support for multi-database test scenarios (testing failover, read replicas)
+- Pre-configured database containers (PostgreSQL, MySQL, Oracle) bundled with OJP
+- Performance test helpers for stress testing containerized OJP instances
+- Network simulation for testing OJP behavior under poor network conditions
+
+The `ojp-testcontainers` module represents a significant step toward making OJP development more accessible. By eliminating manual server management and providing reproducible test environments, it encourages contributors to write comprehensive integration tests.
+
 ## 16.8 Common Development Tasks
 
 Once your environment is set up, here are some common tasks you'll perform during development.
