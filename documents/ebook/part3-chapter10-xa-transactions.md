@@ -10,8 +10,6 @@ Before diving into how OJP implements XA, let's understand what XA transactions 
 
 ### The Distributed Transaction Problem
 
-— Roberto Robetti, OJP Creator
-
 > "When you need to update a customer's account and their audit log simultaneously, and both live in different databases, you need more than hope. You need XA."
 
 Consider a banking application that needs to transfer money between accounts. In a traditional setup with a single database, this is straightforward—start a transaction, debit one account, credit the other, and commit. The database ensures atomicity automatically. But what if these accounts live in different database instances? Perhaps you've sharded your data for scalability, or maybe you're running a microservices architecture where different services own different databases.
@@ -38,7 +36,7 @@ The `XAConnection` interface serves a dual purpose. First, it provides an `XARes
 ```java
 // Create XA-capable data source
 OjpXADataSource xaDataSource = new OjpXADataSource(
-    "ojp://server1:1059,server2:1059/mydb",
+    "jdbc:ojp[server1:1059,server2:1059]_postgresql://localhost:5432/mydb",
     "username",
     "password"
 );
@@ -128,7 +126,7 @@ OJP implements XA support through a sophisticated architecture that combines cli
 
 On the client side, OJP provides three primary classes that implement the JDBC XA interfaces. These classes handle the translation between JDBC XA method calls and OJP's gRPC protocol.
 
-The `OjpXADataSource` class implements `javax.sql.XADataSource` and serves as your application's entry point for XA connections. When you call `getXAConnection()`, it establishes a gRPC connection to an OJP Server with the `isXA=true` flag. This flag tells the server to use XA-capable backend session pooling rather than the regular HikariCP pool used for non-XA connections.
+The `OjpXADataSource` class implements `javax.sql.XADataSource` and serves as your application's entry point for XA connections. When you call `getXAConnection()`, it establishes a gRPC connection to an OJP Server with the `isXA=true` flag. This flag tells the server to use XA-capable backend session pooling rather than the regular HikariCP pool or other regular connection pool provider used for non-XA connections.
 
 The `OjpXAConnection` class wraps the server-side XA session and provides both the `XAResource` for transaction control and the `Connection` for SQL execution. It maintains the session information and routes all XA operations and SQL statements through the gRPC channel to the server.
 
@@ -233,27 +231,7 @@ Setting up XA transactions with OJP requires configuration on both the client an
 
 ### Client-Side Configuration
 
-On the client side, you create an `OjpXADataSource` instead of a regular `OjpDataSource`. The URL format is the same as for non-XA connections, supporting both single-server and multinode configurations:
-
-```java
-// Single server
-OjpXADataSource xaDataSource = new OjpXADataSource(
-    "ojp://localhost:1059/mydb",
-    "username",
-    "password"
-);
-
-// Multinode for high availability
-OjpXADataSource xaDataSource = new OjpXADataSource(
-    "ojp://server1:1059,server2:1059,server3:1059/mydb",
-    "username",
-    "password"
-);
-```
-
-That's it for basic setup. The `OjpXADataSource` handles all the complexity of establishing XA-capable connections to the server.
-
-For advanced scenarios, you can configure the XA connection pool through an `ojp.properties` file on your classpath. These properties control the server-side backend session pool:
+On the client side, you can configure the XA connection pool through an `ojp.properties` file on your classpath. These properties control the server-side backend session pool (configured from the client):
 
 ```properties
 # Maximum total backend sessions per server
@@ -274,22 +252,35 @@ ojp.xa.connection.pool.maxLifetime=1800000
 
 In a multinode deployment, OJP automatically divides the pool size among servers. For example, with two servers and `maxTotal=22`, each server maintains a pool of 11 sessions. When a server fails, the remaining servers automatically expand their pools to compensate, and when the failed server recovers, pools rebalance back to their original sizes.
 
+For basic programmatic setup, you create an `OjpXADataSource` instead of a regular `OjpDataSource`. The URL format follows the OJP standard, supporting both single-server and multinode configurations:
+
+```java
+// Single server
+OjpXADataSource xaDataSource = new OjpXADataSource(
+    "jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb",
+    "username",
+    "password"
+);
+
+// Multinode for high availability
+OjpXADataSource xaDataSource = new OjpXADataSource(
+    "jdbc:ojp[server1:1059,server2:1059,server3:1059]_postgresql://localhost:5432/mydb",
+    "username",
+    "password"
+);
+```
+
+Integrating XA with common frameworks like Spring Boot, Quarkus, or Micronaut is straightforward. For detailed framework integration patterns and complete configuration examples, see Chapter 7: Framework Integration.
+
 ### Server-Side Configuration
 
-The OJP Server requires minimal XA-specific configuration. The backend session pool uses sensible defaults that work well for most applications:
+The OJP Server requires minimal XA-specific configuration. All pool sizing and timeout properties shown above are configured on the **client side** (via ojp.properties or programmatically) but control the **server-side** backend session pool behavior. This allows applications to tune server-side connection pool behavior remotely.
+
+The server can enable or disable XA backend session pooling:
 
 ```properties
 # Enable XA backend session pooling (enabled by default)
 ojp.xa.pooling.enabled=true
-
-# Pool sizing (can be overridden by client properties)
-ojp.xa.connection.pool.maxTotal=22
-ojp.xa.connection.pool.minIdle=20
-
-# Timeout settings
-ojp.xa.connection.pool.maxWaitMillis=20000
-ojp.xa.connection.pool.idleTimeout=600000
-ojp.xa.connection.pool.maxLifetime=1800000
 ```
 
 If you need to fall back to the older pass-through implementation (not recommended), you can disable pooling:
