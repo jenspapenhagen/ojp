@@ -11,7 +11,6 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.UUID;
 
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
@@ -45,14 +44,24 @@ public class Db2SessionAffinityIntegrationTest {
 
         Connection conn = DriverManager.getConnection(url, user, pwd);
 
-        // Generate unique table name to avoid conflicts with previous test runs
-        // Use UUID to ensure uniqueness (replace dashes to make valid DB2 identifier)
-        String tableName = "ts_" + UUID.randomUUID().toString().replace("-", "_");
+        // Use fixed table name - DB2 temp tables are session-scoped
+        // If table already exists from previous test in same session, we'll handle the error
+        String tableName = "temp_session_test";
         
         try (Statement stmt = conn.createStatement()) {
-            // Create declared global temporary table (this should trigger session affinity)
+            // Try to create declared global temporary table (this should trigger session affinity)
             log.debug("Creating DB2 declared global temporary table: {}", tableName);
-            stmt.execute("DECLARE GLOBAL TEMPORARY TABLE " + tableName + " (id INT, value VARCHAR(100)) ON COMMIT PRESERVE ROWS");
+            try {
+                stmt.execute("DECLARE GLOBAL TEMPORARY TABLE " + tableName + " (id INT, value VARCHAR(100)) ON COMMIT PRESERVE ROWS");
+            } catch (SQLException e) {
+                // If table already exists (SQLSTATE 42727), delete existing data and continue
+                if ("42727".equals(e.getSQLState())) {
+                    log.debug("Temp table already exists, clearing existing data");
+                    stmt.execute("DELETE FROM SESSION." + tableName);
+                } else {
+                    throw e;
+                }
+            }
 
             // Insert data into temporary table (should use same session)
             log.debug("Inserting data into temporary table");
@@ -92,14 +101,24 @@ public class Db2SessionAffinityIntegrationTest {
 
         Connection conn = DriverManager.getConnection(url, user, pwd);
 
-        // Generate unique table name to avoid conflicts with previous test runs
-        // Use UUID to ensure uniqueness (replace dashes to make valid DB2 identifier)
-        String tableName = "tc_" + UUID.randomUUID().toString().replace("-", "_");
+        // Use fixed table name - DB2 temp tables are session-scoped
+        // If table already exists from previous test in same session, we'll handle the error
+        String tableName = "temp_complex";
         
         try (Statement stmt = conn.createStatement()) {
-            // Create temporary table
+            // Try to create temporary table
             log.debug("Creating complex temp table: {}", tableName);
-            stmt.execute("DECLARE GLOBAL TEMPORARY TABLE " + tableName + " (id INT NOT NULL, name VARCHAR(100), amount DECIMAL(10,2)) ON COMMIT PRESERVE ROWS");
+            try {
+                stmt.execute("DECLARE GLOBAL TEMPORARY TABLE " + tableName + " (id INT NOT NULL, name VARCHAR(100), amount DECIMAL(10,2)) ON COMMIT PRESERVE ROWS");
+            } catch (SQLException e) {
+                // If table already exists (SQLSTATE 42727), delete existing data and continue
+                if ("42727".equals(e.getSQLState())) {
+                    log.debug("Temp table already exists, clearing existing data");
+                    stmt.execute("DELETE FROM SESSION." + tableName);
+                } else {
+                    throw e;
+                }
+            }
 
             // Insert multiple rows
             log.debug("Inserting multiple rows");
@@ -157,13 +176,23 @@ public class Db2SessionAffinityIntegrationTest {
 
         Connection conn = DriverManager.getConnection(url, user, pwd);
 
-        // Generate unique table name to avoid conflicts with previous test runs
-        // Use UUID to ensure uniqueness (replace dashes to make valid DB2 identifier)
-        String tableName = "tp_" + UUID.randomUUID().toString().replace("-", "_");
+        // Use fixed table name - DB2 temp tables are session-scoped
+        // If table already exists from previous test in same session, we'll handle the error
+        String tableName = "temp_persist";
         
         try (Statement stmt = conn.createStatement()) {
-            // Create temp table
-            stmt.execute("DECLARE GLOBAL TEMPORARY TABLE " + tableName + " (id INT, data VARCHAR(100)) ON COMMIT PRESERVE ROWS");
+            // Try to create temp table
+            try {
+                stmt.execute("DECLARE GLOBAL TEMPORARY TABLE " + tableName + " (id INT, data VARCHAR(100)) ON COMMIT PRESERVE ROWS");
+            } catch (SQLException e) {
+                // If table already exists (SQLSTATE 42727), delete existing data and continue
+                if ("42727".equals(e.getSQLState())) {
+                    log.debug("Temp table already exists, clearing existing data");
+                    stmt.execute("DELETE FROM SESSION." + tableName);
+                } else {
+                    throw e;
+                }
+            }
 
             // Start transaction and insert
             conn.setAutoCommit(false);
