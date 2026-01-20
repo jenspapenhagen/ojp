@@ -293,7 +293,7 @@ However, the pass-through implementation suffers significant performance penalti
 
 ### Framework Integration
 
-OJP XA transactions integrate seamlessly with Java EE and Spring transaction managers. Here's an example using Spring's `JtaTransactionManager`:
+OJP XA transactions integrate seamlessly with Java EE and Spring transaction managers like Atomikos, Narayana, or Bitronix. These transaction managers run on the client side and coordinate distributed transactions. Here's an example using Spring with Atomikos:
 
 ```java
 @Configuration
@@ -302,7 +302,7 @@ public class XAConfig {
     @Bean
     public XADataSource primaryXADataSource() {
         return new OjpXADataSource(
-            "ojp://server1:1059/orders",
+            "jdbc:ojp[server1:1059]_postgresql://localhost:5432/orders",
             "username",
             "password"
         );
@@ -311,7 +311,7 @@ public class XAConfig {
     @Bean
     public XADataSource secondaryXADataSource() {
         return new OjpXADataSource(
-            "ojp://server2:1059/inventory",
+            "jdbc:ojp[server2:1059]_postgresql://localhost:5432/inventory",
             "username",
             "password"
         );
@@ -340,6 +340,7 @@ public class OrderService {
     @Transactional
     public void processOrder(Order order) {
         // Both updates participate in same XA transaction
+        // Atomikos (or your transaction manager) coordinates the XA commit
         // Either both commit or both roll back
         
         try (Connection ordersConn = primaryDataSource.getConnection();
@@ -364,11 +365,13 @@ public class OrderService {
                 inventoryStmt.executeUpdate();
             }
             
-            // Spring's transaction manager coordinates the XA commit
+            // Transaction manager coordinates the XA commit
         }
     }
 }
 ```
+
+In realistic production scenarios, you would use a client-side XA transaction manager like Atomikos, Agroal, or Oracle UCP to manage XA transactions. These managers maintain durable transaction logs and handle recovery scenarios. The OJP driver integrates with these managers through standard JDBC XA interfaces.
 
 **[IMAGE PROMPT: Spring XA Transaction Flow]**
 Create a sequence diagram showing Spring transaction flow with multiple XADataSources. Left side shows Spring transaction manager icon. Middle section shows two parallel flows: one to "Orders Database" via OJP Server 1, another to "Inventory Database" via OJP Server 2. Show transaction phases: 1) @Transactional begins, 2) Execute SQL on both databases (parallel arrows), 3) Prepare phase (synchronization point), 4) Commit phase (parallel completion). Use Spring green color for framework layer, OJP blue for server layer, database gray for backends. Include timing indicators showing phases happen in sequence. Style: Technical sequence diagram with clear temporal ordering.
@@ -509,26 +512,26 @@ The session count includes both active XA transactions and regular non-XA connec
 
 ### Cross-Database XA Transactions
 
-One powerful use case for OJP's multinode architecture is coordinating transactions across different databases. Each OJP server connects to a different database, and a transaction manager coordinates XA operations across all servers:
+One powerful use case for OJP's multinode architecture is coordinating transactions across different databases. Each OJP server connects to a different database, and a transaction manager (like Atomikos, Narayana, or Bitronix) running on the client side coordinates XA operations across all servers:
 
 ```java
 // Configure XADataSources for different databases
 XADataSource ordersDB = new OjpXADataSource(
-    "ojp://server1:1059/orders",
+    "jdbc:ojp[server1:1059]_postgresql://localhost:5432/orders",
     "username", "password"
 );
 
 XADataSource inventoryDB = new OjpXADataSource(
-    "ojp://server2:1059/inventory",
+    "jdbc:ojp[server2:1059]_mysql://localhost:3306/inventory",
     "username", "password"
 );
 
 XADataSource billingDB = new OjpXADataSource(
-    "ojp://server3:1059/billing",
+    "jdbc:ojp[server3:1059]_oracle:thin:@localhost:1521/billing",
     "username", "password"
 );
 
-// Transaction manager coordinates across all three databases
+// Transaction manager (Atomikos, Narayana, etc.) coordinates across all three databases
 @Transactional
 public void processOrderWithAllUpdates(Order order) {
     // Update in orders database
@@ -547,18 +550,18 @@ public void processOrderWithAllUpdates(Order order) {
 }
 ```
 
-Each OJP server independently manages its backend session pool and delegates XA operations to its target database. The transaction manager (like Narayana or Bitronix) coordinates the two-phase commit protocol across all servers, ensuring atomicity across the entire distributed transaction.
+Each OJP server independently manages its backend session pool and delegates XA operations to its target database. The transaction manager (like Atomikos, Narayana, or Bitronix) coordinates the two-phase commit protocol across all servers, ensuring atomicity across the entire distributed transaction.
 
 **[IMAGE PROMPT: Multinode XA Coordination Diagram]**
 Create a network topology diagram showing multinode XA coordination. Top shows Transaction Manager (circle, orange). Three branches below show OJP Server 1, 2, and 3 (rounded rectangles, blue). Below each server show corresponding databases: PostgreSQL, MySQL, and Oracle (cylinders, gray). Show bidirectional arrows between TM and each server (XA protocol, labeled "prepare/commit"). Show bidirectional arrows between each server and its database (SQL execution). Add cloud of client applications at very top connecting to TM. Include annotations: "Health Check" between servers (dotted lines), "Pool: 11 sessions" label on each server, "2PC Coordinator" label on TM. Show one server with red X (failed) and arrows showing remaining servers expanding to "Pool: 16 sessions". Style: Professional network diagram with clear layering and annotations.
 
 ## Best Practices
 
-Years of production experience with XA transactions have revealed patterns that work well and antipatterns to avoid.
+Based on our experience with XA transactions, several patterns work well and some antipatterns should be avoided.
 
 ### Design for Idempotency
 
-XA transactions can fail in subtle ways. The prepare phase might succeed, but the network fails before the commit message arrives. The transaction manager might crash after prepare but before commit. In these scenarios, the transaction manager will eventually retry the commit operation when it recovers.
+XA transactions can fail in subtle ways. The prepare phase might succeed, but the network fails before the commit message arrives. The transaction manager might crash after prepare but before commit. In these scenarios, the transaction manager (Atomikos, Narayana, etc.) will eventually retry the commit operation when it recovers.
 
 Your transaction logic must handle these retries gracefully. Design operations to be idempotent—executing them multiple times produces the same result as executing them once. Use techniques like unique constraint checks, conditional updates based on version numbers, or insert-if-not-exists patterns:
 
