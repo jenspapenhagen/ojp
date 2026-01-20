@@ -234,6 +234,9 @@ Setting up XA transactions with OJP requires configuration on both the client an
 On the client side, you can configure the XA connection pool through an `ojp.properties` file on your classpath. These properties control the server-side backend session pool (configured from the client):
 
 ```properties
+# Enable/disable XA connection pooling (defaults to true)
+ojp.xa.connection.pool.enabled=true
+
 # Maximum total backend sessions per server
 ojp.xa.connection.pool.maxTotal=22
 
@@ -249,6 +252,8 @@ ojp.xa.connection.pool.idleTimeout=600000
 # Maximum session lifetime (milliseconds)
 ojp.xa.connection.pool.maxLifetime=1800000
 ```
+
+The `ojp.xa.connection.pool.enabled` property controls whether XA connections use server-side pooling. When set to `true` (the default), OJP maintains a pool of backend XA sessions using Apache Commons Pool 2, providing the performance benefits described earlier in this chapter. When set to `false`, OJP creates XA connections on demand without pooling—this can be useful for testing, debugging, or specialized scenarios where you need direct XA connection creation. In production environments, pooling should remain enabled for optimal performance.
 
 In a multinode deployment, OJP automatically divides the pool size among servers. For example, with two servers and `ojp.xa.connection.pool.maxTotal=22`, each server maintains a pool of 11 sessions. When a server fails, the remaining servers automatically expand their pools to compensate, and when the failed server recovers, pools rebalance back to their original sizes.
 
