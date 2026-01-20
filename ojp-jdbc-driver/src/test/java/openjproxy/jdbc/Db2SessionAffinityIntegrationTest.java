@@ -89,21 +89,24 @@ public class Db2SessionAffinityIntegrationTest {
         Connection conn = DriverManager.getConnection(url, user, pwd);
         
         try (Statement stmt = conn.createStatement()) {
-            // Try to create declared global temporary table (this should trigger session affinity)
-            log.debug("Creating DB2 declared global temporary table: {}", SHARED_TABLE_NAME);
+            // DB2 Note: DROP TABLE for session temp tables must use SESSION schema prefix
+            // First, try to drop any existing table from previous runs
+            log.debug("Attempting to drop any existing temp table: {}", SHARED_TABLE_NAME);
             try {
-                stmt.execute("DECLARE GLOBAL TEMPORARY TABLE " + SHARED_TABLE_NAME + 
-                    " (id INT, value VARCHAR(100)) ON COMMIT PRESERVE ROWS");
+                stmt.execute("DROP TABLE SESSION." + SHARED_TABLE_NAME);
+                log.debug("Successfully dropped existing temp table");
             } catch (SQLException e) {
-                // If table already exists (SQLSTATE 42727), delete existing data and continue
-                // This can happen if tests are run multiple times in the same JVM session
-                if ("42727".equals(e.getSQLState())) {
-                    log.debug("Temp table already exists from previous run, clearing existing data");
-                    stmt.execute("DELETE FROM SESSION." + SHARED_TABLE_NAME);
-                } else {
-                    throw e;
+                // SQLCODE=-204 (SQLSTATE 42704) means table doesn't exist - this is fine
+                if (!"42704".equals(e.getSQLState())) {
+                    log.warn("Unexpected error dropping temp table: SQLCODE={}, SQLSTATE={}", 
+                        e.getErrorCode(), e.getSQLState());
                 }
             }
+            
+            // Now create the declared global temporary table (this should trigger session affinity)
+            log.debug("Creating DB2 declared global temporary table: {}", SHARED_TABLE_NAME);
+            stmt.execute("DECLARE GLOBAL TEMPORARY TABLE " + SHARED_TABLE_NAME + 
+                " (id INT, value VARCHAR(100)) ON COMMIT PRESERVE ROWS");
 
             // Insert data into temporary table (should use same session)
             log.debug("Inserting data into temporary table");
@@ -153,19 +156,7 @@ public class Db2SessionAffinityIntegrationTest {
             // Clear any existing data from previous test
             // The table should already exist from test 1 due to session persistence
             log.debug("Clearing data from shared temp table: {}", SHARED_TABLE_NAME);
-            try {
-                stmt.execute("DELETE FROM SESSION." + SHARED_TABLE_NAME);
-            } catch (SQLException e) {
-                // If table doesn't exist (tests running out of order or individually),
-                // create it now
-                if ("42704".equals(e.getSQLState())) {
-                    log.debug("Temp table doesn't exist, creating it");
-                    stmt.execute("DECLARE GLOBAL TEMPORARY TABLE " + SHARED_TABLE_NAME + 
-                        " (id INT, value VARCHAR(100)) ON COMMIT PRESERVE ROWS");
-                } else {
-                    throw e;
-                }
-            }
+            stmt.execute("DELETE FROM SESSION." + SHARED_TABLE_NAME);
 
             // Insert multiple rows
             log.debug("Inserting multiple rows");
@@ -229,19 +220,7 @@ public class Db2SessionAffinityIntegrationTest {
             // Clear any existing data from previous tests
             // The table should already exist from test 1 due to session persistence
             log.debug("Clearing data from shared temp table: {}", SHARED_TABLE_NAME);
-            try {
-                stmt.execute("DELETE FROM SESSION." + SHARED_TABLE_NAME);
-            } catch (SQLException e) {
-                // If table doesn't exist (tests running out of order or individually),
-                // create it now
-                if ("42704".equals(e.getSQLState())) {
-                    log.debug("Temp table doesn't exist, creating it");
-                    stmt.execute("DECLARE GLOBAL TEMPORARY TABLE " + SHARED_TABLE_NAME + 
-                        " (id INT, value VARCHAR(100)) ON COMMIT PRESERVE ROWS");
-                } else {
-                    throw e;
-                }
-            }
+            stmt.execute("DELETE FROM SESSION." + SHARED_TABLE_NAME);
 
             // Start transaction and insert
             conn.setAutoCommit(false);
