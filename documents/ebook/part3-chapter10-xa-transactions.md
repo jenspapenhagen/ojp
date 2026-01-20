@@ -235,22 +235,22 @@ On the client side, you can configure the XA connection pool through an `ojp.pro
 
 ```properties
 # Maximum total backend sessions per server
-xa.maxPoolSize=22
+ojp.xa.connection.pool.maxTotal=22
 
 # Minimum idle sessions to maintain
-xa.minIdle=20
+ojp.xa.connection.pool.minIdle=20
 
 # Timeout when borrowing sessions (milliseconds)
-xa.connectionTimeoutMs=20000
+ojp.xa.connection.pool.connectionTimeout=20000
 
 # Idle session eviction timeout (milliseconds)
-xa.idleTimeoutMs=600000
+ojp.xa.connection.pool.idleTimeout=600000
 
 # Maximum session lifetime (milliseconds)
-xa.maxLifetimeMs=1800000
+ojp.xa.connection.pool.maxLifetime=1800000
 ```
 
-In a multinode deployment, OJP automatically divides the pool size among servers. For example, with two servers and `xa.maxPoolSize=22`, each server maintains a pool of 11 sessions. When a server fails, the remaining servers automatically expand their pools to compensate, and when the failed server recovers, pools rebalance back to their original sizes.
+In a multinode deployment, OJP automatically divides the pool size among servers. For example, with two servers and `ojp.xa.connection.pool.maxTotal=22`, each server maintains a pool of 11 sessions. When a server fails, the remaining servers automatically expand their pools to compensate, and when the failed server recovers, pools rebalance back to their original sizes.
 
 For basic programmatic setup, you create an `OjpXADataSource` instead of a regular `OjpDataSource`. The URL format follows the OJP standard, supporting both single-server and multinode configurations:
 
@@ -276,20 +276,7 @@ Integrating XA with common frameworks like Spring Boot, Quarkus, or Micronaut is
 
 The OJP Server requires minimal XA-specific configuration. All pool sizing and timeout properties shown above are configured on the **client side** (via ojp.properties or programmatically) but control the **server-side** backend session pool behavior. This allows applications to tune server-side connection pool behavior remotely.
 
-The server can enable or disable XA backend session pooling:
-
-```properties
-# Enable XA backend session pooling (enabled by default)
-ojp.xa.pooling.enabled=true
-```
-
-If you need to fall back to the older pass-through implementation (not recommended), you can disable pooling:
-
-```properties
-ojp.xa.pooling.enabled=false
-```
-
-However, the pass-through implementation suffers significant performance penalties and lacks the reliability benefits of the pooled implementation.
+The server has default XA pooling settings that work well for most applications. Pool sizing is controlled client-side through the properties shown above.
 
 ### Framework Integration
 
@@ -371,7 +358,7 @@ public class OrderService {
 }
 ```
 
-In realistic production scenarios, you would use a client-side XA transaction manager like Atomikos, Agroal, or Oracle UCP to manage XA transactions. These managers maintain durable transaction logs and handle recovery scenarios. The OJP driver integrates with these managers through standard JDBC XA interfaces.
+In realistic production scenarios, you would use a client-side XA transaction manager like Atomikos, Narayana, or Bitronix to manage XA transactions. These managers maintain durable transaction logs and handle recovery scenarios. The OJP driver integrates with these managers through standard JDBC XA interfaces. You may also use XA-capable connection pools like Agroal or Oracle UCP alongside these transaction managers.
 
 **[IMAGE PROMPT: Spring XA Transaction Flow]**
 Create a sequence diagram showing Spring transaction flow with multiple XADataSources. Left side shows Spring transaction manager icon. Middle section shows two parallel flows: one to "Orders Database" via OJP Server 1, another to "Inventory Database" via OJP Server 2. Show transaction phases: 1) @Transactional begins, 2) Execute SQL on both databases (parallel arrows), 3) Prepare phase (synchronization point), 4) Commit phase (parallel completion). Use Spring green color for framework layer, OJP blue for server layer, database gray for backends. Include timing indicators showing phases happen in sequence. Style: Technical sequence diagram with clear temporal ordering.
