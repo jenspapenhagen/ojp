@@ -45,7 +45,7 @@ public class Db2SessionAffinityIntegrationTest {
         Connection conn = DriverManager.getConnection(url, user, pwd);
 
         try (Statement stmt = conn.createStatement()) {
-            // Drop temp table if it exists
+            // Try to drop temp table if it exists, ignore errors
             try {
                 stmt.execute("DROP TABLE SESSION.temp_session_test");
             } catch (SQLException e) {
@@ -53,8 +53,19 @@ public class Db2SessionAffinityIntegrationTest {
             }
 
             // Create declared global temporary table (this should trigger session affinity)
+            // If table already exists, just truncate it instead
             log.debug("Creating DB2 declared global temporary table");
-            stmt.execute("DECLARE GLOBAL TEMPORARY TABLE temp_session_test (id INT, value VARCHAR(100)) ON COMMIT PRESERVE ROWS");
+            try {
+                stmt.execute("DECLARE GLOBAL TEMPORARY TABLE temp_session_test (id INT, value VARCHAR(100)) ON COMMIT PRESERVE ROWS");
+            } catch (SQLException e) {
+                // If table already exists (SQLSTATE 42727), just truncate it
+                if ("42727".equals(e.getSQLState())) {
+                    log.debug("Temp table already exists, truncating instead");
+                    stmt.execute("DELETE FROM SESSION.temp_session_test");
+                } else {
+                    throw e;
+                }
+            }
 
             // Insert data into temporary table (should use same session)
             log.debug("Inserting data into temporary table");
@@ -95,7 +106,7 @@ public class Db2SessionAffinityIntegrationTest {
         Connection conn = DriverManager.getConnection(url, user, pwd);
 
         try (Statement stmt = conn.createStatement()) {
-            // Drop if exists
+            // Try to drop if exists
             try {
                 stmt.execute("DROP TABLE SESSION.temp_complex");
             } catch (SQLException e) {
@@ -103,8 +114,19 @@ public class Db2SessionAffinityIntegrationTest {
             }
 
             // Create temporary table
+            // If table already exists, just truncate it instead
             log.debug("Creating complex temp table");
-            stmt.execute("DECLARE GLOBAL TEMPORARY TABLE temp_complex (id INT NOT NULL, name VARCHAR(100), amount DECIMAL(10,2)) ON COMMIT PRESERVE ROWS");
+            try {
+                stmt.execute("DECLARE GLOBAL TEMPORARY TABLE temp_complex (id INT NOT NULL, name VARCHAR(100), amount DECIMAL(10,2)) ON COMMIT PRESERVE ROWS");
+            } catch (SQLException e) {
+                // If table already exists (SQLSTATE 42727), just truncate it
+                if ("42727".equals(e.getSQLState())) {
+                    log.debug("Temp table already exists, truncating instead");
+                    stmt.execute("DELETE FROM SESSION.temp_complex");
+                } else {
+                    throw e;
+                }
+            }
 
             // Insert multiple rows
             log.debug("Inserting multiple rows");
@@ -163,7 +185,7 @@ public class Db2SessionAffinityIntegrationTest {
         Connection conn = DriverManager.getConnection(url, user, pwd);
 
         try (Statement stmt = conn.createStatement()) {
-            // Drop if exists
+            // Try to drop if exists
             try {
                 stmt.execute("DROP TABLE SESSION.temp_persist");
             } catch (SQLException e) {
@@ -171,7 +193,18 @@ public class Db2SessionAffinityIntegrationTest {
             }
 
             // Create temp table
-            stmt.execute("DECLARE GLOBAL TEMPORARY TABLE temp_persist (id INT, data VARCHAR(100)) ON COMMIT PRESERVE ROWS");
+            // If table already exists, just truncate it instead
+            try {
+                stmt.execute("DECLARE GLOBAL TEMPORARY TABLE temp_persist (id INT, data VARCHAR(100)) ON COMMIT PRESERVE ROWS");
+            } catch (SQLException e) {
+                // If table already exists (SQLSTATE 42727), just truncate it
+                if ("42727".equals(e.getSQLState())) {
+                    log.debug("Temp table already exists, truncating instead");
+                    stmt.execute("DELETE FROM SESSION.temp_persist");
+                } else {
+                    throw e;
+                }
+            }
 
             // Start transaction and insert
             conn.setAutoCommit(false);

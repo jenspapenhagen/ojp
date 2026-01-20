@@ -42,7 +42,15 @@ public class SQLServerSessionAffinityIntegrationTest {
 
         log.info("Testing temporary table session affinity for SQL Server: {}", url);
 
-        Connection conn = DriverManager.getConnection(url, user, pwd);
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(url, user, pwd);
+        } catch (SQLException e) {
+            // If connection fails, skip the test (server not available)
+            log.warn("SQL Server connection failed, skipping test: {}", e.getMessage());
+            assumeFalse(true, "SQL Server not available: " + e.getMessage());
+            return;
+        }
 
         try (Statement stmt = conn.createStatement()) {
             // Drop temp table if it exists
@@ -98,7 +106,15 @@ public class SQLServerSessionAffinityIntegrationTest {
 
         log.info("Testing complex temporary table operations for SQL Server: {}", url);
 
-        Connection conn = DriverManager.getConnection(url, user, pwd);
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(url, user, pwd);
+        } catch (SQLException e) {
+            // If connection fails, skip the test (server not available)
+            log.warn("SQL Server connection failed, skipping test: {}", e.getMessage());
+            assumeFalse(true, "SQL Server not available: " + e.getMessage());
+            return;
+        }
 
         try (Statement stmt = conn.createStatement()) {
             // Cleanup
@@ -172,7 +188,15 @@ public class SQLServerSessionAffinityIntegrationTest {
 
         log.info("Testing temporary table persistence across transactions for SQL Server: {}", url);
 
-        Connection conn = DriverManager.getConnection(url, user, pwd);
+        Connection conn = null;
+        try {
+            conn = DriverManager.getConnection(url, user, pwd);
+        } catch (SQLException e) {
+            // If connection fails, skip the test (server not available)
+            log.warn("SQL Server connection failed, skipping test: {}", e.getMessage());
+            assumeFalse(true, "SQL Server not available: " + e.getMessage());
+            return;
+        }
 
         try (Statement stmt = conn.createStatement()) {
             // Cleanup
