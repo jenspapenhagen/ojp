@@ -70,6 +70,24 @@ class SqlSessionAffinityDetectorTest {
     }
     
     @Test
+    void testDb2DeclareGlobalTemporaryTableDetection() {
+        // DB2 syntax for declaring global temporary tables
+        assertTrue(SqlSessionAffinityDetector.requiresSessionAffinity(
+            "DECLARE GLOBAL TEMPORARY TABLE temp_session (id INT, value VARCHAR(100)) ON COMMIT PRESERVE ROWS"));
+        
+        assertTrue(SqlSessionAffinityDetector.requiresSessionAffinity(
+            "DECLARE GLOBAL TEMPORARY TABLE temp_data (col1 INT) ON COMMIT DELETE ROWS"));
+        
+        // Case insensitive
+        assertTrue(SqlSessionAffinityDetector.requiresSessionAffinity(
+            "declare global temporary table temp (id int)"));
+        
+        // With leading whitespace
+        assertTrue(SqlSessionAffinityDetector.requiresSessionAffinity(
+            "  DECLARE GLOBAL TEMPORARY TABLE temp (id INT)"));
+    }
+    
+    @Test
     void testRegularTableNotDetected() {
         // Regular tables should NOT trigger session affinity
         assertFalse(SqlSessionAffinityDetector.requiresSessionAffinity(

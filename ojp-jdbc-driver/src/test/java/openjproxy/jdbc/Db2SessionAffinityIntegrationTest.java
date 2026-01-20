@@ -46,24 +46,8 @@ public class Db2SessionAffinityIntegrationTest {
 
         try (Statement stmt = conn.createStatement()) {
             // Create declared global temporary table (this should trigger session affinity)
-            // DB2 temporary tables persist for the session - if it already exists, just clear it
             log.debug("Creating DB2 declared global temporary table");
-            try {
-                stmt.execute("DECLARE GLOBAL TEMPORARY TABLE temp_session_test (id INT, value VARCHAR(100)) ON COMMIT PRESERVE ROWS");
-            } catch (SQLException e) {
-                // If table already exists (SQLSTATE 42727), just delete existing data
-                if ("42727".equals(e.getSQLState())) {
-                    log.debug("Temp table already exists, clearing data");
-                    try {
-                        stmt.execute("DELETE FROM SESSION.temp_session_test");
-                    } catch (SQLException deleteEx) {
-                        // If delete fails, log and continue - table might be in an inconsistent state
-                        log.warn("Failed to clear existing temp table: {}", deleteEx.getMessage());
-                    }
-                } else {
-                    throw e;
-                }
-            }
+            stmt.execute("DECLARE GLOBAL TEMPORARY TABLE temp_session_test (id INT, value VARCHAR(100)) ON COMMIT PRESERVE ROWS");
 
             // Insert data into temporary table (should use same session)
             log.debug("Inserting data into temporary table");
@@ -105,24 +89,8 @@ public class Db2SessionAffinityIntegrationTest {
 
         try (Statement stmt = conn.createStatement()) {
             // Create temporary table
-            // DB2 temporary tables persist for the session - if it already exists, just clear it
             log.debug("Creating complex temp table");
-            try {
-                stmt.execute("DECLARE GLOBAL TEMPORARY TABLE temp_complex (id INT NOT NULL, name VARCHAR(100), amount DECIMAL(10,2)) ON COMMIT PRESERVE ROWS");
-            } catch (SQLException e) {
-                // If table already exists (SQLSTATE 42727), just delete existing data
-                if ("42727".equals(e.getSQLState())) {
-                    log.debug("Temp table already exists, clearing data");
-                    try {
-                        stmt.execute("DELETE FROM SESSION.temp_complex");
-                    } catch (SQLException deleteEx) {
-                        // If delete fails, log and continue - table might be in an inconsistent state
-                        log.warn("Failed to clear existing temp table: {}", deleteEx.getMessage());
-                    }
-                } else {
-                    throw e;
-                }
-            }
+            stmt.execute("DECLARE GLOBAL TEMPORARY TABLE temp_complex (id INT NOT NULL, name VARCHAR(100), amount DECIMAL(10,2)) ON COMMIT PRESERVE ROWS");
 
             // Insert multiple rows
             log.debug("Inserting multiple rows");
@@ -182,23 +150,7 @@ public class Db2SessionAffinityIntegrationTest {
 
         try (Statement stmt = conn.createStatement()) {
             // Create temp table
-            // DB2 temporary tables persist for the session - if it already exists, just clear it
-            try {
-                stmt.execute("DECLARE GLOBAL TEMPORARY TABLE temp_persist (id INT, data VARCHAR(100)) ON COMMIT PRESERVE ROWS");
-            } catch (SQLException e) {
-                // If table already exists (SQLSTATE 42727), just delete existing data
-                if ("42727".equals(e.getSQLState())) {
-                    log.debug("Temp table already exists, clearing data");
-                    try {
-                        stmt.execute("DELETE FROM SESSION.temp_persist");
-                    } catch (SQLException deleteEx) {
-                        // If delete fails, log and continue - table might be in an inconsistent state
-                        log.warn("Failed to clear existing temp table: {}", deleteEx.getMessage());
-                    }
-                } else {
-                    throw e;
-                }
-            }
+            stmt.execute("DECLARE GLOBAL TEMPORARY TABLE temp_persist (id INT, data VARCHAR(100)) ON COMMIT PRESERVE ROWS");
 
             // Start transaction and insert
             conn.setAutoCommit(false);
