@@ -10,8 +10,6 @@ Before diving into how OJP implements XA, let's understand what XA transactions 
 
 ### The Distributed Transaction Problem
 
-— Roberto Robetti, OJP Creator
-
 > "When you need to update a customer's account and their audit log simultaneously, and both live in different databases, you need more than hope. You need XA."
 
 Consider a banking application that needs to transfer money between accounts. In a traditional setup with a single database, this is straightforward—start a transaction, debit one account, credit the other, and commit. The database ensures atomicity automatically. But what if these accounts live in different database instances? Perhaps you've sharded your data for scalability, or maybe you're running a microservices architecture where different services own different databases.
@@ -38,7 +36,7 @@ The `XAConnection` interface serves a dual purpose. First, it provides an `XARes
 ```java
 // Create XA-capable data source
 OjpXADataSource xaDataSource = new OjpXADataSource(
-    "ojp://server1:1059,server2:1059/mydb",
+    "jdbc:ojp[server1:1059,server2:1059]_postgresql://localhost:5432/mydb",
     "username",
     "password"
 );
@@ -128,7 +126,7 @@ OJP implements XA support through a sophisticated architecture that combines cli
 
 On the client side, OJP provides three primary classes that implement the JDBC XA interfaces. These classes handle the translation between JDBC XA method calls and OJP's gRPC protocol.
 
-The `OjpXADataSource` class implements `javax.sql.XADataSource` and serves as your application's entry point for XA connections. When you call `getXAConnection()`, it establishes a gRPC connection to an OJP Server with the `isXA=true` flag. This flag tells the server to use XA-capable backend session pooling rather than the regular HikariCP pool used for non-XA connections.
+The `OjpXADataSource` class implements `javax.sql.XADataSource` and serves as your application's entry point for XA connections. When you call `getXAConnection()`, it establishes a gRPC connection to an OJP Server with the `isXA=true` flag. This flag tells the server to use XA-capable backend session pooling rather than the regular HikariCP pool or other regular connection pool provider used for non-XA connections.
 
 The `OjpXAConnection` class wraps the server-side XA session and provides both the `XAResource` for transaction control and the `Connection` for SQL execution. It maintains the session information and routes all XA operations and SQL statements through the gRPC channel to the server.
 
@@ -233,27 +231,7 @@ Setting up XA transactions with OJP requires configuration on both the client an
 
 ### Client-Side Configuration
 
-On the client side, you create an `OjpXADataSource` instead of a regular `OjpDataSource`. The URL format is the same as for non-XA connections, supporting both single-server and multinode configurations:
-
-```java
-// Single server
-OjpXADataSource xaDataSource = new OjpXADataSource(
-    "ojp://localhost:1059/mydb",
-    "username",
-    "password"
-);
-
-// Multinode for high availability
-OjpXADataSource xaDataSource = new OjpXADataSource(
-    "ojp://server1:1059,server2:1059,server3:1059/mydb",
-    "username",
-    "password"
-);
-```
-
-That's it for basic setup. The `OjpXADataSource` handles all the complexity of establishing XA-capable connections to the server.
-
-For advanced scenarios, you can configure the XA connection pool through an `ojp.properties` file on your classpath. These properties control the server-side backend session pool:
+On the client side, you can configure the XA connection pool through an `ojp.properties` file on your classpath. These properties control the server-side backend session pool (configured from the client):
 
 ```properties
 # Maximum total backend sessions per server
@@ -263,7 +241,7 @@ ojp.xa.connection.pool.maxTotal=22
 ojp.xa.connection.pool.minIdle=20
 
 # Timeout when borrowing sessions (milliseconds)
-ojp.xa.connection.pool.maxWaitMillis=20000
+ojp.xa.connection.pool.connectionTimeout=20000
 
 # Idle session eviction timeout (milliseconds)
 ojp.xa.connection.pool.idleTimeout=600000
@@ -272,37 +250,37 @@ ojp.xa.connection.pool.idleTimeout=600000
 ojp.xa.connection.pool.maxLifetime=1800000
 ```
 
-In a multinode deployment, OJP automatically divides the pool size among servers. For example, with two servers and `maxTotal=22`, each server maintains a pool of 11 sessions. When a server fails, the remaining servers automatically expand their pools to compensate, and when the failed server recovers, pools rebalance back to their original sizes.
+In a multinode deployment, OJP automatically divides the pool size among servers. For example, with two servers and `ojp.xa.connection.pool.maxTotal=22`, each server maintains a pool of 11 sessions. When a server fails, the remaining servers automatically expand their pools to compensate, and when the failed server recovers, pools rebalance back to their original sizes.
+
+For basic programmatic setup, you create an `OjpXADataSource` instead of a regular `OjpDataSource`. The URL format follows the OJP standard, supporting both single-server and multinode configurations:
+
+```java
+// Single server
+OjpXADataSource xaDataSource = new OjpXADataSource(
+    "jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb",
+    "username",
+    "password"
+);
+
+// Multinode for high availability
+OjpXADataSource xaDataSource = new OjpXADataSource(
+    "jdbc:ojp[server1:1059,server2:1059,server3:1059]_postgresql://localhost:5432/mydb",
+    "username",
+    "password"
+);
+```
+
+Integrating XA with common frameworks like Spring Boot, Quarkus, or Micronaut is straightforward. For detailed framework integration patterns and complete configuration examples, see Chapter 7: Framework Integration.
 
 ### Server-Side Configuration
 
-The OJP Server requires minimal XA-specific configuration. The backend session pool uses sensible defaults that work well for most applications:
+The OJP Server requires minimal XA-specific configuration. All pool sizing and timeout properties shown above are configured on the **client side** (via ojp.properties or programmatically) but control the **server-side** backend session pool behavior. This allows applications to tune server-side connection pool behavior remotely.
 
-```properties
-# Enable XA backend session pooling (enabled by default)
-ojp.xa.pooling.enabled=true
-
-# Pool sizing (can be overridden by client properties)
-ojp.xa.connection.pool.maxTotal=22
-ojp.xa.connection.pool.minIdle=20
-
-# Timeout settings
-ojp.xa.connection.pool.maxWaitMillis=20000
-ojp.xa.connection.pool.idleTimeout=600000
-ojp.xa.connection.pool.maxLifetime=1800000
-```
-
-If you need to fall back to the older pass-through implementation (not recommended), you can disable pooling:
-
-```properties
-ojp.xa.pooling.enabled=false
-```
-
-However, the pass-through implementation suffers significant performance penalties and lacks the reliability benefits of the pooled implementation.
+The server has default XA pooling settings that work well for most applications. Pool sizing is controlled client-side through the properties shown above.
 
 ### Framework Integration
 
-OJP XA transactions integrate seamlessly with Java EE and Spring transaction managers. Here's an example using Spring's `JtaTransactionManager`:
+OJP XA transactions integrate seamlessly with Java EE and Spring transaction managers like Atomikos, Narayana, or Bitronix. These transaction managers run on the client side and coordinate distributed transactions. Here's an example using Spring with Atomikos:
 
 ```java
 @Configuration
@@ -311,7 +289,7 @@ public class XAConfig {
     @Bean
     public XADataSource primaryXADataSource() {
         return new OjpXADataSource(
-            "ojp://server1:1059/orders",
+            "jdbc:ojp[server1:1059]_postgresql://localhost:5432/orders",
             "username",
             "password"
         );
@@ -320,7 +298,7 @@ public class XAConfig {
     @Bean
     public XADataSource secondaryXADataSource() {
         return new OjpXADataSource(
-            "ojp://server2:1059/inventory",
+            "jdbc:ojp[server2:1059]_postgresql://localhost:5432/inventory",
             "username",
             "password"
         );
@@ -349,6 +327,7 @@ public class OrderService {
     @Transactional
     public void processOrder(Order order) {
         // Both updates participate in same XA transaction
+        // Atomikos (or your transaction manager) coordinates the XA commit
         // Either both commit or both roll back
         
         try (Connection ordersConn = primaryDataSource.getConnection();
@@ -373,11 +352,13 @@ public class OrderService {
                 inventoryStmt.executeUpdate();
             }
             
-            // Spring's transaction manager coordinates the XA commit
+            // Transaction manager coordinates the XA commit
         }
     }
 }
 ```
+
+In realistic production scenarios, you would use a client-side XA transaction manager like Atomikos, Narayana, or Bitronix to manage XA transactions. These managers maintain durable transaction logs and handle recovery scenarios. The OJP driver integrates with these managers through standard JDBC XA interfaces. You may also use XA-capable connection pools like Agroal or Oracle UCP alongside these transaction managers.
 
 **[IMAGE PROMPT: Spring XA Transaction Flow]**
 Create a sequence diagram showing Spring transaction flow with multiple XADataSources. Left side shows Spring transaction manager icon. Middle section shows two parallel flows: one to "Orders Database" via OJP Server 1, another to "Inventory Database" via OJP Server 2. Show transaction phases: 1) @Transactional begins, 2) Execute SQL on both databases (parallel arrows), 3) Prepare phase (synchronization point), 4) Commit phase (parallel completion). Use Spring green color for framework layer, OJP blue for server layer, database gray for backends. Include timing indicators showing phases happen in sequence. Style: Technical sequence diagram with clear temporal ordering.
@@ -415,7 +396,9 @@ Effective monitoring is essential for XA deployments because distributed transac
 
 ### Pool Metrics
 
-OJP exposes comprehensive pool metrics through both debug logging and JMX. The most important metrics to monitor are active session count, idle session count, and pool wait times.
+OJP exposes comprehensive pool metrics through both debug logging and JMX/Prometheus. For HikariCP (non-XA), metrics are exposed via `HikariPoolMXBean` including active connections, idle connections, total connections, and threads awaiting connections. For XA pools (Apache Commons Pool 2), metrics are exposed through debug logging and enhanced diagnostics.
+
+The most important metrics to monitor are active session count, idle session count, and pool wait times.
 
 Active session count shows how many backend sessions are currently borrowed from the pool. If this number consistently approaches `maxTotal`, you may need to increase your pool size. Idle session count shows how many sessions are waiting in the pool. If this number is consistently low, increasing `minIdle` ensures better response times for bursts of traffic.
 
@@ -481,21 +464,22 @@ Session state errors indicate that operations executed in the wrong order. XA re
 ```mermaid
 stateDiagram-v2
     [*] --> NONEXISTENT
-    NONEXISTENT --> ACTIVE : start()
+    NONEXISTENT --> ACTIVE : start() - Session pinned
     ACTIVE --> ENDED : end()
     ENDED --> PREPARED : prepare()
     PREPARED --> COMMITTED : commit()
     PREPARED --> ROLLEDBACK : rollback()
-    COMMITTED --> [*]
-    ROLLEDBACK --> [*]
+    COMMITTED --> PENDING_CLOSE : Transaction complete
+    ROLLEDBACK --> PENDING_CLOSE : Transaction complete
+    PENDING_CLOSE --> [*] : XAConnection.close() - Session returned to pool
     
     ACTIVE --> ROLLEDBACK : rollback()
     ENDED --> ROLLEDBACK : rollback()
     
-    note right of ACTIVE : SQL execution allowed
-    note right of PREPARED : Session pinned
-    note right of COMMITTED : Session returned to pool
-    note right of ROLLEDBACK : Session returned to pool
+    note right of ACTIVE : SQL execution allowed<br/>Session pinned to this OJP instance
+    note right of PREPARED : Session remains pinned
+    note right of PENDING_CLOSE : Waiting for XAConnection.close()<br/>Session still pinned
+    note right of [*] : Session returned to pool only<br/>after BOTH conditions met:<br/>1) TX complete (commit/rollback)<br/>2) XAConnection.close() called
 ```
 
 ## Multinode XA Coordination
@@ -508,36 +492,34 @@ OJP's XA implementation integrates tightly with the multinode health checking sy
 
 Pool rebalancing is critical for maintaining consistent performance during server failures. Consider a three-server cluster with `maxTotal=33` (11 sessions per server). If one server fails, the remaining two servers immediately expand their pools to 16-17 sessions each, ensuring the cluster maintains the same total capacity. When the failed server recovers, pools rebalance back to 11 sessions per server.
 
-This rebalancing happens transparently to applications. Active transactions continue executing, and new transaction requests find adequate pool capacity waiting. The only observable effect is a slight increase in average pool utilization on the surviving servers.
+This rebalancing happens transparently to applications. Active transactions continue executing on healthy servers, and new transaction requests find adequate pool capacity waiting. **Important**: In-flight XA transactions that have sessions pinned to a failed server will fail and need to be retried by the application or transaction manager. Once an XA session is established on a specific OJP server, it remains pinned to that server for the duration of the transaction to maintain XA integrity. The only observable effect under normal operation is a slight increase in average pool utilization on the surviving servers.
 
 ### Load Distribution
 
-OJP uses session count tracking to distribute XA transactions optimally across the cluster. When a client requests a new XA connection, OJP selects the server with the fewest active sessions. This load-aware selection provides significantly better distribution than simple round-robin, especially when transaction durations vary.
-
-The session count includes both active XA transactions and regular non-XA connections, providing accurate insight into each server's actual load. In practice, this approach distributes load within 10-15% variance across servers, compared to 30-40% variance with round-robin selection.
+OJP uses session count tracking to distribute both XA and non-XA connections optimally across the cluster. When a client requests a new XA connection, OJP selects the server with the fewest active sessions. Load distribution works the same way for XA transactions as for regular connections—the key difference is that once an XA transaction starts on a server, it remains pinned to that server for the entire transaction lifecycle to maintain XA session integrity.
 
 ### Cross-Database XA Transactions
 
-One powerful use case for OJP's multinode architecture is coordinating transactions across different databases. Each OJP server connects to a different database, and a transaction manager coordinates XA operations across all servers:
+One powerful use case for OJP's multinode architecture is coordinating transactions across different databases. Each OJP server connects to a different database, and a transaction manager (like Atomikos, Narayana, or Bitronix) running on the client side coordinates XA operations across all servers:
 
 ```java
 // Configure XADataSources for different databases
 XADataSource ordersDB = new OjpXADataSource(
-    "ojp://server1:1059/orders",
+    "jdbc:ojp[server1:1059]_postgresql://localhost:5432/orders",
     "username", "password"
 );
 
 XADataSource inventoryDB = new OjpXADataSource(
-    "ojp://server2:1059/inventory",
+    "jdbc:ojp[server2:1059]_mysql://localhost:3306/inventory",
     "username", "password"
 );
 
 XADataSource billingDB = new OjpXADataSource(
-    "ojp://server3:1059/billing",
+    "jdbc:ojp[server3:1059]_oracle:thin:@localhost:1521/billing",
     "username", "password"
 );
 
-// Transaction manager coordinates across all three databases
+// Transaction manager (Atomikos, Narayana, etc.) coordinates across all three databases
 @Transactional
 public void processOrderWithAllUpdates(Order order) {
     // Update in orders database
@@ -556,18 +538,18 @@ public void processOrderWithAllUpdates(Order order) {
 }
 ```
 
-Each OJP server independently manages its backend session pool and delegates XA operations to its target database. The transaction manager (like Narayana or Bitronix) coordinates the two-phase commit protocol across all servers, ensuring atomicity across the entire distributed transaction.
+Each OJP server independently manages its backend session pool and delegates XA operations to its target database. The transaction manager (like Atomikos, Narayana, or Bitronix) coordinates the two-phase commit protocol across all servers, ensuring atomicity across the entire distributed transaction.
 
 **[IMAGE PROMPT: Multinode XA Coordination Diagram]**
 Create a network topology diagram showing multinode XA coordination. Top shows Transaction Manager (circle, orange). Three branches below show OJP Server 1, 2, and 3 (rounded rectangles, blue). Below each server show corresponding databases: PostgreSQL, MySQL, and Oracle (cylinders, gray). Show bidirectional arrows between TM and each server (XA protocol, labeled "prepare/commit"). Show bidirectional arrows between each server and its database (SQL execution). Add cloud of client applications at very top connecting to TM. Include annotations: "Health Check" between servers (dotted lines), "Pool: 11 sessions" label on each server, "2PC Coordinator" label on TM. Show one server with red X (failed) and arrows showing remaining servers expanding to "Pool: 16 sessions". Style: Professional network diagram with clear layering and annotations.
 
 ## Best Practices
 
-Years of production experience with XA transactions have revealed patterns that work well and antipatterns to avoid.
+Based on our experience with XA transactions, several patterns work well and some antipatterns should be avoided.
 
 ### Design for Idempotency
 
-XA transactions can fail in subtle ways. The prepare phase might succeed, but the network fails before the commit message arrives. The transaction manager might crash after prepare but before commit. In these scenarios, the transaction manager will eventually retry the commit operation when it recovers.
+XA transactions can fail in subtle ways. The prepare phase might succeed, but the network fails before the commit message arrives. The transaction manager might crash after prepare but before commit. In these scenarios, the transaction manager (Atomikos, Narayana, etc.) will eventually retry the commit operation when it recovers.
 
 Your transaction logic must handle these retries gracefully. Design operations to be idempotent—executing them multiple times produces the same result as executing them once. Use techniques like unique constraint checks, conditional updates based on version numbers, or insert-if-not-exists patterns:
 
@@ -634,14 +616,14 @@ The thread lifecycle is simple: created during pool construction if any feature 
 Here's what this means for resource usage:
 
 - **No features enabled**: Zero threads, zero memory overhead
-- **Leak detection only**: One daemon thread, approximately 1 MB memory
+- **Leak detection only**: One daemon thread, approximately 1 MB memory for thread stack
 - **Leak detection + diagnostics**: Same one thread (shared), approximately 1 MB memory
 
-The memory overhead per connection is minimal—about 200 bytes for tracking timestamps and thread information, plus an additional 2-5 KB per connection if you enable enhanced leak detection with stack traces.
+The memory overhead per connection is minimal—about 200 bytes for tracking timestamps and thread information, plus an additional 2-5 KB per connection if you enable enhanced leak detection with stack traces (which captures full call stacks).
 
 ### Leak Detection in Action
 
-When your application borrows a connection from the pool, leak detection records the current timestamp, the borrowing thread, and optionally a stack trace showing exactly where in your code the connection was obtained. Every minute (configurable), the leak detection task scans all currently borrowed connections, comparing their hold time against the configured timeout (default 5 minutes).
+Connection leakage is unlikely with proper use of try-with-resources or finally blocks, but leak detection provides an early warning system when leaks do occur. When your application borrows a connection from the pool, leak detection records the current timestamp, the borrowing thread, and optionally a stack trace showing exactly where in your code the connection was obtained. Every minute (configurable), the leak detection task scans all currently borrowed connections, comparing their hold time against the configured timeout (default 5 minutes).
 
 If a connection has been held longer than the timeout, leak detection logs a warning message identifying the thread that borrowed it. If enhanced mode is enabled, the warning includes the full stack trace showing where the borrow occurred, making it trivial to locate the leak in your codebase.
 
@@ -1053,17 +1035,15 @@ While this does not change XA correctness or recovery behavior, using OJP may in
 
 Despite these limitations, OJP's XA support is appropriate and valuable for the vast majority of enterprise XA usage. Use OJP for XA when:
 
-**Coordination convenience trumps absolute guarantees.** You need XA primarily for coordinating updates across multiple databases or resources, and you can tolerate rare edge cases requiring manual intervention. Most enterprise applications fall into this category—they need the convenience of atomic multi-resource updates without requiring financial-grade guarantees.
+**Coordination convenience trumps absolute guarantees.** You need XA primarily for coordinating updates across multiple databases or resources, and you can tolerate rare edge cases requiring manual intervention. Most enterprise applications fall into this category—they need the convenience of atomic multi-resource updates.
 
 **Occasional manual recovery is acceptable.** Your operations team can handle rare scenarios where prepared transactions require manual investigation and resolution. You have monitoring, alerting, and runbooks for handling in-doubt transactions. Most enterprise environments have DBAs or operations teams who can intervene when needed.
 
-**Transactions are short-lived and high-success-rate.** Your XA transactions complete quickly (seconds, not minutes) and succeed in the overwhelming majority of cases. The scenarios where strict XA correctness matters—crashes during commit phase, network partitions during prepare—are rare enough that
-
- manual handling is acceptable.
+**Transactions are short-lived and high-success-rate.** Your XA transactions complete quickly (seconds, not minutes) and succeed in the overwhelming majority of cases. The scenarios where strict XA correctness matters—crashes during commit phase, network partitions during prepare—are rare enough that manual handling is acceptable.
 
 **You already tolerate vendor XA quirks.** You understand that different database vendors have different XA behaviors, that JDBC drivers have their own quirks, and that perfect XA is rare even without a proxy layer. OJP adds one more layer but doesn't fundamentally change the reality that enterprise XA is pragmatic, not perfect.
 
-**You prioritize availability and performance.** OJP's connection pooling and proxy architecture give you significant performance benefits (80% reduction in overhead) and availability benefits (automatic failover, load balancing). These benefits are worth the tradeoff of not having provable exactly-once guarantees.
+**You prioritize availability and performance.** OJP's connection pooling and proxy architecture give you significant performance benefits (80% reduction in overhead) and availability benefits (automatic failover, load balancing). These benefits are worth the tradeoff of one additional network hop in the architecture.
 
 This describes the majority of enterprise XA usage in practice—coordinating e-commerce orders with inventory, managing multi-tenant SaaS updates, implementing microservice sagas, ensuring data consistency across sharded databases.
 
@@ -1071,21 +1051,17 @@ This describes the majority of enterprise XA usage in practice—coordinating e-
 
 Do not use OJP's XA implementation when:
 
-**You require provable exactly-once commit semantics.** If a single duplicated or lost commit is catastrophic—financial transfers, payment processing, billing records, regulatory filings—you need stronger guarantees than OJP provides. Systems in this category typically need dedicated transaction coordinators with durable logs.
+**You require provable exactly-once commit semantics.** If a single duplicated or lost commit is catastrophic—financial transfers, payment processing, billing records, regulatory filings—you need stronger guarantees. For these scenarios, use OJP with a transaction coordinator that provides durable logs and robust recovery (like Atomikos, Narayana with persistent storage, or Oracle Tuxedo). The coordinator's durable transaction log provides the guarantees needed for financial systems.
 
-**You need automatic recovery with zero ambiguity.** If prepared transactions must be automatically discovered and resolved without human intervention, and every edge case must have a deterministic outcome, OJP cannot meet this requirement. The lack of durable coordinator state makes automatic recovery incomplete.
+**Regulators or auditors require strict consistency.** If regulatory compliance depends on provable transaction correctness under all failure modes, or if auditors require documentation of exactly-once guarantees, ensure your transaction coordinator (Atomikos, Narayana, etc.) is configured with durable logging and proper recovery procedures. These systems usually need specialized infrastructure with audit trails, provable recovery, and formal verification—which the transaction manager provides.
 
-**Regulators or auditors require strict consistency.** If regulatory compliance depends on provable transaction correctness under all failure modes, or if auditors require documentation of exactly-once guarantees, OJP is not sufficient. These systems usually need specialized infrastructure with audit trails, provable recovery, and formal verification.
-
-**You cannot tolerate heuristic outcomes.** If the possibility of heuristic commit or heuristic rollback—even in rare scenarios—is unacceptable, do not put OJP in the middle. Strict XA correctness means no heuristics ever, which requires infrastructure OJP doesn't provide.
-
-Systems in these categories should either use a dedicated, durable transaction coordinator (like a proper XA transaction manager with persistent logs) or adopt a different architecture entirely (idempotent operations with saga patterns, event sourcing, or CRDTs).
+Systems in these categories should use a dedicated, durable transaction coordinator (like Atomikos with persistent logs, Narayana configured for recovery, or Oracle Tuxedo) in combination with OJP, or adopt a different architecture entirely (idempotent operations with saga patterns, event sourcing, or CRDTs).
 
 ### The Honest Position
 
-OJP supports XA mechanics comprehensively and reliably, but not XA absolutes under catastrophic failures. That's the correct, honest position that should guide your architectural decisions.
+OJP supports XA mechanics comprehensively and reliably as a connection proxy. The transaction coordinator (Atomikos, Narayana, Bitronix) running on the client side provides the XA guarantees through its durable transaction logs and recovery mechanisms. That's the correct, honest position that should guide your architectural decisions.
 
-For financial institutions implementing money transfers, use a dedicated XA coordinator with durable logs, not a proxy. For payment processors handling credit card transactions, implement idempotency at the application level and use saga patterns, not distributed XA. For systems where regulatory compliance requires provable correctness, document every transaction decision with audit logs in a durable store.
+For financial institutions implementing money transfers, use OJP with a production-grade XA coordinator like Atomikos configured with durable logs. The coordinator's persistent transaction manager provides the guarantees financial systems require, while OJP provides efficient connection pooling and high availability. For payment processors handling credit card transactions, combine OJP with a robust transaction manager and implement idempotency at the application level for defense in depth.
 
 For e-commerce platforms coordinating orders and inventory where rare inconsistencies can be manually resolved, use OJP's XA support—it provides excellent coordination with acceptable operational burden. For microservice architectures needing atomic multi-resource updates where short-term inconsistencies are tolerable, use OJP's XA—the performance and availability benefits outweigh the rare edge cases. For enterprise applications implementing business logic across multiple databases where operations teams can handle occasional manual recovery, use OJP's XA—it significantly reduces complexity while maintaining practical reliability.
 
@@ -1094,19 +1070,19 @@ Create a horizontal spectrum visualization showing the continuum of XA guarantee
 
 ### Operational Recommendations
 
-If you choose to use OJP's XA support (and for most enterprise use cases, you should), implement these operational practices:
+If you choose to use OJP's XA support (and for most enterprise use cases, you should), implement these operational practices. Remember that your transaction manager (Atomikos, Narayana, Bitronix) provides the core XA guarantees through its durable logging and recovery mechanisms:
 
-**Monitor for in-doubt transactions.** Set up monitoring that queries databases for prepared transactions that haven't completed. Alert when prepared transactions exist for more than a reasonable threshold (5-10 minutes). Have runbooks for investigating and resolving them.
+**Monitor for in-doubt transactions.** Set up monitoring that queries databases for prepared transactions that haven't completed. Alert when prepared transactions exist for more than a reasonable threshold (5-10 minutes). Have runbooks for investigating and resolving them. Your transaction manager should handle most recovery automatically if it has durable logging enabled.
 
 **Keep transactions short.** The longer a transaction remains open, the higher the chance that a failure occurs during a critical phase. Design transactions to complete in seconds, not minutes. Break long-running processes into multiple short transactions where possible.
 
-**Implement idempotency where practical.** Even with XA, implementing idempotent operations at the application level provides an additional safety layer. If a transaction does get retried or resolved ambiguously, idempotency prevents double-application of changes.
+**Implement idempotency where practical.** Even with XA and a transaction manager providing guarantees, implementing idempotent operations at the application level provides an additional safety layer. If a transaction does get retried or resolved ambiguously, idempotency prevents double-application of changes.
 
-**Test failure scenarios.** Don't wait for production to discover edge cases. Test what happens when OJP servers crash during transactions, when networks partition, when databases become unreachable. Ensure your operations team knows how to investigate and resolve in-doubt transactions.
+**Test failure scenarios.** Don't wait for production to discover edge cases. Test what happens when OJP servers crash during transactions, when networks partition, when databases become unreachable. Ensure your operations team knows how to investigate and resolve in-doubt transactions. Verify that your transaction manager's recovery mechanisms work correctly.
 
-**Have rollback procedures.** Document how to manually commit or roll back prepared transactions for each database vendor you use. Train your operations team on these procedures. Keep vendor-specific XA recovery tools accessible.
+**Have rollback procedures.** Document how to manually commit or roll back prepared transactions for each database vendor you use. Train your operations team on these procedures. Keep vendor-specific XA recovery tools accessible. Your transaction manager (Atomikos, Narayana, etc.) should handle most cases automatically through its recovery subsystem.
 
-**Monitor heuristic outcomes.** Some databases log heuristic decisions (commits or rollbacks made without coordinator instruction). Monitor these logs and investigate any heuristic outcomes to understand what happened and whether data consistency was affected.
+**Monitor heuristic outcomes.** Some databases log heuristic decisions (commits or rollbacks made without coordinator instruction). Your transaction manager monitors these through the XA recovery protocol. Monitor these logs and investigate any heuristic outcomes to understand what happened and whether data consistency was affected. Transaction managers like Atomikos can be configured to alert on heuristic outcomes.
 
 ### The Value of Transparency
 
