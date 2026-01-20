@@ -628,14 +628,14 @@ The thread lifecycle is simple: created during pool construction if any feature 
 Here's what this means for resource usage:
 
 - **No features enabled**: Zero threads, zero memory overhead
-- **Leak detection only**: One daemon thread, approximately 1 MB memory
+- **Leak detection only**: One daemon thread, approximately 1 MB memory for thread stack
 - **Leak detection + diagnostics**: Same one thread (shared), approximately 1 MB memory
 
-The memory overhead per connection is minimal—about 200 bytes for tracking timestamps and thread information, plus an additional 2-5 KB per connection if you enable enhanced leak detection with stack traces.
+The memory overhead per connection is minimal—about 200 bytes for tracking timestamps and thread information, plus an additional 2-5 KB per connection if you enable enhanced leak detection with stack traces (which captures full call stacks).
 
 ### Leak Detection in Action
 
-When your application borrows a connection from the pool, leak detection records the current timestamp, the borrowing thread, and optionally a stack trace showing exactly where in your code the connection was obtained. Every minute (configurable), the leak detection task scans all currently borrowed connections, comparing their hold time against the configured timeout (default 5 minutes).
+Connection leakage is unlikely with proper use of try-with-resources or finally blocks, but leak detection provides an early warning system when leaks do occur. When your application borrows a connection from the pool, leak detection records the current timestamp, the borrowing thread, and optionally a stack trace showing exactly where in your code the connection was obtained. Every minute (configurable), the leak detection task scans all currently borrowed connections, comparing their hold time against the configured timeout (default 5 minutes).
 
 If a connection has been held longer than the timeout, leak detection logs a warning message identifying the thread that borrowed it. If enhanced mode is enabled, the warning includes the full stack trace showing where the borrow occurred, making it trivial to locate the leak in your codebase.
 
@@ -1047,17 +1047,15 @@ While this does not change XA correctness or recovery behavior, using OJP may in
 
 Despite these limitations, OJP's XA support is appropriate and valuable for the vast majority of enterprise XA usage. Use OJP for XA when:
 
-**Coordination convenience trumps absolute guarantees.** You need XA primarily for coordinating updates across multiple databases or resources, and you can tolerate rare edge cases requiring manual intervention. Most enterprise applications fall into this category—they need the convenience of atomic multi-resource updates without requiring financial-grade guarantees.
+**Coordination convenience trumps absolute guarantees.** You need XA primarily for coordinating updates across multiple databases or resources, and you can tolerate rare edge cases requiring manual intervention. Most enterprise applications fall into this category—they need the convenience of atomic multi-resource updates.
 
 **Occasional manual recovery is acceptable.** Your operations team can handle rare scenarios where prepared transactions require manual investigation and resolution. You have monitoring, alerting, and runbooks for handling in-doubt transactions. Most enterprise environments have DBAs or operations teams who can intervene when needed.
 
-**Transactions are short-lived and high-success-rate.** Your XA transactions complete quickly (seconds, not minutes) and succeed in the overwhelming majority of cases. The scenarios where strict XA correctness matters—crashes during commit phase, network partitions during prepare—are rare enough that
-
- manual handling is acceptable.
+**Transactions are short-lived and high-success-rate.** Your XA transactions complete quickly (seconds, not minutes) and succeed in the overwhelming majority of cases. The scenarios where strict XA correctness matters—crashes during commit phase, network partitions during prepare—are rare enough that manual handling is acceptable.
 
 **You already tolerate vendor XA quirks.** You understand that different database vendors have different XA behaviors, that JDBC drivers have their own quirks, and that perfect XA is rare even without a proxy layer. OJP adds one more layer but doesn't fundamentally change the reality that enterprise XA is pragmatic, not perfect.
 
-**You prioritize availability and performance.** OJP's connection pooling and proxy architecture give you significant performance benefits (80% reduction in overhead) and availability benefits (automatic failover, load balancing). These benefits are worth the tradeoff of not having provable exactly-once guarantees.
+**You prioritize availability and performance.** OJP's connection pooling and proxy architecture give you significant performance benefits (80% reduction in overhead) and availability benefits (automatic failover, load balancing). These benefits are worth the tradeoff of one additional network hop in the architecture.
 
 This describes the majority of enterprise XA usage in practice—coordinating e-commerce orders with inventory, managing multi-tenant SaaS updates, implementing microservice sagas, ensuring data consistency across sharded databases.
 
@@ -1065,21 +1063,17 @@ This describes the majority of enterprise XA usage in practice—coordinating e-
 
 Do not use OJP's XA implementation when:
 
-**You require provable exactly-once commit semantics.** If a single duplicated or lost commit is catastrophic—financial transfers, payment processing, billing records, regulatory filings—you need stronger guarantees than OJP provides. Systems in this category typically need dedicated transaction coordinators with durable logs.
+**You require provable exactly-once commit semantics.** If a single duplicated or lost commit is catastrophic—financial transfers, payment processing, billing records, regulatory filings—you need stronger guarantees. For these scenarios, use OJP with a transaction coordinator that provides durable logs and robust recovery (like Atomikos, Narayana with persistent storage, or Oracle Tuxedo). The coordinator's durable transaction log provides the guarantees needed for financial systems.
 
-**You need automatic recovery with zero ambiguity.** If prepared transactions must be automatically discovered and resolved without human intervention, and every edge case must have a deterministic outcome, OJP cannot meet this requirement. The lack of durable coordinator state makes automatic recovery incomplete.
+**Regulators or auditors require strict consistency.** If regulatory compliance depends on provable transaction correctness under all failure modes, or if auditors require documentation of exactly-once guarantees, ensure your transaction coordinator (Atomikos, Narayana, etc.) is configured with durable logging and proper recovery procedures. These systems usually need specialized infrastructure with audit trails, provable recovery, and formal verification—which the transaction manager provides.
 
-**Regulators or auditors require strict consistency.** If regulatory compliance depends on provable transaction correctness under all failure modes, or if auditors require documentation of exactly-once guarantees, OJP is not sufficient. These systems usually need specialized infrastructure with audit trails, provable recovery, and formal verification.
-
-**You cannot tolerate heuristic outcomes.** If the possibility of heuristic commit or heuristic rollback—even in rare scenarios—is unacceptable, do not put OJP in the middle. Strict XA correctness means no heuristics ever, which requires infrastructure OJP doesn't provide.
-
-Systems in these categories should either use a dedicated, durable transaction coordinator (like a proper XA transaction manager with persistent logs) or adopt a different architecture entirely (idempotent operations with saga patterns, event sourcing, or CRDTs).
+Systems in these categories should use a dedicated, durable transaction coordinator (like Atomikos with persistent logs, Narayana configured for recovery, or Oracle Tuxedo) in combination with OJP, or adopt a different architecture entirely (idempotent operations with saga patterns, event sourcing, or CRDTs).
 
 ### The Honest Position
 
-OJP supports XA mechanics comprehensively and reliably, but not XA absolutes under catastrophic failures. That's the correct, honest position that should guide your architectural decisions.
+OJP supports XA mechanics comprehensively and reliably as a connection proxy. The transaction coordinator (Atomikos, Narayana, Bitronix) running on the client side provides the XA guarantees through its durable transaction logs and recovery mechanisms. That's the correct, honest position that should guide your architectural decisions.
 
-For financial institutions implementing money transfers, use a dedicated XA coordinator with durable logs, not a proxy. For payment processors handling credit card transactions, implement idempotency at the application level and use saga patterns, not distributed XA. For systems where regulatory compliance requires provable correctness, document every transaction decision with audit logs in a durable store.
+For financial institutions implementing money transfers, use OJP with a production-grade XA coordinator like Atomikos configured with durable logs. The coordinator's persistent transaction manager provides the guarantees financial systems require, while OJP provides efficient connection pooling and high availability. For payment processors handling credit card transactions, combine OJP with a robust transaction manager and implement idempotency at the application level for defense in depth.
 
 For e-commerce platforms coordinating orders and inventory where rare inconsistencies can be manually resolved, use OJP's XA support—it provides excellent coordination with acceptable operational burden. For microservice architectures needing atomic multi-resource updates where short-term inconsistencies are tolerable, use OJP's XA—the performance and availability benefits outweigh the rare edge cases. For enterprise applications implementing business logic across multiple databases where operations teams can handle occasional manual recovery, use OJP's XA—it significantly reduces complexity while maintaining practical reliability.
 
@@ -1088,19 +1082,19 @@ Create a horizontal spectrum visualization showing the continuum of XA guarantee
 
 ### Operational Recommendations
 
-If you choose to use OJP's XA support (and for most enterprise use cases, you should), implement these operational practices:
+If you choose to use OJP's XA support (and for most enterprise use cases, you should), implement these operational practices. Remember that your transaction manager (Atomikos, Narayana, Bitronix) provides the core XA guarantees through its durable logging and recovery mechanisms:
 
-**Monitor for in-doubt transactions.** Set up monitoring that queries databases for prepared transactions that haven't completed. Alert when prepared transactions exist for more than a reasonable threshold (5-10 minutes). Have runbooks for investigating and resolving them.
+**Monitor for in-doubt transactions.** Set up monitoring that queries databases for prepared transactions that haven't completed. Alert when prepared transactions exist for more than a reasonable threshold (5-10 minutes). Have runbooks for investigating and resolving them. Your transaction manager should handle most recovery automatically if it has durable logging enabled.
 
 **Keep transactions short.** The longer a transaction remains open, the higher the chance that a failure occurs during a critical phase. Design transactions to complete in seconds, not minutes. Break long-running processes into multiple short transactions where possible.
 
-**Implement idempotency where practical.** Even with XA, implementing idempotent operations at the application level provides an additional safety layer. If a transaction does get retried or resolved ambiguously, idempotency prevents double-application of changes.
+**Implement idempotency where practical.** Even with XA and a transaction manager providing guarantees, implementing idempotent operations at the application level provides an additional safety layer. If a transaction does get retried or resolved ambiguously, idempotency prevents double-application of changes.
 
-**Test failure scenarios.** Don't wait for production to discover edge cases. Test what happens when OJP servers crash during transactions, when networks partition, when databases become unreachable. Ensure your operations team knows how to investigate and resolve in-doubt transactions.
+**Test failure scenarios.** Don't wait for production to discover edge cases. Test what happens when OJP servers crash during transactions, when networks partition, when databases become unreachable. Ensure your operations team knows how to investigate and resolve in-doubt transactions. Verify that your transaction manager's recovery mechanisms work correctly.
 
-**Have rollback procedures.** Document how to manually commit or roll back prepared transactions for each database vendor you use. Train your operations team on these procedures. Keep vendor-specific XA recovery tools accessible.
+**Have rollback procedures.** Document how to manually commit or roll back prepared transactions for each database vendor you use. Train your operations team on these procedures. Keep vendor-specific XA recovery tools accessible. Your transaction manager (Atomikos, Narayana, etc.) should handle most cases automatically through its recovery subsystem.
 
-**Monitor heuristic outcomes.** Some databases log heuristic decisions (commits or rollbacks made without coordinator instruction). Monitor these logs and investigate any heuristic outcomes to understand what happened and whether data consistency was affected.
+**Monitor heuristic outcomes.** Some databases log heuristic decisions (commits or rollbacks made without coordinator instruction). Your transaction manager monitors these through the XA recovery protocol. Monitor these logs and investigate any heuristic outcomes to understand what happened and whether data consistency was affected. Transaction managers like Atomikos can be configured to alert on heuristic outcomes.
 
 ### The Value of Transparency
 
