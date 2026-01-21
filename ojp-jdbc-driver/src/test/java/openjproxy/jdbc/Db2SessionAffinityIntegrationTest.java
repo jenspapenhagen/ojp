@@ -93,7 +93,7 @@ public class Db2SessionAffinityIntegrationTest {
         log.debug("Creating DB2 declared global temporary table: {}", SHARED_TABLE_NAME);
         Statement createStmt = conn.createStatement();
         try {
-            createStmt.execute("DECLARE GLOBAL TEMPORARY TABLE " + SHARED_TABLE_NAME + 
+            createStmt.execute("DECLARE GLOBAL TEMPORARY TABLE SESSION." + SHARED_TABLE_NAME + 
                 " (id INT, value VARCHAR(100)) ON COMMIT PRESERVE ROWS");
             log.debug("Successfully created temporary table");
         } catch (SQLException e) {
@@ -157,7 +157,7 @@ public class Db2SessionAffinityIntegrationTest {
         log.debug("Ensuring temp table exists: {}", SHARED_TABLE_NAME);
         Statement createStmt = conn.createStatement();
         try {
-            createStmt.execute("DECLARE GLOBAL TEMPORARY TABLE " + SHARED_TABLE_NAME + 
+            createStmt.execute("DECLARE GLOBAL TEMPORARY TABLE SESSION." + SHARED_TABLE_NAME + 
                 " (id INT, value VARCHAR(100)) ON COMMIT PRESERVE ROWS");
             log.debug("Successfully created temporary table");
         } catch (SQLException e) {
@@ -235,7 +235,7 @@ public class Db2SessionAffinityIntegrationTest {
         log.debug("Ensuring temp table exists: {}", SHARED_TABLE_NAME);
         Statement createStmt = conn.createStatement();
         try {
-            createStmt.execute("DECLARE GLOBAL TEMPORARY TABLE " + SHARED_TABLE_NAME + 
+            createStmt.execute("DECLARE GLOBAL TEMPORARY TABLE SESSION." + SHARED_TABLE_NAME + 
                 " (id INT, value VARCHAR(100)) ON COMMIT PRESERVE ROWS");
             log.debug("Successfully created temporary table");
         } catch (SQLException e) {
