@@ -18,7 +18,7 @@ java -version
 
 Expected output (version should be 21 or higher):
 ```
-openjdk version "21.0.9" 2025-10-21
+openjdk version "21.0.9" 2024-10-21
 OpenJDK Runtime Environment (build 21.0.9+10)
 OpenJDK 64-Bit Server VM (build 21.0.9+10, mixed mode, sharing)
 ```
@@ -276,15 +276,15 @@ jdbc:ojp[localhost:1059]_h2:~/test
 
 ### Java Version Issues
 
-**Problem**: `error: invalid target release: 22`
+**Problem**: `error: invalid target release: 21`
 
-**Solution**: Ensure you're using Java 22 or higher:
+**Solution**: Ensure you're using Java 21 or higher:
 ```bash
 java -version
 ```
 
 If using a different Java version, either:
-- Upgrade to Java 22, or
+- Upgrade to Java 21 or higher, or
 - Temporarily modify `ojp-server/pom.xml` to use your Java version (change `maven.compiler.source` and `maven.compiler.target`)
 
 ### Build Issues
