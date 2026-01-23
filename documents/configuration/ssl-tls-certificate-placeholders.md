@@ -9,11 +9,15 @@ OJP Server supports property placeholders in JDBC URLs to allow SSL/TLS certific
 - You need to avoid hardcoding file paths in connection URLs
 - You're using different certificate paths across environments (dev, staging, production)
 
+**Important**: Some database drivers (notably Oracle) can also read SSL properties directly from JVM system properties without requiring URL parameters or placeholders. See the database-specific sections below for details.
+
 ## How It Works
 
 1. **Client Side (JDBC Driver)**: Configure the JDBC URL in `ojp.properties` with placeholders like `${ojp.server.sslrootcert}`
 2. **Server Side (OJP Server)**: Configure the actual certificate paths using JVM properties or environment variables
 3. **Runtime**: When the server receives the connection request, it automatically resolves all placeholders before establishing the database connection
+
+**Alternative for certain databases**: Some JDBC drivers (e.g., Oracle) natively support reading SSL configuration from JVM system properties, eliminating the need for URL placeholders entirely.
 
 ## Placeholder Format
 
@@ -52,6 +56,23 @@ java -jar ojp-server.jar
 ```
 
 **Note**: JVM properties take precedence over environment variables.
+
+## SSL Configuration Approaches by Database
+
+Different databases support different SSL configuration methods:
+
+| Database | URL Placeholders | JVM Properties (No URL Changes) | Notes |
+|----------|------------------|--------------------------------|-------|
+| PostgreSQL | ✅ Supported | ❌ Not Supported | Requires SSL parameters in URL |
+| MySQL/MariaDB | ✅ Supported | ⚠️ Limited | Standard Java SSL properties work, but driver-specific properties need URL |
+| Oracle | ✅ Supported | ✅ **Fully Supported** | Oracle JDBC natively reads `oracle.net.*` JVM properties |
+| SQL Server | ✅ Supported | ⚠️ Limited | Standard Java SSL properties work for basic SSL |
+| DB2 | ✅ Supported | ❌ Not Supported | Requires SSL parameters in URL |
+
+**Recommendation**: 
+- For **Oracle**, prefer JVM-based configuration for simplicity (see Oracle section below)
+- For **other databases**, use URL placeholders for explicit control
+- For **MySQL/SQL Server**, JVM properties can be used for standard Java SSL (`javax.net.ssl.*`) but driver-specific properties need URL parameters
 
 ## Database-Specific Examples
 
@@ -135,6 +156,28 @@ export OJP_SERVER_MYSQL_KEYSTOREPASSWORD=changeit
 | `useSSL` | Enable SSL (true/false) |
 | `requireSSL` | Require SSL connection (true/false) |
 
+#### MySQL/MariaDB JVM-Based SSL (Standard Java SSL Properties)
+
+MySQL/MariaDB can use standard Java SSL properties for basic SSL configuration, but this only works with the default Java SSL context and not for driver-specific keystores:
+
+**Server Configuration:**
+```bash
+# Using standard Java SSL properties (limited functionality)
+java -jar ojp-server.jar \
+  -Djavax.net.ssl.trustStore=/etc/ojp/certs/truststore.jks \
+  -Djavax.net.ssl.trustStorePassword=changeit \
+  -Djavax.net.ssl.keyStore=/etc/ojp/certs/keystore.jks \
+  -Djavax.net.ssl.keyStorePassword=changeit
+```
+
+**Client Configuration:**
+```properties
+# Simple URL - SSL configured via JVM properties
+ojp.datasource.url=jdbc:ojp[localhost:1059]_mysql://dbhost:3306/mydb?useSSL=true&requireSSL=true
+```
+
+**Limitations**: This approach uses the default Java SSL context. For explicit control over certificate locations or to use multiple different keystores, use URL placeholders instead.
+
 ### Oracle
 
 Oracle uses Oracle Wallet for SSL/TLS certificate management.
@@ -169,8 +212,75 @@ export ORACLE_NET_TNS_ADMIN=/etc/ojp/tns
 | `oracle.net.wallet_location` | Path to Oracle Wallet directory |
 | `oracle.net.ssl_server_dn_match` | Verify server DN (true/false) |
 | `oracle.net.ssl_version` | SSL/TLS version |
+| `oracle.net.tns_admin` | Path to TNS configuration directory |
 
 **Note**: Oracle Wallet must be configured using Oracle Wallet Manager (`owm`) or `orapki` utility before use.
+
+#### Oracle JVM-Based SSL Configuration (No URL Parameters)
+
+Oracle JDBC driver supports reading SSL configuration directly from JVM system properties without requiring parameters in the JDBC URL. This approach is useful when:
+- SSL properties are standardized across multiple connections
+- You want to avoid exposing wallet paths in connection URLs
+- Using TCPS protocol in TNS connection descriptors
+
+**Scenario 1: Using JVM Properties Only (No URL Placeholders)**
+
+With this approach, the Oracle JDBC driver automatically picks up SSL properties from JVM arguments at the OJP server startup, and no URL modification is needed.
+
+**Client Configuration (ojp.properties):**
+```properties
+# Simple Oracle URL without SSL parameters
+# SSL configuration is handled entirely by JVM properties on the server
+ojp.datasource.url=jdbc:ojp[localhost:1059]_oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCPS)(HOST=dbhost)(PORT=2484))(CONNECT_DATA=(SERVICE_NAME=myservice)))
+
+# Or using TNS alias (requires tnsnames.ora on server)
+ojp.datasource.url=jdbc:ojp[localhost:1059]_oracle:thin:@mydb_ssl
+```
+
+**Server Configuration:**
+```bash
+# Start OJP server with Oracle SSL JVM properties
+# Oracle JDBC driver will automatically use these properties
+java -jar ojp-server.jar \
+  -Doracle.net.wallet_location=/etc/ojp/wallet \
+  -Doracle.net.tns_admin=/etc/ojp/tns \
+  -Doracle.net.ssl_server_dn_match=true \
+  -Doracle.net.ssl_version=1.2 \
+  -Djavax.net.ssl.trustStore=/etc/ojp/certs/truststore.jks \
+  -Djavax.net.ssl.trustStorePassword=changeit
+```
+
+**Key Benefits:**
+- No placeholders needed in JDBC URL
+- Oracle JDBC driver natively reads these properties
+- Simplifies client configuration
+- All Oracle connections from the server inherit the same SSL settings
+
+**Scenario 2: Hybrid Approach (JVM Properties + URL Placeholders)**
+
+You can combine both methods for flexibility:
+
+**Client Configuration:**
+```properties
+# Override specific properties in URL while using JVM defaults for others
+ojp.datasource.url=jdbc:ojp[localhost:1059]_oracle:thin:@dbhost:2484/myservice?oracle.net.wallet_location=${ojp.server.oracle.custom.wallet}
+```
+
+**Server Configuration:**
+```bash
+# Base SSL configuration via JVM properties
+java -jar ojp-server.jar \
+  -Doracle.net.ssl_server_dn_match=true \
+  -Doracle.net.ssl_version=1.2 \
+  -Dojp.server.oracle.custom.wallet=/etc/ojp/custom-wallet
+```
+
+**Important Notes:**
+1. **Property Precedence**: URL parameters override JVM system properties in Oracle JDBC
+2. **TCPS Protocol**: When using `PROTOCOL=TCPS` in connection descriptor, SSL is automatically enabled
+3. **TNS Configuration**: If using TNS aliases, ensure `tnsnames.ora` is accessible via `oracle.net.tns_admin`
+4. **Wallet Auto-Discovery**: Oracle JDBC can auto-discover wallets in default locations if not explicitly specified
+
 
 ### SQL Server
 
@@ -213,6 +323,26 @@ export OJP_SERVER_SQLSERVER_KEYSTOREPASSWORD=changeit
 | `trustStorePassword` | Truststore password |
 | `keyStore` | Path to keystore file |
 | `keyStorePassword` | Keystore password |
+
+#### SQL Server JVM-Based SSL (Standard Java SSL Properties)
+
+SQL Server JDBC driver can use standard Java SSL properties for basic SSL encryption:
+
+**Server Configuration:**
+```bash
+# Using standard Java SSL properties
+java -jar ojp-server.jar \
+  -Djavax.net.ssl.trustStore=/etc/ojp/certs/truststore.jks \
+  -Djavax.net.ssl.trustStorePassword=changeit
+```
+
+**Client Configuration:**
+```properties
+# Simple URL - SSL configured via JVM properties
+ojp.datasource.url=jdbc:ojp[localhost:1059]_sqlserver://dbhost:1433;databaseName=mydb;encrypt=true;trustServerCertificate=false
+```
+
+**Limitations**: This uses the default Java SSL context. For explicit truststore/keystore paths or SQL Server-specific SSL properties, use URL placeholders instead.
 
 ### DB2
 
