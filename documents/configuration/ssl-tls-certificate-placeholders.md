@@ -134,6 +134,8 @@ Different databases support different SSL configuration methods:
 
 ## Database-Specific Examples
 
+**Important Note**: In all examples below, JDBC URLs are shown for readability but must be written as a single continuous line in actual properties files. Line breaks are not supported in `.properties` files.
+
 ### PostgreSQL
 
 PostgreSQL supports SSL/TLS connections with various verification modes.
@@ -495,10 +497,7 @@ Ensure certificate files have appropriate permissions:
 ```bash
 # Certificate files should be readable only by the OJP server user
 # Use find for better portability across shells
-find /etc/ojp/certs -name 'ca-cert.pem' -exec chmod 400 {} \;
-find /etc/ojp/certs -name 'client-cert.pem' -exec chmod 400 {} \;
-find /etc/ojp/certs -name 'client-key.pem' -exec chmod 400 {} \;
-find /etc/ojp/certs -name '*.jks' -exec chmod 400 {} \;
+find /etc/ojp/certs \( -name '*.pem' -o -name '*.jks' \) -type f -exec chmod 400 {} \;
 
 # Directories should be accessible
 find /etc/ojp/certs -type d -exec chmod 500 {} \;

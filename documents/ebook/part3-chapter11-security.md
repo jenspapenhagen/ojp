@@ -180,6 +180,7 @@ OJP Server 0.3.0+ introduces **property placeholder support** that allows you to
 
 1. **Client Configuration**: In your `ojp.properties` file, use placeholders in the JDBC URL:
    ```properties
+   # Note: In actual properties files, the URL must be on a single line
    ojp.datasource.url=jdbc:ojp[localhost:1059]_postgresql://dbhost:5432/mydb?ssl=true&sslmode=verify-full&sslrootcert=${ojp.server.sslrootcert}
    ```
 
@@ -320,8 +321,7 @@ MySQL and SQL Server also support standard Java SSL properties (`javax.net.ssl.t
 3. **Secure file permissions** on certificate files:
    ```bash
    # Use find for better portability across shells
-   find /etc/ojp/certs -name '*.pem' -exec chmod 400 {} \;
-   find /etc/ojp/certs -name '*.jks' -exec chmod 400 {} \;
+   find /etc/ojp/certs \( -name '*.pem' -o -name '*.jks' \) -exec chmod 400 {} \;
    chown -R ojp-server:ojp-server /etc/ojp/certs
    ```
 
