@@ -170,6 +170,172 @@ jdbc:sqlserver://dbhost:1433;databaseName=mydb;encrypt=true;trustServerCertifica
 jdbc:sqlserver://dbhost:1433;databaseName=mydb;encrypt=true;integratedSecurity=false;authentication=SqlPassword;clientCertificate=/path/to/client-cert.pem;clientKey=/path/to/client-key.pem
 ```
 
+### SSL Certificate Path Placeholders
+
+One of the challenges with SSL/TLS configuration in OJP deployments is that certificate files reside on the OJP Server, not on client machines. Hardcoding certificate paths in JDBC connection URLs is inflexible and makes it difficult to manage certificates across different environments (development, staging, production).
+
+OJP Server 0.4.0-beta+ introduces **property placeholder support** that allows you to use placeholders like `${ojp.server.sslrootcert}` in JDBC URLs. The server automatically resolves these placeholders to actual certificate paths at runtime using JVM system properties or environment variables.
+
+**How It Works:**
+
+1. **Client Configuration**: In your `ojp.properties` file, use placeholders in the JDBC URL:
+   ```properties
+   # Note: In actual properties files, the URL must be on a single line
+   ojp.datasource.url=jdbc:ojp[localhost:1059]_postgresql://dbhost:5432/mydb?ssl=true&sslmode=verify-full&sslrootcert=${ojp.server.sslrootcert}
+   ```
+
+2. **Server Configuration**: Start the OJP Server with JVM properties or environment variables:
+   ```bash
+   # Using JVM properties
+   java -jar ojp-server.jar -Dojp.server.sslrootcert=/etc/ojp/certs/ca-cert.pem
+   
+   # Or using environment variables (property names converted to uppercase with underscores)
+   export OJP_SERVER_SSLROOTCERT=/etc/ojp/certs/ca-cert.pem
+   java -jar ojp-server.jar
+   ```
+
+3. **Runtime Resolution**: When the server receives the connection request, it resolves `${ojp.server.sslrootcert}` to `/etc/ojp/certs/ca-cert.pem` before establishing the database connection.
+
+**Security Validation:**
+
+To prevent security vulnerabilities when a client is compromised, OJP implements strict whitelist-based validation of property names. Only property names matching specific patterns are allowed:
+
+- **Must start with**: `ojp.server.` or `ojp.client.`
+- **Can contain**: Alphanumeric characters, dots (`.`), hyphens (`-`), and underscores (`_`)
+- **Length limits**: Suffix must be 1-200 characters (total property name up to 211 characters)
+
+**Why This Security Is Critical:**
+
+If a malicious actor compromises a client application, they could attempt to inject unauthorized placeholders into JDBC URLs. Without validation, this could lead to:
+- **System property exposure**: Reading sensitive system properties like `${java.home}` or `${user.home}`
+- **Command injection**: Using special characters like `;`, `|`, or `&` to execute commands
+- **SQL injection**: Injecting malicious SQL through certificate path parameters
+- **Path traversal**: Accessing files outside intended directories (e.g., `../../../etc/passwd`)
+
+The whitelist validation blocks all these attacks:
+
+```properties
+# Valid placeholders (allowed)
+${ojp.server.sslrootcert}           ✓
+${ojp.server.mysql.truststore}      ✓
+${ojp.client.config-value}          ✓
+
+# Blocked attacks
+${java.home}                        ✗ System property exposure
+${ojp.server.cert;rm -rf /}         ✗ Command injection
+${ojp.server.cert../../../passwd}   ✗ Path traversal
+```
+
+When an invalid property name is detected, the server:
+1. Immediately rejects the connection
+2. Throws a `SecurityException` with violation details
+3. Logs the security violation for audit purposes
+
+**Database-Specific Examples:**
+
+PostgreSQL:
+```properties
+ojp.datasource.url=jdbc:ojp[localhost:1059]_postgresql://dbhost:5432/mydb?ssl=true&sslmode=verify-full&sslrootcert=${ojp.server.sslrootcert}&sslcert=${ojp.server.sslcert}&sslkey=${ojp.server.sslkey}
+```
+
+MySQL:
+```properties
+ojp.datasource.url=jdbc:ojp[localhost:1059]_mysql://dbhost:3306/mydb?useSSL=true&requireSSL=true&trustCertificateKeyStoreUrl=${ojp.server.mysql.truststore}&trustCertificateKeyStorePassword=${ojp.server.mysql.truststorePassword}
+```
+
+Oracle (with placeholders):
+```properties
+ojp.datasource.url=jdbc:ojp[localhost:1059]_oracle:thin:@dbhost:2484/myservice?oracle.net.wallet_location=${ojp.server.oracle.wallet}
+```
+
+Oracle (JVM-based without placeholders):
+```properties
+# Simple URL - Oracle JDBC natively reads JVM properties
+ojp.datasource.url=jdbc:ojp[localhost:1059]_oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=TCPS)(HOST=dbhost)(PORT=2484))(CONNECT_DATA=(SERVICE_NAME=myservice)))
+
+# Server started with JVM properties (no placeholders needed)
+java -jar ojp-server.jar \
+  -Doracle.net.wallet_location=/etc/ojp/wallet \
+  -Doracle.net.ssl_server_dn_match=true
+```
+
+SQL Server:
+```properties
+ojp.datasource.url=jdbc:ojp[localhost:1059]_sqlserver://dbhost:1433;databaseName=mydb;encrypt=true;trustStore=${ojp.server.sqlserver.truststore};trustStorePassword=${ojp.server.sqlserver.truststorePassword}
+```
+
+DB2:
+```properties
+ojp.datasource.url=jdbc:ojp[localhost:1059]_db2://dbhost:50001/mydb:sslConnection=true;sslTrustStoreLocation=${ojp.server.db2.truststore};sslTrustStorePassword=${ojp.server.db2.truststorePassword};
+```
+
+**Alternative: JVM-Based SSL Configuration**
+
+Some databases, particularly **Oracle**, support reading SSL configuration directly from JVM system properties without requiring URL parameters. This approach works when:
+- SSL properties are standardized across all connections
+- You want to avoid exposing certificate paths in connection URLs
+- The JDBC driver natively supports JVM property resolution
+
+For Oracle, you can configure SSL entirely through JVM properties:
+```bash
+java -jar ojp-server.jar \
+  -Doracle.net.wallet_location=/etc/ojp/wallet \
+  -Doracle.net.tns_admin=/etc/ojp/tns \
+  -Doracle.net.ssl_server_dn_match=true \
+  -Doracle.net.ssl_version=1.2
+```
+
+MySQL and SQL Server also support standard Java SSL properties (`javax.net.ssl.trustStore`, `javax.net.ssl.keyStore`) for basic SSL, but driver-specific properties still require URL parameters or placeholders.
+
+**Best Practices:**
+
+1. **Use descriptive property names** that clearly indicate purpose and environment:
+   ```bash
+   -Dojp.server.postgresql.prod.sslrootcert=/etc/certs/prod/ca.pem
+   -Dojp.server.mysql.dev.truststore=/etc/certs/dev/truststore.jks
+   ```
+
+2. **Organize certificates by database and environment**:
+   ```
+   /etc/ojp/certs/
+   ├── postgresql/
+   │   ├── prod/
+   │   │   ├── ca-cert.pem
+   │   │   ├── client-cert.pem
+   │   │   └── client-key.pem
+   │   └── dev/
+   │       └── ...
+   ├── mysql/
+   │   ├── prod/
+   │   │   ├── truststore.jks
+   │   │   └── keystore.jks
+   │   └── dev/
+   │       └── ...
+   └── oracle/
+       ├── prod/
+       │   └── wallet/
+       └── dev/
+           └── wallet/
+   ```
+
+3. **Secure file permissions** on certificate files:
+   ```bash
+   # Use find for better portability across shells
+   find /etc/ojp/certs \( -name '*.pem' -o -name '*.jks' \) -exec chmod 400 {} \;
+   chown -R ojp-server:ojp-server /etc/ojp/certs
+   ```
+
+4. **Never commit credentials** to version control—use environment-specific configuration:
+   ```bash
+   # Development
+   export OJP_SERVER_MYSQL_TRUSTSTOREPASSWORD=dev_password
+   
+   # Production (use secrets management)
+   export OJP_SERVER_MYSQL_TRUSTSTOREPASSWORD=$(vault read -field=password secret/ojp/mysql/truststore)
+   ```
+
+For complete details on SSL certificate placeholder configuration, including security considerations, troubleshooting, and advanced scenarios, see the [SSL/TLS Certificate Configuration Guide](../configuration/ssl-tls-certificate-placeholders.md).
+
 ### Testing SSL Connections
 
 Always test your SSL configuration before deploying to production:
