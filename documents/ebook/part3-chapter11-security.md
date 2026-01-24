@@ -800,9 +800,9 @@ graph TB
         DB3[Database Server 3]
     end
     
-    OJP -.->|local network<br/>&lt;1ms| DB1
-    OJP -.->|local network<br/>&lt;1ms| DB2
-    OJP -.->|local network<br/>&lt;1ms| DB3
+    OJP -.->|local network<br/><1ms| DB1
+    OJP -.->|local network<br/><1ms| DB2
+    OJP -.->|local network<br/><1ms| DB3
     
     style AppNet fill:#f5f5f5
     style DBNet fill:#1565c0,color:#fff
