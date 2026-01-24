@@ -52,27 +52,40 @@ PostgreSQL provides the most straightforward SSL configuration. The driver suppo
 
 ```properties
 # Basic SSL (encrypts but doesn't verify server)
-jdbc:postgresql://dbhost:5432/mydb?ssl=true&sslmode=require
+jdbc:ojp[localhost:1059]_postgresql://dbhost:5432/mydb?ssl=true&sslmode=require
 
 # Verify server certificate against CA
-jdbc:postgresql://dbhost:5432/mydb?ssl=true&sslmode=verify-ca&sslrootcert=/path/to/ca-cert.pem
+jdbc:ojp[localhost:1059]_postgresql://dbhost:5432/mydb?ssl=true&sslmode=verify-ca&sslrootcert=${ojp.server.sslrootcert}
 
 # Full verification including hostname
-jdbc:postgresql://dbhost:5432/mydb?ssl=true&sslmode=verify-full&sslrootcert=/path/to/ca-cert.pem
+jdbc:ojp[localhost:1059]_postgresql://dbhost:5432/mydb?ssl=true&sslmode=verify-full&sslrootcert=${ojp.server.sslrootcert}
 
 # Client certificate authentication (mTLS)
-jdbc:postgresql://dbhost:5432/mydb?ssl=true&sslmode=verify-full&sslcert=/path/to/client-cert.pem&sslkey=/path/to/client-key.pem&sslrootcert=/path/to/ca-cert.pem
+jdbc:ojp[localhost:1059]_postgresql://dbhost:5432/mydb?ssl=true&sslmode=verify-full&sslcert=${ojp.server.sslcert}&sslkey=${ojp.server.sslkey}&sslrootcert=${ojp.server.sslrootcert}
 ```
 
 **OJP Server Configuration:**
 
-In your `ojp.properties` file, specify the backend JDBC URL with SSL parameters:
+In your `ojp.properties` file, specify the backend JDBC URL with SSL parameter placeholders:
 
 ```properties
 # PostgreSQL with full SSL verification
-ojp.backend.jdbc.url=jdbc:postgresql://dbhost:5432/mydb?ssl=true&sslmode=verify-full&sslrootcert=/etc/ojp/certs/ca-cert.pem
+# Note: Certificate paths are resolved from JVM properties or environment variables
+ojp.backend.jdbc.url=jdbc:postgresql://dbhost:5432/mydb?ssl=true&sslmode=verify-full&sslrootcert=${ojp.server.sslrootcert}
 ojp.backend.jdbc.username=ojp_user
 ojp.backend.jdbc.password=${DB_PASSWORD}
+```
+
+Start the OJP Server with the certificate paths:
+
+```bash
+# Using JVM properties
+java -jar ojp-server.jar \
+  -Dojp.server.sslrootcert=/etc/ojp/certs/ca-cert.pem
+
+# Or using environment variables
+export OJP_SERVER_SSLROOTCERT=/etc/ojp/certs/ca-cert.pem
+java -jar ojp-server.jar
 ```
 
 **SSL Mode Reference:**
@@ -111,13 +124,29 @@ MySQL and MariaDB use similar SSL configuration, with some differences in parame
 
 ```properties
 # MySQL with SSL
-jdbc:mysql://dbhost:3306/mydb?useSSL=true&requireSSL=true&verifyServerCertificate=true&trustCertificateKeyStoreUrl=file:/path/to/truststore.jks&trustCertificateKeyStorePassword=changeit
+jdbc:ojp[localhost:1059]_mysql://dbhost:3306/mydb?useSSL=true&requireSSL=true&verifyServerCertificate=true&trustCertificateKeyStoreUrl=${ojp.server.mysql.truststore}&trustCertificateKeyStorePassword=${ojp.server.mysql.truststorePassword}
 
 # MariaDB with SSL
-jdbc:mariadb://dbhost:3306/mydb?useSsl=true&serverSslCert=/path/to/server-cert.pem
+jdbc:ojp[localhost:1059]_mariadb://dbhost:3306/mydb?useSsl=true&serverSslCert=${ojp.server.mariadb.sslcert}
 
 # Client certificate authentication (mTLS)
-jdbc:mysql://dbhost:3306/mydb?useSSL=true&requireSSL=true&clientCertificateKeyStoreUrl=file:/path/to/keystore.jks&clientCertificateKeyStorePassword=changeit
+jdbc:ojp[localhost:1059]_mysql://dbhost:3306/mydb?useSSL=true&requireSSL=true&clientCertificateKeyStoreUrl=${ojp.server.mysql.keystore}&clientCertificateKeyStorePassword=${ojp.server.mysql.keystorePassword}&trustCertificateKeyStoreUrl=${ojp.server.mysql.truststore}&trustCertificateKeyStorePassword=${ojp.server.mysql.truststorePassword}
+```
+
+Start the OJP Server with certificate paths:
+
+```bash
+# Using JVM properties
+java -jar ojp-server.jar \
+  -Dojp.server.mysql.truststore=file:///etc/ojp/certs/mysql/truststore.jks \
+  -Dojp.server.mysql.truststorePassword=changeit \
+  -Dojp.server.mysql.keystore=file:///etc/ojp/certs/mysql/keystore.jks \
+  -Dojp.server.mysql.keystorePassword=changeit
+
+# Or using environment variables
+export OJP_SERVER_MYSQL_TRUSTSTORE=file:///etc/ojp/certs/mysql/truststore.jks
+export OJP_SERVER_MYSQL_TRUSTSTOREPASSWORD=changeit
+java -jar ojp-server.jar
 ```
 
 MySQL typically uses Java keystores (JKS format) rather than PEM files:
@@ -136,26 +165,39 @@ keytool -importkeystore -srckeystore client.p12 -srcstoretype PKCS12 -destkeysto
 Oracle requires the Oracle Wallet for SSL configuration, which is more complex but provides robust security:
 
 ```properties
-# Oracle with SSL using wallet
-jdbc:oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=tcps)(HOST=dbhost)(PORT=2484))(CONNECT_DATA=(SERVICE_NAME=mydb))(SECURITY=(SSL_SERVER_CERT_DN="CN=dbhost,O=MyOrg,C=US")))
+# Oracle with SSL using wallet (using placeholders)
+jdbc:ojp[localhost:1059]_oracle:thin:@dbhost:2484/myservice?oracle.net.wallet_location=${ojp.server.oracle.wallet}
 
-# Oracle wallet location (set as JVM property)
--Doracle.net.wallet_location=/path/to/wallet
--Djavax.net.ssl.trustStore=/path/to/wallet/truststore.jks
--Djavax.net.ssl.trustStorePassword=changeit
+# Or using TCPS protocol with JVM-based configuration (no placeholders needed)
+jdbc:ojp[localhost:1059]_oracle:thin:@(DESCRIPTION=(ADDRESS=(PROTOCOL=tcps)(HOST=dbhost)(PORT=2484))(CONNECT_DATA=(SERVICE_NAME=mydb))(SECURITY=(SSL_SERVER_CERT_DN="CN=dbhost,O=MyOrg,C=US")))
+```
+
+Start the OJP Server with Oracle SSL configuration:
+
+```bash
+# Using JVM properties (Oracle JDBC driver reads these automatically)
+java -jar ojp-server.jar \
+  -Doracle.net.wallet_location=/etc/ojp/wallet \
+  -Doracle.net.ssl_server_dn_match=true \
+  -Djavax.net.ssl.trustStore=/etc/ojp/wallet/truststore.jks \
+  -Djavax.net.ssl.trustStorePassword=changeit
+
+# Or with placeholder support
+java -jar ojp-server.jar \
+  -Dojp.server.oracle.wallet=/etc/ojp/wallet
 ```
 
 Oracle Wallet setup:
 
 ```bash
-# Create Oracle Wallet
-orapki wallet create -wallet /path/to/wallet -auto_login
+# Create Oracle Wallet (specify actual path on OJP server)
+orapki wallet create -wallet /etc/ojp/wallet -auto_login
 
 # Add trusted certificate
-orapki wallet add -wallet /path/to/wallet -trusted_cert -cert ca-cert.pem
+orapki wallet add -wallet /etc/ojp/wallet -trusted_cert -cert ca-cert.pem
 
 # Add client certificate for mTLS
-orapki wallet add -wallet /path/to/wallet -user_cert -cert client-cert.pem -pwd wallet_password
+orapki wallet add -wallet /etc/ojp/wallet -user_cert -cert client-cert.pem -pwd wallet_password
 ```
 
 ### SQL Server SSL Configuration
@@ -164,10 +206,26 @@ SQL Server uses the `encrypt` parameter for TLS configuration:
 
 ```properties
 # SQL Server with encryption
-jdbc:sqlserver://dbhost:1433;databaseName=mydb;encrypt=true;trustServerCertificate=false;trustStore=/path/to/truststore.jks;trustStorePassword=changeit
+jdbc:ojp[localhost:1059]_sqlserver://dbhost:1433;databaseName=mydb;encrypt=true;trustServerCertificate=false;trustStore=${ojp.server.sqlserver.truststore};trustStorePassword=${ojp.server.sqlserver.truststorePassword}
 
 # Client certificate authentication
-jdbc:sqlserver://dbhost:1433;databaseName=mydb;encrypt=true;integratedSecurity=false;authentication=SqlPassword;clientCertificate=/path/to/client-cert.pem;clientKey=/path/to/client-key.pem
+jdbc:ojp[localhost:1059]_sqlserver://dbhost:1433;databaseName=mydb;encrypt=true;integratedSecurity=false;authentication=SqlPassword;clientCertificate=${ojp.server.sqlserver.clientcert};clientKey=${ojp.server.sqlserver.clientkey}
+```
+
+Start the OJP Server with certificate paths:
+
+```bash
+# Using JVM properties
+java -jar ojp-server.jar \
+  -Dojp.server.sqlserver.truststore=/etc/ojp/certs/sqlserver/truststore.jks \
+  -Dojp.server.sqlserver.truststorePassword=changeit \
+  -Dojp.server.sqlserver.clientcert=/etc/ojp/certs/sqlserver/client-cert.pem \
+  -Dojp.server.sqlserver.clientkey=/etc/ojp/certs/sqlserver/client-key.pem
+
+# Or using environment variables
+export OJP_SERVER_SQLSERVER_TRUSTSTORE=/etc/ojp/certs/sqlserver/truststore.jks
+export OJP_SERVER_SQLSERVER_TRUSTSTOREPASSWORD=changeit
+java -jar ojp-server.jar
 ```
 
 ### SSL Certificate Path Placeholders
@@ -338,14 +396,19 @@ For complete details on SSL certificate placeholder configuration, including sec
 
 ### Testing SSL Connections
 
-Always test your SSL configuration before deploying to production:
+Always test your SSL configuration before deploying to production. When testing directly with database clients, you'll use the actual certificate paths since these commands run on machines where the certificates are stored:
 
 ```bash
-# Test PostgreSQL SSL connection
+# Test PostgreSQL SSL connection (direct database client)
+# Note: When using psql directly, provide the actual cert path on the client machine
 psql "postgresql://dbhost:5432/mydb?sslmode=verify-full&sslrootcert=/path/to/ca-cert.pem" -U myuser
 
-# Test MySQL SSL connection
+# Test MySQL SSL connection (direct database client)
 mysql --host=dbhost --ssl-ca=/path/to/ca-cert.pem --ssl-verify-server-cert -u myuser -p
+
+# Test through OJP (uses placeholders)
+# In your ojp.properties:
+# ojp.datasource.url=jdbc:ojp[localhost:1059]_postgresql://dbhost:5432/mydb?sslmode=verify-full&sslrootcert=${ojp.server.sslrootcert}
 
 # Verify encryption is active (PostgreSQL)
 SELECT * FROM pg_stat_ssl WHERE pid = pg_backend_pid();
@@ -471,14 +534,15 @@ keytool -import -alias ca -file ca-cert.pem -keystore ojp-client-truststore.jks 
 
 ### Configuring OJP Server for mTLS
 
-Configure the OJP Server to require client certificates:
+Configure the OJP Server to require client certificates. These paths point to the keystore and truststore files on the OJP server machine:
 
 ```bash
 # Start OJP Server with mTLS enabled
+# Note: Paths are actual file locations on the OJP server
 java -Dojp.server.tls.enabled=true \
-     -Dojp.server.tls.keystore.path=/path/to/ojp-server-keystore.jks \
+     -Dojp.server.tls.keystore.path=/etc/ojp/tls/ojp-server-keystore.jks \
      -Dojp.server.tls.keystore.password=changeit \
-     -Dojp.server.tls.truststore.path=/path/to/ojp-server-truststore.jks \
+     -Dojp.server.tls.truststore.path=/etc/ojp/tls/ojp-server-truststore.jks \
      -Dojp.server.tls.truststore.password=changeit \
      -Dojp.server.tls.client.auth=REQUIRE \
      -jar ojp-server.jar
@@ -488,9 +552,9 @@ Or using environment variables:
 
 ```bash
 export OJP_SERVER_TLS_ENABLED=true
-export OJP_SERVER_TLS_KEYSTORE_PATH=/path/to/ojp-server-keystore.jks
+export OJP_SERVER_TLS_KEYSTORE_PATH=/etc/ojp/tls/ojp-server-keystore.jks
 export OJP_SERVER_TLS_KEYSTORE_PASSWORD=changeit
-export OJP_SERVER_TLS_TRUSTSTORE_PATH=/path/to/ojp-server-truststore.jks
+export OJP_SERVER_TLS_TRUSTSTORE_PATH=/etc/ojp/tls/ojp-server-truststore.jks
 export OJP_SERVER_TLS_TRUSTSTORE_PASSWORD=changeit
 export OJP_SERVER_TLS_CLIENT_AUTH=REQUIRE
 
@@ -510,7 +574,7 @@ java -jar ojp-server.jar
 
 ### Configuring JDBC Driver for mTLS
 
-Client applications need keystore (client certificate) and truststore (to verify server):
+Client applications need keystore (client certificate) and truststore (to verify server). These paths point to certificate files on the client application machine:
 
 ```java
 import com.zaxxer.hikari.HikariConfig;
@@ -521,10 +585,11 @@ public class DataSourceConfig {
     
     public DataSource createSecureDataSource() {
         // Set system properties for client TLS
+        // Note: Paths are actual file locations on the client machine
         System.setProperty("ojp.client.tls.enabled", "true");
-        System.setProperty("ojp.client.tls.keystore.path", "/path/to/ojp-client-keystore.jks");
+        System.setProperty("ojp.client.tls.keystore.path", "/etc/app/tls/ojp-client-keystore.jks");
         System.setProperty("ojp.client.tls.keystore.password", "changeit");
-        System.setProperty("ojp.client.tls.truststore.path", "/path/to/ojp-client-truststore.jks");
+        System.setProperty("ojp.client.tls.truststore.path", "/etc/app/tls/ojp-client-truststore.jks");
         System.setProperty("ojp.client.tls.truststore.password", "changeit");
         
         HikariConfig config = new HikariConfig();
@@ -542,10 +607,11 @@ Or via `ojp.properties` file on the classpath:
 
 ```properties
 # Client mTLS configuration
+# Note: Paths are actual file locations on the client machine
 ojp.client.tls.enabled=true
-ojp.client.tls.keystore.path=/path/to/ojp-client-keystore.jks
+ojp.client.tls.keystore.path=/etc/app/tls/ojp-client-keystore.jks
 ojp.client.tls.keystore.password=changeit
-ojp.client.tls.truststore.path=/path/to/ojp-client-truststore.jks
+ojp.client.tls.truststore.path=/etc/app/tls/ojp-client-truststore.jks
 ojp.client.tls.truststore.password=changeit
 
 # Connection settings
@@ -592,7 +658,7 @@ keytool -importkeystore -srckeystore ojp-server.p12 -srcstoretype PKCS12 \
   -destkeystore ojp-server-keystore.jks -deststoretype JKS
 
 # Automate renewal
-echo "0 0 * * 0 certbot renew --deploy-hook /path/to/update-keystores.sh" | crontab -
+echo "0 0 * * 0 certbot renew --deploy-hook /etc/ojp/scripts/update-keystores.sh" | crontab -
 ```
 
 ### Testing mTLS Configuration
