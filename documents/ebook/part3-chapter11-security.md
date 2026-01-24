@@ -1,5 +1,21 @@
 # Chapter 11: Security & Network Architecture
 
+> **⚠️ IMPLEMENTATION STATUS NOTE**
+> 
+> This chapter documents OJP's security capabilities and architecture. Please note the current implementation status:
+> 
+> **✅ Currently Implemented:**
+> - **Database SSL/TLS** (OJP Server ↔ Database): Fully supported via JDBC URL parameters (Section 11.2)
+> - **IP Whitelisting** (Client ↔ OJP Server): Fully implemented (see Chapter 6)
+> - **Network Architecture Patterns**: Applicable with current implementation (Section 11.4)
+> 
+> **📋 Planned for Future Release:**
+> - **gRPC TLS/mTLS** (JDBC Driver ↔ OJP Server): Sections 11.3 describe the planned implementation
+> - Currently, gRPC communication between the JDBC driver and OJP Server uses plaintext
+> - Implementation prompts and architecture are provided for future development
+> 
+> For production deployments requiring end-to-end encryption today, use network-level security (VPN, private networks, or TLS-terminating proxies) to protect the JDBC Driver ↔ OJP Server communication.
+
 Security is not just a feature—it's a fundamental aspect of running OJP in production. When your proxy server sits between applications and databases, it becomes a critical component in your security posture. This chapter covers the complete security landscape: encrypting traffic between all components, implementing mutual TLS authentication, designing secure network architectures, and following security best practices.
 
 ## 11.1 Security Overview
@@ -418,6 +434,23 @@ SHOW STATUS LIKE 'Ssl_cipher';
 ```
 
 ## 11.3 mTLS Between JDBC Driver and OJP Server
+
+> **📋 PLANNED FEATURE - NOT YET IMPLEMENTED**
+> 
+> The mTLS functionality described in this section is **not yet implemented** in the current OJP release. This section documents the planned architecture and configuration for future implementation.
+> 
+> **Current Status:**
+> - gRPC communication between JDBC Driver and OJP Server currently uses **plaintext** (no encryption)
+> - The `GrpcChannelFactory` explicitly uses `.usePlaintext()` when creating channels
+> - None of the TLS configuration properties described below exist in the codebase
+> 
+> **Workarounds for Production:**
+> - Use **private networks** or **VPNs** to secure JDBC Driver ↔ OJP Server communication
+> - Deploy within **isolated network segments** (see Section 11.4)
+> - Use **TLS-terminating proxies** (e.g., Envoy, nginx with gRPC support) in front of OJP Server
+> 
+> **Implementation Roadmap:**
+> See `CHAPTER11_REVIEW_FINDINGS.md` in the repository root for detailed implementation prompts and requirements.
 
 Mutual TLS (mTLS) provides the strongest authentication model for gRPC connections between your applications and the OJP Server. Unlike traditional password-based authentication, mTLS uses certificate-based authentication where both client and server prove their identities cryptographically. This eliminates password-related vulnerabilities (weak passwords, password reuse, credential theft) and provides non-repudiation—you can prove which client made which connection.
 
