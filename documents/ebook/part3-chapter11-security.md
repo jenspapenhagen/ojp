@@ -333,7 +333,7 @@ MySQL and SQL Server also support standard Java SSL properties (`javax.net.ssl.t
    export OJP_SERVER_MYSQL_PASSWORD=$(vault read -field=password secret/ojp/mysql)
    ```
 
-For complete details on SSL certificate placeholder configuration, including security considerations, troubleshooting, and advanced scenarios, see the [SSL/TLS Certificate Configuration Guide](../../configuration/ssl-tls-certificate-placeholders.md).
+For complete details on SSL certificate placeholder configuration, including security considerations, troubleshooting, and advanced scenarios, see the [SSL/TLS Certificate Configuration Guide](../configuration/ssl-tls-certificate-placeholders.md).
 
 ### Testing SSL Connections
 
