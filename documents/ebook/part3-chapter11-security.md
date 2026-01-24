@@ -587,7 +587,7 @@ java -jar ojp-server.jar
 | `ojp.server.tls.truststore.type` | No | `JKS` | Truststore type |
 | `ojp.server.tls.clientAuthRequired` | No | `false` | Require client certificates (mTLS) |
 
-> **💡 JVM Default Keystores:** If truststore path is not specified, OJP uses the JVM's default truststore (typically `$JAVA_HOME/lib/security/cacerts`). This works well in containerized environments with centralized PKI management. For multi-tenant production deployments, explicit paths provide better isolation.
+> **💡 JVM Default Truststore:** If truststore path is not specified, OJP uses the JVM's default truststore (typically `$JAVA_HOME/lib/security/cacerts`). This works well in containerized environments with centralized PKI management. For multi-tenant production deployments, explicit paths provide better isolation.
 
 ### Configuring JDBC Driver for mTLS
 
