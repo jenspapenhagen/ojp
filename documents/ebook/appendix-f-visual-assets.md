@@ -2148,7 +2148,7 @@ String named = "jdbc:ojp[localhost:1059(mainApp)]_postgresql://localhost:5432/my
 // With connection parameters (including SSL)
 String params = "jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb?" +
                 "ssl=true&sslfactory=org.postgresql.ssl.NonValidatingFactory";
-// For SSL configuration details between OJP and database, see Chapter 6 Security section
+// For SSL configuration details between OJP and database, see Chapter 11: Security & Network Architecture
 ```
 
 **MySQL**:
