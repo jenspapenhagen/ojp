@@ -426,54 +426,189 @@ public class OjpProgrammaticConfig {
 }
 ```
 
-### Environment-Specific Settings
+### Environment-Specific Configuration
+
+OJP supports native environment-specific configuration files using the naming convention `ojp-{environment}.properties`. This eliminates the need for custom application code to manage different configurations per environment.
 
 **[IMAGE PROMPT 9]**: Create a multi-environment configuration diagram:
 Show Development, Testing, Production environments
 Each with different pool sizes and timeouts
 Use environment-specific color coding
+Include file structure showing ojp.properties and ojp-{env}.properties files
 Professional multi-environment guide
 
-**Development Environment**:
+#### File Structure
+
+Place environment-specific property files in your application's classpath (e.g., `src/main/resources/`):
+
+```
+resources/
+  ├── ojp.properties           # Default fallback (backward compatible)
+  ├── ojp-dev.properties       # Development configuration
+  ├── ojp-staging.properties   # Staging configuration
+  └── ojp-prod.properties      # Production configuration
+```
+
+#### Configuration Files
+
+**Development Environment** (`ojp-dev.properties`):
 ```properties
-# dev-ojp.properties - Small pools, verbose logging
+# Development - Small pools, verbose logging
 ojp.connection.pool.maximumPoolSize=5
 ojp.connection.pool.minimumIdle=2
 ojp.connection.pool.connectionTimeout=10000
-ojp.connection.pool.leakDetectionThreshold=30000  # Aggressive leak detection
-```
-
-**Testing Environment**:
-```properties
-# test-ojp.properties - Medium pools, moderate timeouts
-ojp.connection.pool.maximumPoolSize=15
-ojp.connection.pool.minimumIdle=5
-ojp.connection.pool.connectionTimeout=20000
 ojp.connection.pool.idleTimeout=300000
 ```
 
-**Production Environment**:
+**Staging Environment** (`ojp-staging.properties`):
 ```properties
-# prod-ojp.properties - Large pools, production-grade settings
+# Staging - Medium pools, production-like settings
+ojp.connection.pool.maximumPoolSize=25
+ojp.connection.pool.minimumIdle=10
+ojp.connection.pool.connectionTimeout=20000
+ojp.connection.pool.idleTimeout=600000
+ojp.connection.pool.maxLifetime=1800000
+```
+
+**Production Environment** (`ojp-prod.properties`):
+```properties
+# Production - Large pools, optimized settings
 ojp.connection.pool.maximumPoolSize=50
 ojp.connection.pool.minimumIdle=20
 ojp.connection.pool.connectionTimeout=30000
 ojp.connection.pool.idleTimeout=600000
 ojp.connection.pool.maxLifetime=1800000
-ojp.connection.pool.keepaliveTime=300000  # 5 minutes
+ojp.connection.pool.keepaliveTime=300000
 ```
 
-**Load configuration by environment**:
+**Default Fallback** (`ojp.properties`):
+```properties
+# Fallback configuration - used when no environment specified
+ojp.connection.pool.maximumPoolSize=20
+ojp.connection.pool.minimumIdle=5
+ojp.connection.pool.connectionTimeout=15000
+```
+
+#### Specifying the Environment
+
+OJP automatically loads the appropriate configuration file based on the environment name. The environment can be specified in two ways (with the following precedence):
+
+**1. System Property** (highest priority):
+```bash
+# Command line
+java -Dojp.environment=prod -jar app.jar
+
+# Maven
+mvn spring-boot:run -Dojp.environment=staging
+
+# Gradle
+./gradlew bootRun -Dojp.environment=dev
+```
+
+**2. Environment Variable**:
+```bash
+# Unix/Linux/macOS
+export OJP_ENVIRONMENT=prod
+java -jar app.jar
+
+# Windows
+set OJP_ENVIRONMENT=prod
+java -jar app.jar
+
+# Docker
+docker run -e OJP_ENVIRONMENT=prod myapp:latest
+```
+
+#### Docker and Kubernetes Deployment
+
+**Docker Compose**:
+```yaml
+version: '3.8'
+services:
+  app:
+    image: myapp:latest
+    environment:
+      - OJP_ENVIRONMENT=prod
+    # Application will load ojp-prod.properties automatically
+```
+
+**Kubernetes Deployment**:
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+spec:
+  template:
+    spec:
+      containers:
+      - name: myapp
+        image: myapp:latest
+        env:
+        - name: OJP_ENVIRONMENT
+          value: "prod"
+        # Application will load ojp-prod.properties automatically
+```
+
+**Kubernetes ConfigMap** (for dynamic environment setting):
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ojp-config
+data:
+  environment: "prod"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+spec:
+  template:
+    spec:
+      containers:
+      - name: myapp
+        image: myapp:latest
+        env:
+        - name: OJP_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: ojp-config
+              key: environment
+```
+
+#### Loading Behavior
+
+1. **Environment Specified**: OJP loads `ojp-{environment}.properties` first
+2. **Fallback**: If environment-specific file not found, falls back to `ojp.properties`
+3. **No Configuration**: If no properties files found, uses OJP server defaults
+4. **Backward Compatible**: Existing `ojp.properties` files continue to work without any changes
+
+#### Benefits
+
+- ✅ **No Custom Code**: Environment selection happens automatically
+- ✅ **Single Deployment Artifact**: All configurations bundled in one JAR/WAR
+- ✅ **CI/CD Friendly**: Same artifact deployed across all environments
+- ✅ **Docker/Kubernetes Native**: Standard environment variable support
+- ✅ **Backward Compatible**: Existing applications continue working unchanged
+
+#### Example: Multi-Environment Setup
 
 ```java
-public class ConfigLoader {
-    public static void loadConfig() {
-        String env = System.getenv("ENVIRONMENT");  // dev, test, prod
-        String configFile = String.format("ojp-%s.properties", env);
+// No code changes needed - just specify the environment
+// Application code remains the same across all environments
+public class MyApp {
+    public static void main(String[] args) {
+        // OJP automatically loads ojp-{environment}.properties
+        // based on OJP_ENVIRONMENT or -Dojp.environment
         
-        System.setProperty("ojp.config.file", 
-            ConfigLoader.class.getClassLoader()
-                .getResource(configFile).getPath());
+        String url = "jdbc:ojp[localhost:1059]_postgresql://localhost:5432/mydb";
+        Connection conn = DriverManager.getConnection(url, "user", "pass");
+        
+        // Connection pool configured based on environment
+        // dev: 5 max connections
+        // staging: 25 max connections  
+        // prod: 50 max connections
     }
 }
 ```
