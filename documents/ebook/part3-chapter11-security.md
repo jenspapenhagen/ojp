@@ -794,7 +794,7 @@ In this pattern, OJP Server resides in the same network segment as your applicat
 
 - **Database Exposure:** Every application server needs network access to the database tier through OJP
 - **Compliance Complexity:** Some frameworks (PCI-DSS, HIPAA) prefer databases completely isolated from application networks
-- **Attack Surface:** Compromised application servers have a direct path to the database network via OJP
+- **Broader Database Access:** If an application server is compromised, the attacker gains access to OJP's gRPC endpoint. While OJP itself provides IP whitelisting and can be secured with mTLS (reducing this risk), having OJP in the same network as applications means one less network boundary protecting database access. Moving OJP to a separate network adds defense-in-depth through network segmentation
 
 **Best For:**
 
@@ -859,7 +859,7 @@ Here, OJP Server sits within the database network tier, fully isolated from the 
 - **Application Latency:** Cross-network boundary adds latency (typically 2-5ms per request)
 - **Complex Firewall Rules:** Requires allowing gRPC traffic from application network to database network
 - **Operational Overhead:** Changes to application network topology require database network firewall updates
-- **Single Point of Failure Risk:** OJP becomes critical—its failure isolates the entire database tier
+- **Availability Criticality:** OJP becomes a critical component in the data access path. In any architecture pattern, OJP is essential for database connectivity—the distinction here is that failure impacts are contained to the database network. This risk is mitigated through OJP's multinode clustering capabilities, which provide high availability and eliminate single points of failure
 
 **Best For:**
 
@@ -1106,10 +1106,14 @@ aws secretsmanager get-secret-value --secret-id ojp/prod/keystore-password --que
 
 ### Audit Logging
 
+> **⚠️ PLANNED FEATURE - NOT YET IMPLEMENTED**
+> 
+> The audit logging properties described below are planned for a future release and are not currently implemented in the codebase. For current audit trail requirements, use application-level logging or database audit features.
+
 Maintain comprehensive audit logs:
 
 ```properties
-# Enable audit logging
+# Enable audit logging (PLANNED - not yet implemented)
 ojp.server.audit.enabled=true
 ojp.server.audit.log.path=/var/log/ojp/audit.log
 
