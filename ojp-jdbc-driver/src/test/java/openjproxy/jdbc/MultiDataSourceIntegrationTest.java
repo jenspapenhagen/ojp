@@ -6,8 +6,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.openjproxy.jdbc.Driver;
 
-import java.io.ByteArrayInputStream;
-import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -35,27 +33,11 @@ public class MultiDataSourceIntegrationTest {
     private static final String H2_URL_BASE = "jdbc:h2:mem:test_";
     private static final String OJP_URL_BASE = "jdbc:ojp[localhost:1059]_h2:mem:test_";
     
-    private static boolean shouldRunH2Tests;
+    private static boolean isH2TestEnabled;
     
     @BeforeAll
     public static void checkTestConfiguration() {
-        // Only run these H2-based multi-datasource tests when:
-        // 1. H2 tests are explicitly enabled, OR
-        // 2. No database-specific tests are enabled (default test run)
-        boolean isH2Enabled = Boolean.parseBoolean(System.getProperty("enableH2Tests", "false"));
-        boolean isOracleEnabled = Boolean.parseBoolean(System.getProperty("enableOracleTests", "false"));
-        boolean isDb2Enabled = Boolean.parseBoolean(System.getProperty("enableDb2Tests", "false"));
-        boolean isSqlServerEnabled = Boolean.parseBoolean(System.getProperty("enableSqlServerTests", "false"));
-        boolean isPostgresEnabled = Boolean.parseBoolean(System.getProperty("enablePostgresTests", "false"));
-        boolean isMySqlEnabled = Boolean.parseBoolean(System.getProperty("enableMySqlTests", "false"));
-        boolean isMariaDbEnabled = Boolean.parseBoolean(System.getProperty("enableMariaDbTests", "false"));
-        boolean isCockroachEnabled = Boolean.parseBoolean(System.getProperty("enableCockroachTests", "false"));
-        
-        // Run H2 tests if explicitly enabled OR if no other database tests are enabled
-        boolean anyOtherDbEnabled = isOracleEnabled || isDb2Enabled || isSqlServerEnabled || 
-                                     isPostgresEnabled || isMySqlEnabled || isMariaDbEnabled || isCockroachEnabled;
-        
-        shouldRunH2Tests = isH2Enabled || !anyOtherDbEnabled;
+        isH2TestEnabled = Boolean.parseBoolean(System.getProperty("enableH2Tests", "false"));
     }
     
     /**
@@ -82,7 +64,7 @@ public class MultiDataSourceIntegrationTest {
 
     @Test
     public void testMultipleDataSourcesForSingleDatabaseSingleUser() throws Exception {
-        assumeTrue(shouldRunH2Tests, "H2 multi-datasource tests are disabled when running database-specific tests");
+        assumeTrue(isH2TestEnabled, "H2 multi-datasource tests are disabled when running database-specific tests");
         
         // Create test properties with multiple datasources for same database
         String testPropertiesContent = 
@@ -133,7 +115,7 @@ public class MultiDataSourceIntegrationTest {
 
     @Test
     public void testMultipleDataSourcesForDifferentDatabases() throws Exception {
-        assumeTrue(shouldRunH2Tests, "H2 multi-datasource tests are disabled when running database-specific tests");
+        assumeTrue(isH2TestEnabled, "H2 multi-datasource tests are disabled when running database-specific tests");
         
         String testPropertiesContent = 
             "# Database A datasources\n" +
@@ -188,7 +170,7 @@ public class MultiDataSourceIntegrationTest {
 
     @Test
     public void testFailFastForMissingDataSource() throws Exception {
-        assumeTrue(shouldRunH2Tests, "H2 multi-datasource tests are disabled when running database-specific tests");
+        assumeTrue(isH2TestEnabled, "Skipping H2 tests - not enabled");
         
         String testPropertiesContent = 
             "# Only configure one datasource\n" +
@@ -213,7 +195,7 @@ public class MultiDataSourceIntegrationTest {
 
     @Test
     public void testBackwardCompatibilityWithDefaultDataSource() throws Exception {
-        assumeTrue(shouldRunH2Tests, "H2 multi-datasource tests are disabled when running database-specific tests");
+        assumeTrue(isH2TestEnabled, "H2 multi-datasource tests are disabled when running database-specific tests");
         
         String testPropertiesContent = 
             "# Traditional configuration without datasource prefix\n" +
@@ -238,7 +220,7 @@ public class MultiDataSourceIntegrationTest {
 
     @Test
     public void testCrossDatabaseTableAccessThrowsException() throws Exception {
-        assumeTrue(shouldRunH2Tests, "H2 multi-datasource tests are disabled when running database-specific tests");
+        assumeTrue(isH2TestEnabled, "H2 multi-datasource tests are disabled when running database-specific tests");
         
         // Test that trying to access a table from one database using a datasource 
         // configured for a different database throws appropriate exception
