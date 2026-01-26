@@ -198,7 +198,7 @@ histogram_quantile(0.95,
 
 **[AI Image Prompt: Create a modern Grafana dashboard mockup showing OJP monitoring panels. Include 4-6 panels: 1) Line graph showing request rate over time with multiple OJP instances, 2) Gauge showing current error rate percentage, 3) Line graph showing latency percentiles (p50, p95, p99), 4) Bar chart comparing request counts by gRPC method, 5) Connection pool utilization heatmap, 6) Server health status indicator. Use Grafana's dark theme, realistic metrics data with trends, proper axis labels. Style: Dashboard mockup, professional, data visualization best practices.]**
 
-Beyond these basics, you'll want panels specific to OJP's functionality. Monitor connection pool metrics to understand how effectively OJP manages database connections. Track session durations to identify long-running transactions that might be holding connections. Watch for multinode coordination metrics if you're running multiple OJP servers.
+Beyond these basics, you'll want panels specific to OJP's functionality. Monitor connection pool metrics to understand how effectively OJP manages database connections. Track session durations to identify long-running transactions that might be holding connections. When running multiple OJP servers, aggregate metrics across instances to get a complete picture of your deployment's health.
 
 ### Setting Up Alerts
 
@@ -381,17 +381,7 @@ Thread pool metrics reveal how effectively OJP processes concurrent requests. If
 
 Process metrics like CPU usage and file descriptor counts help you understand resource consumption at the OS level. Running out of file descriptors is a common issue in high-connection environments.
 
-### Multinode Coordination Metrics
-
-When running multiple OJP Server instances, additional metrics track coordination behavior.
-
-Server discovery metrics show how many OJP instances each server knows about. Mismatches here indicate service discovery issues.
-
-Load metrics track how much traffic each server handles. Significant imbalances might indicate misconfigured load balancing or network issues.
-
-Failover metrics count how often servers fail and recovery occurs. Frequent failovers suggest instability in your OJP deployment.
-
-**[AI Image Prompt: Create an infographic categorizing OJP's Prometheus metrics into 4 quadrants: 1) gRPC Server Metrics (request counts, latency, errors), 2) Connection Pool Metrics (active, idle, pending connections), 3) Server Health Metrics (JVM memory, threads, CPU), and 4) Multinode Metrics (discovery, load distribution, failover). For each category, show 2-3 key metric names with example values and simple sparkline graphs. Use icons to represent each category (API for gRPC, pool for connections, heartbeat for health, network for multinode). Style: Educational infographic, clean layout, modern flat design, professional colors.]**
+**[AI Image Prompt: Create an infographic categorizing OJP's Prometheus metrics into 3 categories: 1) gRPC Server Metrics (request counts, latency, errors), 2) Connection Pool Metrics (active, idle, pending connections), and 3) Server Health Metrics (JVM memory, threads, CPU, file descriptors). For each category, show 2-3 key metric names with example values and simple sparkline graphs. Use icons to represent each category (API for gRPC, pool for connections, heartbeat for health). Style: Educational infographic, clean layout, modern flat design, professional colors.]**
 
 ## 13.6 Troubleshooting Telemetry Issues
 
@@ -416,8 +406,6 @@ Look at Prometheus logs for scrape errors. They'll often reveal exactly what's w
 Sometimes Prometheus scrapes OJP successfully but certain metrics are missing. This usually happens when the feature generating those metrics hasn't activated yet.
 
 Connection pool metrics only appear after OJP creates at least one connection pool. If you're monitoring a fresh OJP instance that hasn't received any requests yet, pool metrics won't exist.
-
-Multinode coordination metrics only exist when you're running multiple OJP instances. A single-server deployment won't expose these metrics.
 
 Some metrics are counters that start at zero. They won't be visible in queries until they increment at least once. This is normal Prometheus behavior—counters don't appear in the metrics output until they have a non-zero value.
 
@@ -460,10 +448,6 @@ Future versions might include SQL-level metrics—tracking query patterns, execu
 ### Custom Metrics
 
 Application-specific metrics could flow through OJP's telemetry system in future releases. Imagine adding business-level metrics (like "orders processed" or "user registrations") that get exported alongside OJP's operational metrics. This would provide a unified view of both technical and business KPIs.
-
-### Enhanced Multinode Metrics
-
-As multinode capabilities mature, expect richer metrics around cluster coordination. Metrics showing data distribution patterns, node health scoring, and automatic rebalancing decisions would help operators understand and tune multinode deployments more effectively.
 
 **[AI Image Prompt: Create a roadmap timeline visualization showing OJP's telemetry evolution. Display current state (Prometheus metrics) and three future phases: 1) Distributed Tracing (Zipkin/Jaeger/OTLP integration), 2) SQL-Level Instrumentation (query pattern tracking, execution time breakdowns), and 3) Advanced Features (custom metrics, enhanced multinode observability). For each phase, show a representative icon and key capabilities. Use a horizontal timeline with milestone markers. Style: Roadmap infographic, modern design, professional color scheme with gradient elements, clear information hierarchy.]**
 
