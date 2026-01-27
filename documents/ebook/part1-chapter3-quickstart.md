@@ -720,5 +720,5 @@ In the next chapter, we'll explore Kubernetes deployment with Helm charts for cl
 
 ---
 
-**Previous Chapter**: [← Chapter 2: Architecture Deep Dive](part1-chapter2-architecture.md)  
+**Previous Chapter**: [← Chapter 2a: OJP as Smart Load Balancer and Automatic Failover](part1-chapter2a-smart-load-balancing.md)  
 **Next Chapter**: [Chapter 3a: Kubernetes Deployment with Helm →](part1-chapter3a-kubernetes-helm.md)

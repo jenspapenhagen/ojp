@@ -364,9 +364,11 @@ OJP is free and open source under the Apache 2.0 license, meaning it's completel
 
 ### Advanced Features
 
+**Smart Load Balancing and Automatic Failover**: OJP's JDBC driver provides client-side load balancing with real-time load awareness and transparent failover capabilities, surpassing traditional database proxies (covered in Chapter 2a).
+
 **Slow Query Segregation**: Automatically separates fast and slow queries to prevent connection starvation (covered in Chapter 8).
 
-**High Availability**: Multi-node deployment with automatic failover and load balancing (covered in Chapter 9).
+**High Availability**: Multi-node deployment with automatic failover and load balancing (covered in Chapters 2a and 9).
 
 **Observability**: Built-in OpenTelemetry support with Prometheus metrics (covered in Chapter 13).
 

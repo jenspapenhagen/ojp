@@ -1029,9 +1029,9 @@ The use of **gRPC** enables high-performance, low-latency communication with HTT
 
 This architecture enables OJP to deliver on its promise: **elastic scalability without proportional database connection growth**, all while maintaining JDBC compliance and requiring minimal application changes.
 
-In the next chapter, we'll walk through a hands-on Quick Start Guide, getting OJP up and running in your environment in under 5 minutes.
+In the next chapter, we'll explore how OJP's architecture enables smart load balancing and automatic failover capabilities that surpass traditional database proxies.
 
 ---
 
 **Previous Chapter**: [← Chapter 1: Introduction to OJP](part1-chapter1-introduction.md)  
-**Next Chapter**: [Chapter 3: Quick Start Guide →](part1-chapter3-quickstart.md)
+**Next Chapter**: [Chapter 2a: OJP as Smart Load Balancer and Automatic Failover →](part1-chapter2a-smart-load-balancing.md)

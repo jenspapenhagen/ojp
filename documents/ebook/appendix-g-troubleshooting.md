@@ -967,10 +967,9 @@ PostgreSQL commonly uses streaming replication with automatic failover tools lik
 MySQL replication with MHA or ProxySQL provides automatic failover. The process is similar to PostgreSQL but with different failure characteristics.
 
 **Handling with OJP**:
-1. **Use ProxySQL for routing**: ProxySQL handles primary detection and routing automatically
-2. **Configure semi-synchronous replication**: Reduces data loss risk during failover
-3. **Set connection timeouts appropriately**: `hikariCP.connectionTimeout=10000`
-4. **Test failover procedures**: Regular failover drills ensure smooth operation
+1. **Configure semi-synchronous replication**: Reduces data loss risk during failover
+2. **Set connection timeouts appropriately**: `hikariCP.connectionTimeout=10000`
+3. **Test failover procedures**: Regular failover drills ensure smooth operation
 
 #### Oracle RAC Failover
 
