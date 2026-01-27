@@ -6,9 +6,14 @@ Setting up your development environment for OJP is straightforward, but there ar
 
 Before diving into OJP development, you'll need to have the right tools installed on your machine. The good news is that OJP doesn't require anything exotic—just the standard Java development toolchain plus Docker for running databases.
 
-### Java 22 or Higher
+### Java Version Requirements
 
-OJP requires Java 22 or newer. This isn't just a recommendation—the project uses modern Java features that won't compile on earlier versions. You can download the latest JDK from [Oracle](https://www.oracle.com/java/technologies/downloads/), [Adoptium](https://adoptium.net/), or use a version manager like [SDKMAN!](https://sdkman.io/).
+OJP has different Java requirements for different components:
+
+- **OJP Server**: Requires Java 21 or newer
+- **OJP JDBC Driver**: Requires Java 11 or newer
+
+The OJP server uses modern Java features introduced in Java 21, while the JDBC driver maintains compatibility with Java 11 to support a wider range of client applications. You can download the latest JDK from [Oracle](https://www.oracle.com/java/technologies/downloads/), [Adoptium](https://adoptium.net/), or use a version manager like [SDKMAN!](https://sdkman.io/).
 
 Once installed, verify your Java version:
 
@@ -16,11 +21,11 @@ Once installed, verify your Java version:
 java -version
 ```
 
-You should see output indicating Java 22 or higher. If you have multiple Java versions installed, make sure your `JAVA_HOME` environment variable points to the correct one.
+You should see output indicating Java 21 or higher for server development. If you have multiple Java versions installed, make sure your `JAVA_HOME` environment variable points to the correct one. Note that for JDBC driver-only development, Java 11+ is sufficient, but server development requires Java 21+.
 
 ### Maven 3.9 or Higher
 
-OJP uses Maven for builds, dependency management, and testing. Maven 3.9+ is required to ensure compatibility with Java 22 and modern dependency resolution. Most Linux distributions and macOS (via Homebrew) provide recent versions:
+OJP uses Maven for builds, dependency management, and testing. Maven 3.9+ is required to ensure compatibility with Java 21 and modern dependency resolution. Most Linux distributions and macOS (via Homebrew) provide recent versions:
 
 ```bash
 # macOS
@@ -65,7 +70,7 @@ sudo apt install git
 # Windows: Download from git-scm.com
 ```
 
-**[IMAGE_PROMPT_1]**: Create a technical diagram showing the development environment stack for OJP. Show four layers vertically: at the bottom "Operating System (Linux/macOS/Windows)", then "Java 22+ JDK & Maven 3.9+", then "Docker Engine with database containers (PostgreSQL, MySQL, H2)", and at the top "OJP Source Code (ojp-server, ojp-jdbc-driver, ojp-grpc-commons)". Use clean lines connecting the layers with arrows showing dependencies flowing upward. Include small icons for Java, Maven, Docker, and Git. Professional developer-focused style with muted blue and gray tones.
+**[IMAGE_PROMPT_1]**: Create a technical diagram showing the development environment stack for OJP. Show four layers vertically: at the bottom "Operating System (Linux/macOS/Windows)", then "Java 21+ JDK (Server) / Java 11+ (Driver) & Maven 3.9+", then "Docker Engine with database containers (PostgreSQL, MySQL, H2)", and at the top "OJP Source Code (ojp-server, ojp-jdbc-driver, ojp-grpc-commons)". Use clean lines connecting the layers with arrows showing dependencies flowing upward. Include small icons for Java, Maven, Docker, and Git. Professional developer-focused style with muted blue and gray tones.
 
 ## 15.2 Forking and Cloning the Repository
 
@@ -144,11 +149,11 @@ You might wonder why these aren't regular Maven dependencies. The answer is flex
 
 ### Proprietary Database Drivers
 
-For Oracle, SQL Server, or DB2, you'll need to obtain the drivers separately:
+For Oracle, SQL Server, or DB2, you'll need to obtain the drivers separately. While these drivers are available in Maven Central, OJP does not have a license to distribute versions with fixed versions of JDBC drivers bundled in:
 
 - **Oracle**: Download `ojdbc11.jar` or `ojdbc8.jar` from Oracle's website and place it in `ojp-libs/`
-- **SQL Server**: Use Maven to download `com.microsoft.sqlserver:mssql-jdbc` or get it from Microsoft
-- **DB2**: Obtain `db2jcc4.jar` from IBM's download site
+- **SQL Server**: Download `mssql-jdbc` JAR from Microsoft or use Maven to obtain it, then place it in `ojp-libs/`
+- **DB2**: Obtain `db2jcc4.jar` from IBM's download site and place it in `ojp-libs/`
 
 The repository includes detailed setup guides for each proprietary database in `documents/environment-setup/`.
 
@@ -168,13 +173,17 @@ mvn clean install -DskipTests
 
 The `-DskipTests` flag skips running tests during the build. This is useful for the initial setup when you just want to verify that everything compiles. The build should complete without errors and typically takes 1-2 minutes on modern hardware.
 
-OJP is organized as a multi-module Maven project:
+OJP is organized as a multi-module Maven project with the following modules:
 
 - **ojp-grpc-commons**: Shared Protocol Buffer definitions and generated gRPC code
 - **ojp-jdbc-driver**: The Type 3 JDBC driver that applications use
 - **ojp-server**: The proxy server that manages database connections
+- **ojp-datasource-api**: DataSource SPI interfaces for pluggable connection pool implementations
+- **ojp-datasource-hikari**: HikariCP-based DataSource implementation for non-XA connections
+- **ojp-datasource-dbcp**: Apache DBCP-based DataSource implementation for non-XA connections
+- **ojp-xa-pool-commons**: Common pooling components for XA transaction support
 
-The build processes all three modules in order, with each depending on the previous one.
+The build processes all modules in order, with each depending on the previous one.
 
 ### Understanding Build Artifacts
 
@@ -190,7 +199,7 @@ The server JAR is executable and includes all dependencies except database drive
 
 If the build fails, check these common issues:
 
-**Java version mismatch**: Ensure `JAVA_HOME` points to Java 22+. Some systems have multiple JDKs, and Maven might pick up an older one.
+**Java version mismatch**: Ensure `JAVA_HOME` points to Java 21+ for server development or Java 11+ for driver-only development. Some systems have multiple JDKs, and Maven might pick up an older one.
 
 **Maven settings**: Corporate firewalls or proxies might block Maven Central. Check your `~/.m2/settings.xml` if downloads fail.
 
@@ -227,11 +236,11 @@ Let's break this down:
 - `-pl ojp-server`: Runs only in the ojp-server module (pl = project list)
 - `-Prun-ojp-server`: Activates the `run-ojp-server` Maven profile
 
-The server starts on port 50051 by default and logs output to your terminal. You'll see messages like:
+The server starts on port 1059 by default (the standard OJP port) and logs output to your terminal. You'll see messages like:
 
 ```
 INFO  Starting OJP Server...
-INFO  gRPC server started on port 50051
+INFO  gRPC server started on port 1059
 INFO  Server is ready to accept connections
 ```
 
@@ -239,20 +248,20 @@ Leave this terminal open—the server needs to stay running while you execute te
 
 ### Server Configuration
 
-The server loads configuration from `ojp-server/src/main/resources/application.yml` by default. During development, you typically don't need to change anything. The defaults work well for local testing:
+The OJP server loads configuration from JVM arguments or environment variables. During development, you typically don't need to change anything. The defaults work well for local testing:
 
-- gRPC port: 50051
-- Connection pool size: 10 per database
-- Idle timeout: 10 minutes
-- HikariCP settings tuned for development
+- gRPC port: 1059 (standard OJP port)
+- Connection pool size: Configurable per database via properties
+- Idle timeout: Configurable via properties
+- Connection pool implementation: HikariCP for non-XA, custom implementation for XA
 
 If you want to test specific configurations, you can override settings via environment variables or JVM properties. For example, to change the port:
 
 ```bash
-mvn verify -pl ojp-server -Prun-ojp-server -Dgrpc.port=50052
+mvn verify -pl ojp-server -Prun-ojp-server -Dgrpc.port=1060
 ```
 
-**[IMAGE_PROMPT_4]**: Create a split-screen diagram showing server startup. Left side shows a terminal window with "$ mvn verify -pl ojp-server -Prun-ojp-server" and log output lines "Starting OJP Server..." "gRPC server started on port 50051" "Server is ready". Right side shows a simplified architecture: ojp-server process box listening on port 50051, with an arrow pointing down to a database pool icon (showing multiple database connections), and an arrow pointing up to a "Test Client" box. Use green checkmarks to indicate successful startup. Professional documentation style with monospace font for terminal text.
+**[IMAGE_PROMPT_4]**: Create a split-screen diagram showing server startup. Left side shows a terminal window with "$ mvn verify -pl ojp-server -Prun-ojp-server" and log output lines "Starting OJP Server..." "gRPC server started on port 1059" "Server is ready". Right side shows a simplified architecture: ojp-server process box listening on port 1059, with an arrow pointing down to a database pool icon (showing multiple database connections), and an arrow pointing up to a "Test Client" box. Use green checkmarks to indicate successful startup. Professional documentation style with monospace font for terminal text.
 
 ## 15.6 Running Tests Locally
 
@@ -260,7 +269,7 @@ Now that the server is running, you can execute OJP's comprehensive test suite. 
 
 ### The Test Philosophy
 
-OJP takes an unusual approach to tests: **all tests are disabled by default**. This might seem counterintuitive, but it's pragmatic. Setting up eight different databases just to run tests would be a huge barrier to contribution. Instead, OJP enables tests explicitly based on what's available.
+OJP takes an unusual approach to testing: **integration tests are disabled by default, while unit tests run normally**. This might seem counterintuitive, but it's pragmatic. Integration tests require a running OJP server and database connections, which would be a huge barrier to contribution. Unit tests, on the other hand, run without external dependencies and are always enabled. Instead, OJP enables integration tests explicitly based on what's available.
 
 ### Running H2 Tests
 
@@ -282,17 +291,18 @@ The tests take 30-60 seconds to complete. If they all pass, you have a working d
 
 ### Running PostgreSQL Tests
 
-To test against PostgreSQL, you first need a running PostgreSQL instance. The easiest way is using Docker:
+To test against PostgreSQL, you first need a running PostgreSQL instance. The easiest way is using Docker. For XA transaction support, PostgreSQL requires the `max_prepared_transactions` setting to be configured:
 
 ```bash
 docker run -d --name ojp-postgres \
   -e POSTGRES_PASSWORD=postgres \
   -e POSTGRES_DB=testdb \
   -p 5432:5432 \
-  postgres:15
+  postgres:15 \
+  -c max_prepared_transactions=100
 ```
 
-Then run the tests with:
+This configuration enables support for two-phase commit transactions. Then run the tests with:
 
 ```bash
 mvn test -DenablePostgresTests=true
@@ -308,8 +318,8 @@ OJP supports comprehensive testing with multiple databases, each with its own en
 - **MariaDB**: `-DenableMariaDBTests=true`
 - **CockroachDB**: `-DenableCockroachDBTests=true`
 - **Oracle**: `-DenableOracleTests=true` (requires manual driver setup)
-- **SQL Server**: `-DenableSqlServerTests=true`
-- **DB2**: `-DenableDB2Tests=true`
+- **SQL Server**: `-DenableSqlServerTests=true` (requires manual driver setup)
+- **DB2**: `-DenableDB2Tests=true` (requires manual driver setup)
 
 For detailed setup instructions for each database, see the guides in `documents/environment-setup/`.
 
@@ -347,12 +357,12 @@ Test connection configurations live in `ojp-jdbc-driver/src/test/resources/`. Yo
 - `postgres_connections.csv`: PostgreSQL configurations
 - `h2_postgres_connections.csv`: Both H2 and PostgreSQL
 
-These CSV files define connection parameters:
+These CSV files define connection parameters in the format:
 
 ```csv
-id,url,username,password
-h2-test,jdbc:ojp:h2://localhost:50051/mem:testdb,sa,
-postgres-test,jdbc:ojp:postgresql://localhost:50051/testdb,postgres,postgres
+driverClass,url,username,password
+org.openjproxy.jdbc.Driver,jdbc:ojp[localhost:1059]_h2:~/test,sa,
+org.openjproxy.jdbc.Driver,jdbc:ojp[localhost:1059]_postgresql://localhost:5432/testdb,postgres,postgres
 ```
 
 Each test class loads the appropriate CSV file and runs all tests against each defined connection. This is why you might see test counts like "48 tests passed"—it's running 8 test methods across 6 configured connections.
@@ -368,7 +378,7 @@ You can add your own connection configurations to test specific scenarios:
 For example, to test against a PostgreSQL instance on a different port:
 
 ```csv
-postgres-custom,jdbc:ojp:postgresql://localhost:50051/customdb,myuser,mypass
+org.openjproxy.jdbc.Driver,jdbc:ojp[localhost:1059]_postgresql://localhost:5433/customdb,myuser,mypass
 ```
 
 The test framework automatically picks up the new configuration and includes it in the test run.
@@ -383,7 +393,7 @@ Tests automatically create and drop test tables. Each test class typically:
 
 This ensures tests are isolated and don't interfere with each other.
 
-**[IMAGE_PROMPT_6]**: Create a technical diagram showing the test configuration flow. Show a CSV file icon labeled "h2_postgres_connections.csv" with sample rows visible. Draw an arrow from the CSV to a "Test Framework" box that reads and parses the configuration. From the test framework, draw multiple arrows to different "Test Execution" boxes, one for each connection ID in the CSV. Each execution box should connect to its respective database (H2 or PostgreSQL). Use a clean, architectural diagram style with clear labels and color-coding for different database types.
+**[IMAGE_PROMPT_6]**: Create a technical diagram showing the test configuration flow. Show a CSV file icon labeled "h2_postgres_connections.csv" with sample rows visible showing format "driverClass,url,username,password". Draw an arrow from the CSV to a "Test Framework" box that reads and parses the configuration. From the test framework, draw multiple arrows to different "Test Execution" boxes, one for each connection in the CSV. Each execution box should connect to its respective database (H2 or PostgreSQL). Use a clean, architectural diagram style with clear labels and color-coding for different database types.
 
 ### 15.7.5 OJP TestContainers Module
 
@@ -453,7 +463,7 @@ public class MyIntegrationTest {
 <dependency>
     <groupId>org.openjproxy</groupId>
     <artifactId>ojp-testcontainers</artifactId>
-    <version>0.3.1-beta</version>
+    <version>0.4.0-beta</version>
     <scope>test</scope>
 </dependency>
 ```
@@ -621,22 +631,22 @@ Even with careful setup, you might encounter issues. Here are solutions to commo
 
 ### "Address already in use" Error
 
-If the server won't start with a message about port 50051 being in use, something else is using that port. Options:
+If the server won't start with a message about port 1059 being in use, something else is using that port. Options:
 
 1. Find and kill the process using the port:
    ```bash
    # macOS/Linux
-   lsof -i :50051
+   lsof -i :1059
    kill -9 <PID>
    
    # Windows
-   netstat -ano | findstr :50051
+   netstat -ano | findstr :1059
    taskkill /PID <PID> /F
    ```
 
 2. Or configure OJP to use a different port:
    ```bash
-   mvn verify -pl ojp-server -Prun-ojp-server -Dgrpc.port=50052
+   mvn verify -pl ojp-server -Prun-ojp-server -Dgrpc.port=1060
    ```
    Then update test connection strings to match.
 
@@ -646,7 +656,7 @@ This usually means the OJP server isn't running. Verify:
 
 1. The server terminal is still open and showing "Server is ready"
 2. You're running tests from a different terminal (not the same one as the server)
-3. No firewall is blocking port 50051
+3. No firewall is blocking port 1059
 
 ### "Driver not found" Errors
 
@@ -681,7 +691,7 @@ mvn test -DenableH2Tests=true
 
 Setting up OJP for development is straightforward once you understand the components:
 
-1. Install Java 22+, Maven 3.9+, Docker, and Git
+1. Install Java 21+ (for server) or Java 11+ (for driver only), Maven 3.9+, Docker, and Git
 2. Fork and clone the repository, adding upstream as a remote
 3. Download JDBC drivers using the provided script
 4. Build the project with `mvn clean install -DskipTests`
