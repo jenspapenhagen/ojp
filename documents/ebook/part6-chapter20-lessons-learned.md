@@ -69,7 +69,7 @@ Create a split-screen comparison showing system behavior under high load. Left s
 
 ## 20.2 Multinode Connection Redistribution
 
-As OJP matured and users deployed it in production, multinode configurations became increasingly common. Multiple OJP servers provide high availability and horizontal scaling, but they introduced a subtle challenge: how connections redistribute when the server pool changes.
+As OJP matured, multinode configurations became increasingly common. Multiple OJP servers provide high availability and horizontal scaling, but they introduced a subtle challenge: how connections redistribute when the server pool changes.
 
 Consider a scenario with three OJP servers, each managing connections to the same database with a configured pool size of 30 connections per server, totaling 90 connections. Now one server shuts down for maintenance. The remaining two servers continue operating, but they still maintain their original pool sizes—30 connections each, totaling just 60 connections. The system lost one-third of its connection capacity even though two-thirds of the servers remain available.
 
