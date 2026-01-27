@@ -74,6 +74,8 @@ graph TD
 
 It's important to understand that OJP JDBC driver hands out **virtual JDBC connections** that all use the same **multiplexed gRPC connection** to each OJP Server. These "virtual" connections are lightweight objects that implement the JDBC `Connection` interface but don't correspond to actual network connections or backend database connections. Instead, when you call `getConnection()`, you get a virtual connection object that sends operations over an existing gRPC channel to the selected OJP Server, which then manages the actual database connections.
 
+> **Note**: The gRPC connection to each OJP Server is established only on the first connection request to that server, then cached and reused for all subsequent virtual connections. This means the network connection overhead is paid once per OJP Server, not per virtual JDBC connection.
+
 This multiplexing is key to OJP's efficiency:
 - **Single gRPC Connection per Server**: The driver establishes one gRPC connection to each configured OJP Server when first connecting
 - **Multiple Virtual Connections**: Your application can create hundreds of JDBC `Connection` objects, all sharing the same underlying gRPC channels
@@ -103,13 +105,13 @@ This approach adapts automatically to varying workloads:
 graph LR
     A[New Virtual Connection Request] --> B[JDBC Driver Checks Session Counts]
     
-    B --> C[Server 1<br/>12 Active Sessions<br/>via gRPC Connection 1]
-    B --> D[Server 2<br/>8 Active Sessions<br/>via gRPC Connection 2]
-    B --> E[Server 3<br/>4 Active Sessions<br/>via gRPC Connection 3]
+    B --> C[Server 1<br/>12 Active Sessions<br/>via gRPC Connection A]
+    B --> D[Server 2<br/>8 Active Sessions<br/>via gRPC Connection B]
+    B --> E[Server 3<br/>4 Active Sessions<br/>via gRPC Connection C]
     
     C & D & E --> F{Select Server with<br/>Minimum Sessions}
     
-    F --> G[Route to Server 3<br/>Fewest Sessions<br/>Use gRPC Connection 3]
+    F --> G[Route to Server 3<br/>Fewest Sessions<br/>Use gRPC Connection C]
     
     style E fill:#90EE90
     style G fill:#90EE90
@@ -144,29 +146,11 @@ You should almost always use load-aware selection. The only scenarios where you 
 
 ## 2a.3 Automatic Failover: No External Load Balancer Needed
 
-High availability requires more than just load distribution—it requires graceful handling of failures. Traditional proxies achieve HA by deploying multiple proxy nodes behind an external load balancer (HAProxy, Keepalived with VIP). OJP's automatic failover is built into the JDBC driver itself, eliminating that entire infrastructure layer.
+High availability requires graceful handling of failures. Traditional proxies achieve HA by deploying multiple proxy nodes behind an external load balancer (HAProxy or Keepalived with VIP). OJP's automatic failover is built into the JDBC driver itself, eliminating that entire infrastructure layer.
 
-### How Traditional Proxies Achieve High Availability
+### OJP's Built-In Failover
 
-Let's first understand what OJP eliminates:
-
-**ProxySQL HA Architecture**:
-- Deploy multiple ProxySQL nodes
-- Use Keepalived or HAProxy in front of ProxySQL nodes
-- Configure a Virtual IP (VIP) that floats between proxy nodes
-- If a ProxySQL node fails, Keepalived detects it and moves the VIP to a healthy node
-- **Result**: App → Load Balancer (VIP) → ProxySQL Node → Database (3 hops + external LB infrastructure)
-
-**PgPool-II HA Architecture**:
-- Deploy multiple PgPool-II nodes with Watchdog
-- Watchdog coordinates between PgPool instances and manages VIP
-- Often still requires HAProxy for advanced load balancing of inbound traffic
-- If a PgPool node fails, Watchdog or HAProxy redirects traffic to healthy nodes
-- **Result**: App → Load Balancer/Watchdog → PgPool Node → Database (3 hops + coordination infrastructure)
-
-### OJP's Built-In Failover: No External Infrastructure
-
-OJP achieves the same high availability **without external load balancers**, using client-side failover logic in the JDBC driver:
+OJP achieves high availability **without external load balancers**, using client-side failover logic in the JDBC driver:
 
 **Multi-Server Configuration**:
 ```java
@@ -184,28 +168,6 @@ From your application's perspective, this is still just a JDBC URL. The driver h
 **Session Awareness**: For idle virtual connections (not in a transaction), failover is transparent. For active connections within a transaction, failover cannot preserve transaction state (since the transaction exists on a specific backend database connection). In this case, the application receives an error and must retry the transaction. This behavior is correct and expected—ACID guarantees cannot survive a mid-transaction server failure without distributed transaction coordination.
 
 > **AI Image Prompt**: Create a sequence diagram showing failover process. Show: 1) Application requests JDBC connection from Driver, 2) Driver attempts gRPC connection to Server 1 (marked with red X - failed), 3) Driver detects failure (timeout or error), 4) Driver automatically retries gRPC connection to Server 2 (green checkmark - success), 5) Virtual JDBC connection established and returned to application. Include note: "No External Load Balancer - Failover in JDBC Driver". Use timeline-style sequence diagram with clear success/failure indicators.
-
-### The Key Advantage: Eliminating External Load Balancer Infrastructure
-
-This is the fundamental difference that makes OJP's approach "smart":
-
-**Traditional Proxy HA**:
-- Requires deploying HAProxy, Keepalived, or similar load balancing infrastructure
-- Requires VIP configuration and management
-- Requires monitoring and maintaining the load balancer layer itself
-- Adds a network hop: App → LB → Proxy → DB
-
-**OJP's Built-In HA**:
-- No external load balancer needed
-- No VIP to configure
-- Failover logic is in the JDBC driver, scales with application instances
-- Fewer network hops: App + JDBC Driver → OJP Server → DB
-
-This architectural difference means:
-- **Less Infrastructure**: One fewer infrastructure layer to deploy, configure, secure, and monitor
-- **Better Scalability**: Load balancing capacity scales with application instances, not separate LB infrastructure
-- **Lower Latency**: One fewer network hop for every query
-- **Simpler Operations**: Fewer moving parts, fewer failure modes
 
 ---
 
@@ -231,100 +193,38 @@ To understand when and why to choose OJP over traditional solutions, let's compa
 | **Infrastructure Overhead** | Minimal (JVM library + servers) | High (proxy VMs + LB) | High (proxy VMs + LB) |
 | **License** | Apache 2.0 (Open Source) | BSD-like (Open Source) | GPLv3 (Open Source) |
 
-### Key Differences: Focus on Proxy Tier High Availability
+### Key Differences: Proxy Tier High Availability
 
 #### 1. **How Proxy HA is Achieved**
 
-This is the fundamental difference:
+**Traditional Proxies**: Deploy multiple proxy nodes with an external load balancer (HAProxy/Keepalived with VIP) in front. The external LB becomes the entry point: App → External LB → Proxy Nodes → Database.
 
-**Traditional Proxies (PgPool-II, ProxySQL)**:
-- To avoid a single proxy being a single point of failure, you must deploy multiple proxy nodes
-- These multiple proxy nodes require an external load balancer in front of them:
-  - ProxySQL: Typically HAProxy or Keepalived with VIP management
-  - PgPool-II: Watchdog for coordination + often HAProxy for load balancing
-- The external load balancer becomes the entry point for applications
-- **Architecture**: App → External Load Balancer → Multiple Proxy Nodes → Database
+**OJP**: Load balancing and failover logic built into the JDBC driver. Multiple OJP Servers specified in JDBC URL. Each application instance independently balances across servers: App with JDBC Driver (built-in LB) → OJP Servers → Database.
 
-**OJP**:
-- The JDBC driver itself contains the load balancing and failover logic
-- Multiple OJP Servers are specified in the JDBC URL
-- Each application instance independently performs load balancing across OJP Servers
-- No external load balancer infrastructure needed
-- **Architecture**: App with JDBC Driver (built-in LB) → Multiple OJP Servers → Database
+#### 2. **Infrastructure and Operations**
 
-#### 2. **Network Hops and Latency**
+**OJP**: Deploy OJP Servers and update JDBC URL. The driver handles the rest. No external LB to deploy, configure, or monitor.
 
-**OJP**: 2 hops
-- App + OJP JDBC Driver → OJP Server → Database
-- The JDBC driver's built-in load balancing adds no network hops
-
-**Traditional Proxies with HA**: 3 hops
-- App → External Load Balancer (HAProxy/Keepalived) → Proxy Node (PgPool/ProxySQL) → Database
-- The external load balancer required for proxy HA adds an extra network hop
-
-For high-throughput applications executing thousands of queries per second, that extra hop accumulates significant latency.
-
-#### 3. **Infrastructure Complexity**
-
-**OJP**:
-- Deploy OJP Servers (just the proxy servers themselves)
-- Update JDBC URL to include multiple server addresses
-- The JDBC driver handles the rest
-
-**Traditional Proxies**:
-- Deploy multiple proxy nodes (PgPool or ProxySQL instances)
-- Deploy and configure external load balancer (HAProxy, Keepalived)
-- Configure VIP management and failover scripts
-- Monitor both the proxy layer and the load balancer layer
-
-#### 4. **Scalability of Load Balancing**
-
-**OJP**: Linear scaling with application instances
-- Each application instance runs its own load balancing logic
-- Adding more application instances = more load balancing capacity (distributed intelligence)
-- No bottleneck in the load balancing layer
-
-**Traditional Proxies**: Depends on external load balancer capacity
-- External load balancer (HAProxy) must handle all inbound connections
-- As applications scale, you may need to scale the load balancer infrastructure
-- Load balancer can become a bottleneck
+**Traditional Proxies**: Deploy proxy nodes + external load balancer. Configure VIP management and failover scripts. Monitor both layers.
 
 ---
 
 ## 2a.5 When to Choose OJP vs Traditional Proxies
 
-Given these differences, when should you choose OJP over traditional solutions?
+**Choose OJP When**:
+- You want to minimize infrastructure (no external LB to deploy/manage)
+- Building cloud-native, microservices applications (client-side logic scales naturally)
+- Using multiple databases or expect to migrate (database-agnostic design)
+- Java-based applications (JDBC driver requirement)
+- Latency optimization is important (fewer network hops)
 
-### Choose OJP When:
+**Choose Traditional Proxies When**:
+- You need database-specific features (PgPool's online recovery, ProxySQL's query caching)
+- Not using Java (Python, Go, Ruby, etc.)
+- Centralized policy enforcement required
+- Already heavily invested in existing proxy infrastructure
 
-**1. You want to minimize infrastructure layers**: OJP eliminates the need for external load balancers for proxy HA. Fewer components to deploy, secure, monitor, and troubleshoot.
-
-**2. You're building cloud-native, microservices-based applications**: OJP's architecture aligns perfectly with horizontally scaled, ephemeral workloads. The client-side logic scales naturally with your application instances.
-
-**3. You use multiple databases or expect to migrate**: OJP's database-agnostic design means one tool handles all databases. Traditional proxies lock you into specific databases (PgPool for PostgreSQL, ProxySQL for MySQL).
-
-**4. Your application is Java-based**: OJP is a JDBC driver—it's designed for Java applications. If you're not using Java, OJP isn't an option (though future gRPC clients for other languages could change this).
-
-**5. You value latency optimization**: Eliminating the external load balancer hop reduces end-to-end request latency.
-
-### Choose Traditional Proxies When:
-
-**1. You need database-specific features**: PgPool's online recovery or ProxySQL's query caching provide value beyond connection management and failover.
-
-**2. You're not using Java**: If your application is written in Python, Go, Ruby, or another language, you need a solution that works with those database drivers.
-
-**3. You need centralized policy enforcement**: Some organizations prefer centralized proxy infrastructure for security, auditing, or compliance reasons.
-
-**4. You're already heavily invested**: If you have mature operational tooling around PgPool or ProxySQL, and it's working well, migrating to OJP may not provide enough value to justify the effort.
-
-### Can You Use Both?
-
-Yes—OJP and traditional database proxies solve different problems:
-
-- **OJP for Proxy Tier HA**: Use multinode OJP deployment (this chapter) to provide high availability and load balancing for the connection management tier
-- **Database Proxies for Database-Specific Features**: Use PgPool or ProxySQL for database-specific features like online recovery, read/write splitting based on replication topology
-
-In this setup, OJP Servers connect to a PgPool or ProxySQL endpoint, which then connects to the database cluster. You get the benefits of OJP's client-side intelligence (no external LB for OJP HA) plus database-specific features.
+**Using Both**: OJP can handle proxy tier HA while PgPool/ProxySQL provide database-specific features. OJP Servers connect to the proxy endpoint, which connects to the database cluster.
 
 ---
 
@@ -416,29 +316,21 @@ ojp.healthcheck.unhealthy.threshold=3
 
 ## 2a.8 Chapter Summary
 
-This chapter explored OJP's architecture as a smart load balancer and automatic failover mechanism, highlighting how it eliminates the need for external load balancer infrastructure that traditional proxies require:
+This chapter explored how OJP's JDBC driver architecture provides built-in load balancing and automatic failover, eliminating the external load balancer infrastructure that traditional database proxies require.
 
 **Key Takeaways**:
 
-1. **OJP's JDBC driver has built-in load balancing and failover**, eliminating the need for external load balancers (HAProxy, Keepalived) that traditional proxies like PgPool-II and ProxySQL require for high availability.
+1. **Built-in HA**: OJP's JDBC driver includes load balancing and failover logic, eliminating the need for external load balancers (HAProxy, Keepalived) that PgPool-II and ProxySQL require.
 
-2. **Virtual JDBC connections over multiplexed gRPC**: OJP hands out lightweight virtual JDBC connections that all share multiplexed gRPC connections to OJP Servers, enabling efficient scaling.
+2. **Virtual Connections**: OJP hands out lightweight virtual JDBC connections over multiplexed gRPC channels (established once per server, then cached and reused).
 
-3. **Load-Aware Server Selection** distributes connections based on real-time server load, adapting automatically to heterogeneous workloads and server additions/removals—all built into the JDBC driver.
+3. **Load-Aware Selection**: Real-time session count tracking routes connections to the least-loaded server, with automatic pool rebalancing when servers fail or recover.
 
-4. **Automatic Failover** handles OJP Server failures transparently for idle connections and gracefully for active transactions, with no external load balancer infrastructure needed.
+4. **Simplified Architecture**: Fewer network hops (App+Driver → OJP Server → DB vs App → LB → Proxy → DB) and less infrastructure to deploy and manage.
 
-5. **Fewer Network Hops**: OJP's architecture (App+Driver → OJP Server → DB = 2 hops) eliminates the external load balancer hop required by traditional proxies (App → LB → Proxy → DB = 3 hops).
+**When OJP Excels**: Cloud-native microservices, latency-sensitive applications, and Java environments where minimizing infrastructure complexity is valued.
 
-6. **Client-Side Architecture** eliminates external load balancer infrastructure, distributes routing intelligence across application instances, and reduces operational overhead.
-
-7. **Connection Pool Auto-Rebalancing**: When you configure max connections with multiple servers, each server automatically caps at (total ÷ server count), and automatically rebalances when servers fail or recover.
-
-**When OJP Excels**: Cloud-native microservices, minimizing infrastructure layers, latency-sensitive applications, and Java-based environments where built-in load balancing in the JDBC driver provides significant operational advantages.
-
-**Complementary with Traditional Proxies**: OJP handles proxy tier HA and load balancing without external infrastructure; database-native replication tools handle database tier HA. Use both for comprehensive resilience.
-
-With these foundational concepts understood, you're ready to explore OJP's deployment and configuration (Chapter 3), and full multinode deployment details (Chapter 9).
+**Complementary Approach**: OJP handles proxy tier HA; database-native replication tools handle database tier HA. Use both for comprehensive resilience.
 
 ---
 
