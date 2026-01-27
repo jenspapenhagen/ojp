@@ -151,6 +151,17 @@ public class MultinodeConnectionManager {
     }
     
     private ChannelAndStub createChannelAndStub(ServerEndpoint endpoint) {
+        // Clean up any existing channel for this endpoint first
+        ChannelAndStub existingChannelAndStub = channelMap.get(endpoint);
+        if (existingChannelAndStub != null) {
+            log.debug("Shutting down existing channel for {} before creating new one", endpoint.getAddress());
+            try {
+                existingChannelAndStub.channel.shutdown();
+            } catch (Exception e) {
+                log.warn("Error shutting down existing channel for {}: {}", endpoint.getAddress(), e.getMessage());
+            }
+        }
+        
         String target = DNS_PREFIX + endpoint.getHost() + ":" + endpoint.getPort();
         ManagedChannel channel = GrpcChannelFactory.createChannel(target);
         
@@ -781,15 +792,18 @@ public class MultinodeConnectionManager {
         // Phase 2: Notify listeners that server became unhealthy
         notifyServerUnhealthy(endpoint, exception);
         
-        // Remove the failed channel from the map, but don't shut it down immediately
-        // The channel will be replaced during recovery, and the old one will be garbage collected
-        // This prevents "Channel shutdown invoked" errors for in-flight operations
+        // Remove the failed channel from the map and shut it down gracefully
+        // Using shutdown() instead of shutdownNow() allows in-flight operations to complete
         ChannelAndStub channelAndStub = channelMap.remove(endpoint);
         if (channelAndStub != null) {
-            log.debug("Removed channel for {} from map (will be replaced during recovery)", 
+            log.debug("Removed channel for {} from map, initiating graceful shutdown", 
                     endpoint.getAddress());
-            // Note: We intentionally don't call channel.shutdown() here to avoid disrupting
-            // in-flight operations. The channel will be garbage collected when no longer referenced.
+            try {
+                channelAndStub.channel.shutdown();
+                log.debug("Initiated graceful shutdown for channel {}", endpoint.getAddress());
+            } catch (Exception e) {
+                log.warn("Error shutting down channel for {}: {}", endpoint.getAddress(), e.getMessage());
+            }
         }
     }
     
