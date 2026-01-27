@@ -1084,6 +1084,9 @@ public class MultinodeConnectionManager {
      */
     private void notifyServerUnhealthy(ServerEndpoint endpoint, Exception exception) {
         for (ServerHealthListener listener : healthListeners) {
+            if (listener == null) {
+                continue; // Skip null listeners
+            }
             try {
                 listener.onServerUnhealthy(endpoint, exception);
             } catch (Exception e) {
@@ -1101,6 +1104,9 @@ public class MultinodeConnectionManager {
      */
     private void notifyServerRecovered(ServerEndpoint endpoint) {
         for (ServerHealthListener listener : healthListeners) {
+            if (listener == null) {
+                continue; // Skip null listeners
+            }
             try {
                 listener.onServerRecovered(endpoint);
             } catch (Exception e) {
