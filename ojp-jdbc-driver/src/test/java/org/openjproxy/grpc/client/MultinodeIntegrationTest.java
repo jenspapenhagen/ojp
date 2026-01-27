@@ -187,10 +187,12 @@ public class MultinodeIntegrationTest {
                 
                 // Check if this is a connection-level error that should be retried
                 if (isConnectionLevelError(e) && attempt < MAX_RETRIES) {
-                    // Connection-level error - retry after delay
-                    log.debug("Connection-level error on attempt {}, retrying: {}", attempt + 1, e.getMessage());
+                    // Connection-level error - retry after delay with exponential backoff
+                    long delayMs = (long) (RETRY_DELAY_MS * Math.pow(2, attempt));
+                    log.debug("Connection-level error on attempt {}, retrying after {}ms: {}", 
+                        attempt + 1, delayMs, e.getMessage());
                     try {
-                        Thread.sleep(RETRY_DELAY_MS * (attempt + 1)); // Exponential backoff
+                        Thread.sleep(delayMs);
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
                         break; // Exit retry loop if interrupted
