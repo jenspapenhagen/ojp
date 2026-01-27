@@ -363,6 +363,22 @@ With this configuration:
 - The OJP driver handles load balancing and failover independently for each datasource
 - No external load balancer infrastructure needed for either datasource
 
+### Scenario 3: Blue-Green Deployment with Zero Downtime
+
+You're deploying a new version of your application using blue-green deployment pattern. You want to switch traffic from the old version to the new version without dropping connections.
+
+**Traditional Approach**: Both blue and green environments connect through the same load balancer to the same proxy. Connection handling depends on proxy behavior and connection draining configuration.
+
+**With OJP**: Both blue and green environments use the same OJP Server URLs. Because OJP Servers are independent of application versions, you can:
+
+1. Deploy green environment (new version), which connects to existing OJP Servers
+2. Switch traffic from blue to green at load balancer
+3. Green environment establishes new connections to OJP Servers (load-aware distribution)
+4. Drain connections from blue environment gracefully
+5. OJP Servers see a gradual shift in session counts, not a sudden spike
+
+The database connection count remains stable throughout—OJP Servers maintain their pools regardless of which application version is connecting.
+
 ---
 
 ## 2a.7 Practical Configuration and Best Practices
@@ -395,15 +411,6 @@ ojp.healthcheck.timeout.seconds=5
 # Unhealthy threshold (consecutive failures before marking unhealthy)
 ojp.healthcheck.unhealthy.threshold=3
 ```
-
-### Monitoring and Alerting
-
-Monitor these key metrics (covered in depth in Chapter 13):
-
-- **Active Sessions per Server**: Should be roughly balanced when using load-aware selection
-- **Failover Events**: Spikes indicate server instability or network issues
-- **Connection Request Latency**: Increases during server failures (expected) or when servers are overloaded
-- **Health Check Failures**: Sustained failures indicate a server is down
 
 ---
 
