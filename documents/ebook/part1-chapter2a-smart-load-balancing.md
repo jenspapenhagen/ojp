@@ -180,7 +180,7 @@ To understand when and why to choose OJP over traditional solutions, let's compa
 | Capability | OJP | PgPool-II | ProxySQL |
 |------------|-----|-----------|----------|
 | **Architecture** | Type 3 JDBC Driver + Server | External Proxy | External Proxy |
-| **Deployment** | Embedded in Application | Separate Infrastructure | Separate Infrastructure |
+| **Deployment** | JDBC Driver in Application + External OJP Servers | Separate Infrastructure | Separate Infrastructure |
 | **Protocol Layer** | Layer 7 (JDBC/SQL) | Layer 7 (PostgreSQL) | Layer 7 (MySQL) |
 | **Load Balancing for Proxy HA** | Built into JDBC Driver (Client-side) | Requires external LB (HAProxy/Watchdog) | Requires external LB (HAProxy/Keepalived) |
 | **Failover Mechanism** | Automatic, Client-driven | Watchdog-based + external LB | Native clustering + Keepalived/HAProxy |
@@ -209,26 +209,7 @@ To understand when and why to choose OJP over traditional solutions, let's compa
 
 ---
 
-## 2a.5 When to Choose OJP vs Traditional Proxies
-
-**Choose OJP When**:
-- You want to minimize infrastructure (no external LB to deploy/manage)
-- Building cloud-native, microservices applications (client-side logic scales naturally)
-- Using multiple databases or expect to migrate (database-agnostic design)
-- Java-based applications (JDBC driver requirement)
-- Latency optimization is important (fewer network hops)
-
-**Choose Traditional Proxies When**:
-- You need database-specific features (PgPool's online recovery, ProxySQL's query caching)
-- Not using Java (Python, Go, Ruby, etc.)
-- Centralized policy enforcement required
-- Already heavily invested in existing proxy infrastructure
-
-**Using Both**: OJP can handle proxy tier HA while PgPool/ProxySQL provide database-specific features. OJP Servers connect to the proxy endpoint, which connects to the database cluster.
-
----
-
-## 2a.6 Real-World Deployment Scenarios
+## 2a.5 Real-World Deployment Scenarios
 
 Let's explore how OJP's smart load balancing and failover work in practice across common deployment patterns.
 
@@ -244,24 +225,26 @@ You have a microservice deployed in Kubernetes with Horizontal Pod Autoscaler (H
 
 You want to configure separate connection pools for different purposes—one for the primary database and another for a read replica or analytics workload.
 
-**Example Setup**:
+**Example Setup Using Named Datasources**:
 ```java
-// Primary database connections - 3 OJP servers in us-east-1
-String primaryUrl = "jdbc:ojp[ojp-1a.internal:1059,ojp-1b.internal:1059,ojp-1c.internal:1059]" +
+// Primary database connections using named datasource
+String primaryUrl = "jdbc:ojp[ojp-1a.internal:1059,ojp-1b.internal:1059,ojp-1c.internal:1059(primaryDS)]" +
                     "_postgresql://primary.rds:5432/mydb";
 DataSource primaryDS = createDataSource(primaryUrl);
 
-// Read replica connections - 3 different OJP servers in us-west-2
-String replicaUrl = "jdbc:ojp[ojp-2a.internal:1059,ojp-2b.internal:1059,ojp-2c.internal:1059]" +
+// Read replica connections using named datasource
+// Note: You can use the same OJP servers with a different datasource name
+String replicaUrl = "jdbc:ojp[ojp-1a.internal:1059,ojp-1b.internal:1059,ojp-1c.internal:1059(replicaDS)]" +
                     "_postgresql://replica.rds:5432/mydb";
 DataSource replicaDS = createDataSource(replicaUrl);
 ```
 
 With this configuration:
 - Your application can choose which datasource to use based on the query type (writes to primary, reads to replica)
-- Each datasource has its own set of OJP Servers with built-in failover
+- **Same OJP Servers, different datasources**: The same set of OJP Servers can manage multiple named datasources, each connecting to different database endpoints
+- Each datasource has its own connection pool on the OJP Servers
 - The OJP driver handles load balancing and failover independently for each datasource
-- No external load balancer infrastructure needed for either datasource
+- No external load balancer infrastructure needed
 
 ### Scenario 3: Blue-Green Deployment with Zero Downtime
 
@@ -281,7 +264,7 @@ The database connection count remains stable throughout—OJP Servers maintain t
 
 ---
 
-## 2a.7 Practical Configuration and Best Practices
+## 2a.6 Practical Configuration and Best Practices
 
 To leverage OJP's smart load balancing and failover effectively, follow these configuration guidelines:
 
@@ -314,7 +297,7 @@ ojp.healthcheck.unhealthy.threshold=3
 
 ---
 
-## 2a.8 Chapter Summary
+## 2a.7 Chapter Summary
 
 This chapter explored how OJP's JDBC driver architecture provides built-in load balancing and automatic failover, eliminating the external load balancer infrastructure that traditional database proxies require.
 
