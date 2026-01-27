@@ -122,7 +122,7 @@ class XaSlotManagementTest {
                             successCount.incrementAndGet();
                         }
                     } catch (Exception e) {
-                        // Some operations may timeout, which is expected
+                        // Some operations may time out, which is expected
                     } finally {
                         doneLatch.countDown();
                     }
@@ -198,10 +198,9 @@ class XaSlotManagementTest {
             Thread.currentThread().interrupt();
         }
 
-        // Now try to acquire third slot - should timeout
-        assertThrows(RuntimeException.class, () -> {
-            manager.executeWithSegregation("should-timeout", () -> "should not execute");
-        });
+        // Now try to acquire third slot - should time out
+        assertThrows(RuntimeException.class, () ->
+                manager.executeWithSegregation("should-timeout", () -> "should not execute"));
 
         // Release the holders
         holdLatch.countDown();
