@@ -151,29 +151,32 @@ public class MultinodeConnectionManager {
     }
     
     private ChannelAndStub createChannelAndStub(ServerEndpoint endpoint) {
-        String target = DNS_PREFIX + endpoint.getHost() + ":" + endpoint.getPort();
-        ManagedChannel channel = GrpcChannelFactory.createChannel(target);
-        
-        StatementServiceGrpc.StatementServiceBlockingStub blockingStub = 
-                StatementServiceGrpc.newBlockingStub(channel);
-        StatementServiceGrpc.StatementServiceStub asyncStub = 
-                StatementServiceGrpc.newStub(channel);
-        
-        ChannelAndStub newChannelAndStub = new ChannelAndStub(channel, blockingStub, asyncStub);
-        
-        // Atomically replace old channel with new one and shutdown the old one if it exists
-        // This prevents race conditions by doing check-and-replace atomically
-        ChannelAndStub oldChannelAndStub = channelMap.put(endpoint, newChannelAndStub);
-        if (oldChannelAndStub != null) {
-            log.debug("Shutting down replaced channel for {}", endpoint.getAddress());
-            try {
-                oldChannelAndStub.channel.shutdown();
-            } catch (Exception e) {
-                log.warn("Error shutting down replaced channel for {}: {}", endpoint.getAddress(), e.getMessage());
+        // Synchronize on the endpoint to prevent concurrent channel creation for the same endpoint
+        synchronized (endpoint) {
+            String target = DNS_PREFIX + endpoint.getHost() + ":" + endpoint.getPort();
+            ManagedChannel channel = GrpcChannelFactory.createChannel(target);
+            
+            StatementServiceGrpc.StatementServiceBlockingStub blockingStub = 
+                    StatementServiceGrpc.newBlockingStub(channel);
+            StatementServiceGrpc.StatementServiceStub asyncStub = 
+                    StatementServiceGrpc.newStub(channel);
+            
+            ChannelAndStub newChannelAndStub = new ChannelAndStub(channel, blockingStub, asyncStub);
+            
+            // Atomically replace old channel with new one and shutdown the old one if it exists
+            // This prevents race conditions by doing check-and-replace atomically
+            ChannelAndStub oldChannelAndStub = channelMap.put(endpoint, newChannelAndStub);
+            if (oldChannelAndStub != null) {
+                log.debug("Shutting down replaced channel for {}", endpoint.getAddress());
+                try {
+                    oldChannelAndStub.channel.shutdown();
+                } catch (Exception e) {
+                    log.warn("Error shutting down replaced channel for {}: {}", endpoint.getAddress(), e.getMessage());
+                }
             }
+            
+            return newChannelAndStub;
         }
-        
-        return newChannelAndStub;
     }
     
     /**
