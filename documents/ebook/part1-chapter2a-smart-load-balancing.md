@@ -119,10 +119,10 @@ graph LR
 
 When you configure OJP with multiple servers, the connection pool sizing works differently than you might expect. **Each OJP Server automatically caps its connections based on the total pool size divided by the number of servers**.
 
-For example, if you configure a maximum of 30 backend database connections per application instance (via your connection pool settings) and you have 3 OJP Servers:
-- Each server will cap at 10 backend database connections (30 ÷ 3 = 10 per server)
-- If one OJP Server goes down, the other two will rebalance to max 15 connections each (30 ÷ 2 = 15 per server) to compensate
-- When that OJP node comes back online, it will rebalance back to 10 connections per server
+For example, if you configure a total maximum of 30 backend database connections in your application instance's pool settings and you have 3 OJP Servers configured:
+- The 30 connections are automatically divided across the 3 servers: each server will cap at 10 backend database connections (30 ÷ 3 = 10 per server)
+- If one OJP Server goes down, the remaining two will rebalance to max 15 connections each (30 ÷ 2 = 15 per server) to maintain the total capacity
+- When that OJP node comes back online, it will rebalance back to 10 connections per server (30 ÷ 3 = 10 per server)
 
 This automatic rebalancing ensures:
 - **Consistent Total Capacity**: Your application always has access to the total configured connection pool size, distributed across available servers
@@ -379,7 +379,7 @@ String url = "jdbc:ojp[ojp-server-1:1059,ojp-server-2:1059,ojp-server-3:1059]_" 
              "postgresql://db.internal:5432/proddb";
 ```
 
-Three servers is the recommended minimum because it provides better fault tolerance (can survive one failure with 2 healthy servers remaining) while minimizing infrastructure costs. You can deploy more servers (4, 5, or more) if you need higher capacity or want to tolerate multiple simultaneous failures, but 3 is the practical minimum for production HA.
+Three servers is the recommended minimum because it provides better fault tolerance: with 3 servers, losing 1 server leaves 2 active servers with redundancy, whereas with only 2 servers, losing 1 leaves just 1 server with no redundancy. You can deploy more servers (4, 5, or more) if you need higher capacity or want to tolerate multiple simultaneous failures, but 3 is the practical minimum for production HA.
 
 ### Health Check Tuning
 
