@@ -194,8 +194,8 @@ public class MultinodeXAIntegrationTest {
         System.out.println("Total query failures: " + numTotalFailures);
         System.out.println("Total non-connectivity-related failures: " + numNonConnectivityFailures);
         //Assertions.assertEquals(2160, numQueries);
-        Assertions.assertTrue(numTotalFailures < 50, "Expected fewer than 50 failures, but got: " + numTotalFailures);
-        Assertions.assertTrue(numNonConnectivityFailures <= 5, "Expected maximum 5 failures not related to connectivity, but got: " + numNonConnectivityFailures);
+        Assertions.assertEquals(0, numTotalFailures, "Expected zero total failures with retry logic, but got: " + numTotalFailures);
+        Assertions.assertEquals(0, numNonConnectivityFailures, "Expected zero non-connectivity failures with retry logic, but got: " + numNonConnectivityFailures);
         Assertions.assertTrue(totalTimeMs < 180000, "Total test time too high: " + totalTimeMs + " ms");
         Assertions.assertTrue(avgQueryMs < 1000.0, "Average query time too high: " + avgQueryMs + " ms");
     }
