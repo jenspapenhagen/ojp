@@ -186,7 +186,7 @@ public class MultinodeIntegrationTest {
                 lastException = e;
                 
                 // Check if this is a connection-level error that should be retried
-                if (isConnectionLevelError(e) && attempt < MAX_RETRIES) {
+                if (GrpcExceptionHandler.isConnectionLevelError(e) && attempt < MAX_RETRIES) {
                     // Connection-level error - retry after delay with exponential backoff
                     long delayMs = (long) (RETRY_DELAY_MS * Math.pow(2, attempt));
                     log.debug("Connection-level error on attempt {}, retrying after {}ms: {}", 
@@ -214,51 +214,6 @@ public class MultinodeIntegrationTest {
         long end = System.nanoTime();
         queryDurations.add(end - start);
         totalQueries.incrementAndGet();
-    }
-    
-    /**
-     * Determines if an exception represents a connection-level error that should trigger a retry.
-     * This uses the same logic as MultinodeConnectionManager.isConnectionLevelError() to identify
-     * exceptions that indicate server unavailability:
-     * - UNAVAILABLE: Server not reachable
-     * - DEADLINE_EXCEEDED: Request timeout
-     * - CANCELLED: Connection cancelled
-     * - UNKNOWN: Connection-related unknown errors
-     * 
-     * @param exception The exception to check
-     * @return true if this is a connection-level error that should be retried
-     */
-    private static boolean isConnectionLevelError(Exception exception) {
-        if (exception instanceof StatusRuntimeException) {
-            StatusRuntimeException statusException = (StatusRuntimeException) exception;
-            io.grpc.Status.Code code = statusException.getStatus().getCode();
-            
-            // Only these status codes indicate connection-level failures
-            return code == io.grpc.Status.Code.UNAVAILABLE ||
-                   code == io.grpc.Status.Code.DEADLINE_EXCEEDED ||
-                   code == io.grpc.Status.Code.CANCELLED ||
-                   (code == io.grpc.Status.Code.UNKNOWN && 
-                    statusException.getMessage() != null && 
-                    (statusException.getMessage().contains("connection") || 
-                     statusException.getMessage().contains("Connection")));
-        }
-        
-        // For non-gRPC exceptions, check for connection-related keywords
-        String message = exception.getMessage();
-        if (message != null) {
-            String lowerMessage = message.toLowerCase();
-            
-            // Pool exhaustion is NOT a server connectivity issue
-            if (lowerMessage.contains("pool exhausted") || lowerMessage.contains("pool is exhausted")) {
-                return false;
-            }
-            
-            return lowerMessage.contains("connection") || 
-                   lowerMessage.contains("timeout") ||
-                   lowerMessage.contains("unavailable");
-        }
-        
-        return false;
     }
 
     /**

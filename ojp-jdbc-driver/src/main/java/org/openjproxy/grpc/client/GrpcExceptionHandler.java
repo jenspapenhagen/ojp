@@ -32,4 +32,52 @@ public class GrpcExceptionHandler {
                     errorResponse.getVendorCode());
         }
     }
+    
+    /**
+     * Determines if an exception represents a connection-level error that indicates server unavailability.
+     * Connection-level errors include:
+     * - UNAVAILABLE: Server not reachable
+     * - DEADLINE_EXCEEDED: Request timeout
+     * - CANCELLED: Connection cancelled
+     * - UNKNOWN: Connection-related unknown errors
+     * 
+     * Database-level errors (e.g., table not found, syntax errors) do not indicate server unavailability.
+     * Pool exhaustion errors do NOT indicate server unavailability - they indicate resource limits, not connectivity issues.
+     * 
+     * @param exception The exception to check
+     * @return true if this is a connection-level error indicating server unavailability
+     */
+    public static boolean isConnectionLevelError(Exception exception) {
+        if (exception instanceof StatusRuntimeException) {
+            StatusRuntimeException statusException = (StatusRuntimeException) exception;
+            Status.Code code = statusException.getStatus().getCode();
+            
+            // Only these status codes indicate connection-level failures
+            return code == Status.Code.UNAVAILABLE ||
+                   code == Status.Code.DEADLINE_EXCEEDED ||
+                   code == Status.Code.CANCELLED ||
+                   (code == Status.Code.UNKNOWN && 
+                    statusException.getMessage() != null && 
+                    (statusException.getMessage().contains("connection") || 
+                     statusException.getMessage().contains("Connection")));
+        }
+        
+        // For non-gRPC exceptions, check for connection-related keywords
+        String message = exception.getMessage();
+        if (message != null) {
+            String lowerMessage = message.toLowerCase();
+            
+            // CRITICAL: Pool exhaustion is NOT a server connectivity issue
+            // Don't mark server unhealthy when pool is exhausted - it's a resource limit, not a connection failure
+            if (lowerMessage.contains("pool exhausted") || lowerMessage.contains("pool is exhausted")) {
+                return false;
+            }
+            
+            return lowerMessage.contains("connection") || 
+                   lowerMessage.contains("timeout") ||
+                   lowerMessage.contains("unavailable");
+        }
+        
+        return false; // Default to not marking unhealthy for unknown errors
+    }
 }

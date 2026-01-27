@@ -805,37 +805,7 @@ public class MultinodeConnectionManager {
      * Pool exhaustion errors do NOT mark servers unhealthy - they indicate resource limits, not connectivity issues.
      */
     public boolean isConnectionLevelError(Exception exception) {
-        if (exception instanceof io.grpc.StatusRuntimeException) {
-            io.grpc.StatusRuntimeException statusException = (io.grpc.StatusRuntimeException) exception;
-            io.grpc.Status.Code code = statusException.getStatus().getCode();
-            
-            // Only these status codes indicate connection-level failures
-            return code == io.grpc.Status.Code.UNAVAILABLE ||
-                   code == io.grpc.Status.Code.DEADLINE_EXCEEDED ||
-                   code == io.grpc.Status.Code.CANCELLED ||
-                   (code == io.grpc.Status.Code.UNKNOWN && 
-                    statusException.getMessage() != null && 
-                    (statusException.getMessage().contains("connection") || 
-                     statusException.getMessage().contains("Connection")));
-        }
-        
-        // For non-gRPC exceptions, check for connection-related keywords
-        String message = exception.getMessage();
-        if (message != null) {
-            String lowerMessage = message.toLowerCase();
-            
-            // CRITICAL: Pool exhaustion is NOT a server connectivity issue
-            // Don't mark server unhealthy when pool is exhausted - it's a resource limit, not a connection failure
-            if (lowerMessage.contains("pool exhausted") || lowerMessage.contains("pool is exhausted")) {
-                return false;
-            }
-            
-            return lowerMessage.contains("connection") || 
-                   lowerMessage.contains("timeout") ||
-                   lowerMessage.contains("unavailable");
-        }
-        
-        return false; // Default to not marking unhealthy for unknown errors
+        return GrpcExceptionHandler.isConnectionLevelError(exception);
     }
     
     private void attemptServerRecovery() {
