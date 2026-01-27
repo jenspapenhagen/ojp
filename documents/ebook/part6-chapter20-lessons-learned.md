@@ -90,7 +90,7 @@ The configuration design balances simplicity with control. Users specify total d
 
 The lessons learned from this issue emphasize the importance of **thinking at the cluster level, not just the server level**. In distributed systems, configuration that seems local often has global implications. Second, **automatic coordination beats manual calculation**. Expecting operators to manually calculate and adjust pool sizes during topology changes invites errors. Third, **smooth transitions prevent disruption**. Immediately closing connections during scale-down would terminate in-flight operations; gradual adjustment through attrition maintains service continuity.
 
-## 20.3 Production Patterns and Insights
+## 20.3 Patterns and Insights
 
 Beyond specific issues, OJP's journey has revealed recurring patterns and insights applicable to database connection management generally.
 
@@ -100,16 +100,12 @@ Beyond specific issues, OJP's journey has revealed recurring patterns and insigh
 
 **XA Transaction Complexity**: Distributed transactions introduce order-of-magnitude complexity compared to local transactions. Connection must persist across the prepare/commit boundary, state must survive network partitions, and recovery scenarios require careful protocol implementation. The lesson: XA support demands extraordinary attention to correctness; test exhaustively across failure scenarios.
 
-**Framework Integration Subtleties**: Different Java frameworks (Spring Boot, Quarkus, Micronaut) have distinct assumptions about connection management. Spring Boot expects connection pooling at the datasource level. Quarkus prefers compile-time configuration. Micronaut favors AOP-based interception. The lesson: framework integration requires understanding each framework's model, not just providing generic JDBC compliance.
-
-**Observability as First-Class Feature**: Initially, OJP provided basic logging. Production usage revealed that logs alone don't suffice—metrics, traces, and structured events all play crucial roles. OpenTelemetry integration wasn't an afterthought; it became fundamental to operating OJP reliably. The lesson: observability isn't a feature to bolt on later; it's architectural from the start.
+**Observability as First-Class Feature**: Initially, OJP provided basic logging. Production usage revealed that logs alone don't suffice—metrics, traces(planned), and structured events all play crucial roles. OpenTelemetry integration wasn't an afterthought; it became fundamental to operating OJP reliably. The lesson: observability isn't a feature to bolt on later; it's architectural from the start.
 
 **[IMAGE PROMPT: Lessons Learned Infographic]**
 Create an infographic summarizing key lessons learned. Display five sections vertically: 1) "Timeout Protection" showing layered timeouts (library + application level), 2) "Fail Fast" showing explicit error vs silent failure, 3) "Cluster Thinking" showing individual server vs cluster-wide view, 4) "Gradual Adjustment" showing smooth scaling vs abrupt changes, 5) "Observable Everything" showing metrics/logs/traces coverage. Use icons and color coding consistently. Include a banner at top stating "Production Lessons from OJP" with project logo.
 
-**Testing Philosophy Evolution**: Early OJP testing focused on functional correctness—does the feature work? Production experience shifted emphasis toward non-functional testing—how does it behave under stress, during failures, when misconfigured? Integration tests now routinely include timeout scenarios, resource exhaustion, network partitions, and database failures. The lesson: testing the happy path is table stakes; testing failure modes is where reliability is proven.
-
-**Documentation as Living Artifact**: Initially, documentation captured the intended design. Production deployment revealed gaps between intention and reality—configurations that theoretically should work but practically don't, workarounds necessary for specific databases, performance characteristics that only emerge under load. Documentation evolved to capture this operational wisdom, not just design specifications. The lesson: documentation must reflect reality, including the rough edges.
+**Testing Philosophy Evolution**: Early OJP testing focused on functional correctness—does the feature work? Experience shifted emphasis toward non-functional testing—how does it behave under stress, during failures, when misconfigured? Integration tests now routinely include timeout scenarios, resource exhaustion, network partitions, and database failures. The lesson: testing the happy path is table stakes; testing failure modes is where reliability is proven.
 
 ## Conclusion
 
