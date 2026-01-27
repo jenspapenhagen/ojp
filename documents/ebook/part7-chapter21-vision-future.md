@@ -79,8 +79,6 @@ OJP's roadmap reflects both user requests and the maintainers' vision for enhanc
 
 **Health Check Endpoints**: While basic metrics exist, dedicated health check endpoints would integrate better with load balancers and orchestration platforms. HTTP-based health checks that return detailed status information (pool health, database connectivity, resource utilization) would enable smarter routing and monitoring. Kubernetes liveness and readiness probes could leverage these endpoints for more intelligent pod lifecycle management.
 
-**Connection Pool Autoscaling**: Current connection pools have fixed maximum sizes. Future enhancements might include dynamic pool sizing based on observed load. During high traffic, pools would automatically grow (within configured limits). During quiet periods, pools would shrink to conserve resources. This adaptive behavior would optimize resource utilization without manual tuning.
-
 **Read Replica Routing**: Many databases support read replicas for scaling read-heavy workloads. Future OJP versions might intelligently route read-only queries to replicas while sending write operations to the primary. This routing could be automatic (based on query analysis) or explicit (via connection URL hints). The capability would maximize database cluster utilization without application code changes.
 
 **Query Result Caching**: For queries that fetch relatively static data (configuration tables, reference data), an optional caching layer could cache results directly in OJP. Subsequent identical queries would return cached results without hitting the database. This capability requires careful cache invalidation strategies but could dramatically reduce database load for certain access patterns.
