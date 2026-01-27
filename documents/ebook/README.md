@@ -6,9 +6,9 @@ This comprehensive e-book provides complete documentation for Open-J-Proxy (OJP)
 
 ## Content Overview
 
-**Total Content**: 822KB across 22 chapters + 5 appendices  
-**Visual Assets**: 227 AI-ready image prompts, 70 Mermaid diagrams  
-**Completion**: 100% (all 22 chapters written)
+**Total Content**: 860KB across 23 chapters + 7 appendices  
+**Visual Assets**: 237 AI-ready image prompts, 75 Mermaid diagrams  
+**Completion**: 100% (all 23 chapters written)
 
 ## Documentation Version
 
@@ -21,9 +21,10 @@ Message: Merge pull request #284 from Open-J-Proxy/copilot/evaluate-abandoned-se
 
 ## Table of Contents
 
-### Part I: Foundation (4 chapters)
+### Part I: Foundation (5 chapters)
 - [Chapter 1: Introduction to OJP](part1-chapter1-introduction.md)
 - [Chapter 2: Architecture and Design](part1-chapter2-architecture.md)
+- [Chapter 2a: OJP as Smart Load Balancer and Automatic Failover](part1-chapter2a-smart-load-balancing.md)
 - [Chapter 3: Quick Start Guide](part1-chapter3-quickstart.md)
 - [Chapter 3a: Kubernetes Deployment with Helm](part1-chapter3a-kubernetes-helm.md)
 

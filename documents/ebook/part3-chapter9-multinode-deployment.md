@@ -1,5 +1,7 @@
 # Chapter 9: Multinode Deployment
 
+> **Note**: This chapter focuses on the operational aspects of deploying and configuring OJP in multinode mode. For a conceptual understanding of OJP's smart load balancing and automatic failover mechanisms, and how they compare with traditional database proxies, see **[Chapter 2a: OJP as Smart Load Balancer and Automatic Failover](part1-chapter2a-smart-load-balancing.md)**.
+
 ## Introduction
 
 Every production system eventually faces the question: "What happens if this server goes down?" For database connection management, the answer matters tremendously. Your application might be stateless and easily scalable, but if it depends on a single OJP Server instance for all database connectivity, that server becomes a single point of failure. A network blip, a hardware issue, or even a planned maintenance window could bring your entire application to a halt.
@@ -12,7 +14,7 @@ Open J Proxy's multinode deployment capability solves this problem elegantly. In
 
 Modern applications are designed for resilience. You run multiple instances behind a load balancer. You use health checks and automatic scaling. You deploy across availability zones. But what about your database connectivity layer?
 
-If all your application instances connect through a single OJP Server, you've introduced a bottleneck and a single point of failure. Sure, you could use traditional load balancers, but they don't understand the nuances of database connections—session stickiness, transaction boundaries, connection pooling semantics. You need something smarter.
+If all your application instances connect through a single OJP Server, you've introduced a bottleneck and a single point of failure. Traditional load balancers might seem like a solution, but as explained in **[Chapter 2a](part1-chapter2a-smart-load-balancing.md)**, they don't understand the nuances of database connections—session stickiness, transaction boundaries, connection pooling semantics. OJP's client-side load balancing provides something smarter.
 
 Consider a typical microservices deployment running in Kubernetes. You might have 20 pods of your application, each needing database access. With a single OJP Server, that server must handle all 20 pods' connection requests. If it fails, all 20 pods lose database connectivity simultaneously. If it becomes overloaded, all pods experience slow connection acquisition. The system's reliability is only as good as that single server.
 
@@ -153,7 +155,7 @@ stateDiagram-v2
 
 ## Load-Aware Server Selection
 
-The heart of multinode's intelligent behavior is its load-aware server selection algorithm. Rather than using simple round-robin distribution (which was the legacy behavior), modern OJP uses a sophisticated approach that considers actual server load when routing new connections.
+The heart of multinode's intelligent behavior is its load-aware server selection algorithm. Rather than using simple round-robin distribution (which was the legacy behavior), modern OJP uses a sophisticated approach that considers actual server load when routing new connections. For a detailed explanation of how this compares to traditional database proxies, see **[Chapter 2a](part1-chapter2a-smart-load-balancing.md)**.
 
 ### How Load-Aware Selection Works
 
