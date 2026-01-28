@@ -12,7 +12,7 @@ import java.sql.*;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
-public class Db2ResultSetMetaDataExtensiveTests {
+ class Db2ResultSetMetaDataExtensiveTests {
 
     private static boolean isTestDisabled;
     private Connection connection;
@@ -26,7 +26,7 @@ public class Db2ResultSetMetaDataExtensiveTests {
     }
 
     @SneakyThrows
-    public void setUp(String driverClass, String url, String user, String password) throws SQLException {
+     void setUp(String driverClass, String url, String user, String password) throws SQLException {
         assumeFalse(isTestDisabled, "DB2 tests are disabled");
         
         connection = DriverManager.getConnection(url, user, password);
