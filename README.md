@@ -1,12 +1,12 @@
 
 # Open J Proxy
 
-![Release](https://img.shields.io/github/v/release/Open-J-Proxy/ojp?include_prereleases)
+![Release](https://img.shields.io/github/v/release/Open-J-Proxy/ojp?include_prereleases) [![Main CI](https://github.com/Open-J-Proxy/ojp/actions/workflows/main.yml/badge.svg)](https://github.com/Open-J-Proxy/ojp/actions/workflows/main.yml) [![Spring Boot/Micronaut/Quarkus Integration](https://github.com/Open-J-Proxy/ojp-framework-integration/actions/workflows/main.yml/badge.svg)](https://github.com/Open-J-Proxy/ojp-framework-integration/actions/workflows/main.yml) [![License](https://img.shields.io/github/license/Open-J-Proxy/ojp.svg)](https://raw.githubusercontent.com/Open-J-Proxy/ojp/master/LICENSE)
 
-[![Main CI](https://github.com/Open-J-Proxy/ojp/actions/workflows/main.yml/badge.svg)](https://github.com/Open-J-Proxy/ojp/actions/workflows/main.yml)
-[![Spring Boot/Micronaut/Quarkus Integration](https://github.com/Open-J-Proxy/ojp-framework-integration/actions/workflows/main.yml/badge.svg)](https://github.com/Open-J-Proxy/ojp-framework-integration/actions/workflows/main.yml)
+[![security status](https:&#x2F;&#x2F;www.meterian.com/badge/gh/Open-J-Proxy/ojp/security?branch=main)](https:&#x2F;&#x2F;www.meterian.com/report/gh/Open-J-Proxy/ojp) [![stability status](https:&#x2F;&#x2F;www.meterian.com/badge/gh/Open-J-Proxy/ojp/stability?branch=main)](https:&#x2F;&#x2F;www.meterian.com/report/gh/Open-J-Proxy/ojp)
 
-[![License](https://img.shields.io/github/license/Open-J-Proxy/ojp.svg)](https://raw.githubusercontent.com/Open-J-Proxy/ojp/master/LICENSE)
+[openjproxy.com](https://openjproxy.com) 
+---
 
 A type 3 JDBC Driver and Layer 7 Proxy Server to decouple applications from relational database connection management.
 
@@ -28,6 +28,12 @@ _"The only open-source JDBC Type 3 driver globally, this project introduces a tr
 ## Value Proposition
 
 OJP protects your databases from overwhelming connection storms by acting as a smart backpressure mechanism. Instead of every application instance opening and holding connections, OJP orchestrates and optimizes database access through intelligent pooling, query flow control, and multi-database support. With minimal configuration changes, you replace native JDBC drivers gaining connection resilience, and safer scalability. Elastic scaling becomes simpler without putting your database at risk.
+
+---
+## Requirements
+
+- **OJP JDBC Driver**: Java 11 or higher
+- **OJP Server**: Java 21 or higher
 
 ---
 ## Quick Start
@@ -105,14 +111,16 @@ If Docker is not available in your environment, you can build and run OJP Server
 * OJP supports **multiple relational databases** - in theory it can support any relational database that provides a JDBC driver implementation.
 * OJP simple setup just requires the OJP library in the classpath and the OJP prefix added to the connection URL (e.g., `jdbc:ojp[host:port]_h2:~/test` where `host:port` represents the location of the OJP server).
 * **Drop-In External Libraries**: Add proprietary JDBC drivers (Oracle, SQL Server, DB2) and additional libraries (e.g., Oracle UCP) without recompiling - see [Drop-In Driver Documentation](documents/configuration/DRIVERS_AND_LIBS.md). Simply place JARs in the `ojp-libs` directory.
+* **SQL Query Optimization**: Optional SQL enhancer with Apache Calcite provides query optimization using real database schema metadata for improved performance analysis and dialect translation.
 
 ### Further documents
 - [Drop-In External Libraries Support](documents/configuration/DRIVERS_AND_LIBS.md) - Add proprietary database drivers and libraries (Oracle JDBC, Oracle UCP, SQL Server, DB2) without recompiling.
+- [SSL/TLS Certificate Configuration Guide](documents/configuration/ssl-tls-certificate-placeholders.md) - Configure SSL/TLS certificates with server-side property placeholders for PostgreSQL, MySQL, Oracle, SQL Server, and DB2.
 - [Architectural decision records (ADRs)](documents/ADRs) - Technical decisions and rationale behind OJP's architecture.
 - [Get started: Spring Boot, Quarkus and Micronaut](documents/java-frameworks/README.md) - Framework-specific integration guides and examples.
 - [Understanding OJP Service Provider Interfaces (SPIs)](documents/Understanding-OJP-SPIs.md) - Guide for Java developers on implementing custom connection pool providers.
-- [Connection Pool Configuration](documents/configuration/ojp-jdbc-configuration.md) - OJP JDBC driver setup and connection pool settings.
-- [OJP Server Configuration](documents/configuration/ojp-server-configuration.md) - Server startup options and runtime configuration.
+- [Connection Pool Configuration](documents/configuration/ojp-jdbc-configuration.md) - OJP JDBC driver setup, connection pool settings, and environment-specific configuration (ojp-dev.properties, ojp-staging.properties, ojp-prod.properties).
+- [OJP Server Configuration](documents/configuration/ojp-server-configuration.md) - Server startup options, runtime configuration, and SQL enhancer with schema loading.
 - [Multinode Configuration](documents/multinode/README.md) - High availability and load balancing with multiple OJP servers.
 - [Slow query segregation feature](documents/designs/SLOW_QUERY_SEGREGATION.md) - Feature that prevent connection starvation by slow queries (or statements).
 - [Telemetry and Observability](documents/telemetry/README.md) - OpenTelemetry integration and monitoring setup.
@@ -136,22 +144,12 @@ Welcome to OJP! We appreciate your interest in contributing. This guide will hel
 ---
 
 ## Partners
-<a href="https://www.linkedin.com/in/devsjava/" target="_blank" rel="noopener">
-<img width="120px" height="120px" src="documents/images/comunidade_brasil_jug.jpeg" alt="Comunidade Brasil JUG" />
-</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<a href="https://github.com/switcherapi" target="_blank" rel="noopener">
-<img width="180px" src="https://github.com/switcherapi/switcherapi-assets/blob/master/logo/switcherapi_grey.png?raw=true" alt="Comunidade Brasil JUG" />
-</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<a href="https://www.meterian.io/" target="_blank" rel="noopener">
-<img width="180px" src="https://www.meterian.io/images/brand/meterian_logo_blue.svg" alt="Materian" />
-</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<a href="https://www.youtube.com/@cbrjar" target="_blank" rel="noopener">
-<img width="180px" src="/documents/images/cyber_jar_logo.png" alt="Materian" />
-</a>
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-<a href="https://javachallengers.com/career-diagnosis" target="_blank" rel="noopener">
-<img width="150px" src="/documents/images/java_challengers_logo.jpeg" alt="Java Challengers" />
-</a>
+
+| Logo                                                                                                                                                                                                                        | Description                                                                                                                                | Website |
+|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------|---------|
+| <a href="https://www.linkedin.com/in/devsjava/" target="_blank" rel="noopener"><img width="120px" height="120px" src="documents/images/comunidade_brasil_jug.jpeg" alt="Comunidade Brasil JUG" /></a>                       | Brazilian Java User Group connecting developers for knowledge sharing and professional networking.                                         | [linkedin.com/in/devsjava](https://www.linkedin.com/in/devsjava/) |
+| <a href="https://github.com/switcherapi" target="_blank" rel="noopener"><img width="180px" src="https://github.com/switcherapi/switcherapi-assets/blob/master/logo/switcherapi_grey.png?raw=true" alt="Switcher API" /></a> | Feature management platform for managing features at scale with performance focus.                                                         | [github.com/switcherapi](https://github.com/switcherapi) |
+| <a href="https://www.meterian.io/" target="_blank" rel="noopener"><img width="240px" src="https://www.meterian.io/images/brand/meterian_logo_blue.svg" alt="Meterian"  /></a>                                               | Application security platform that identifies vulnerabilities across open-source dependencies and application code.                        | [meterian.io](https://www.meterian.io/) |
+| <a href="https://www.youtube.com/@cbrjar" target="_blank" rel="noopener"><img width="600px" src="/documents/images/cyberjar_logo.png" alt="CyberJAR"  /></a>                                                                | YouTube channel for Java developers covering frameworks, containers, and modern JVM topics.                                                | [youtube.com/@cbrjar](https://www.youtube.com/@cbrjar) |
+| <a href="https://javachallengers.com/career-diagnosis" target="_blank" rel="noopener"><img width="150px" src="/documents/images/java_challengers_logo.jpeg" alt="Java Challengers" /></a>                                   | Helps developers go beyond coding, mastering Java fundamentals, building career confidence, and preparing for international opportunities. | [javachallengers.com](https://javachallengers.com/career-diagnosis) |
+| <a href="https://omnifish.ee" target="_blank" rel="noopener"><img width="130px" src="/documents/images/omnifish_logo.png" alt="OmniFish" /></a>                                                                             | The team behind Eclipse GlassFish, delivering reliable opensource solutions with enterprise support.                                       | [omnifish.ee](https://omnifish.ee/) |

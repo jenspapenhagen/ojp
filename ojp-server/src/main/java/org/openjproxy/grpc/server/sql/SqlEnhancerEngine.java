@@ -1,19 +1,27 @@
 package org.openjproxy.grpc.server.sql;
 
 import lombok.extern.slf4j.Slf4j;
+import org.apache.calcite.plan.RelOptRule;
+import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.parser.SqlParseException;
 import org.apache.calcite.sql.parser.SqlParser;
 import org.apache.calcite.sql.validate.SqlConformanceEnum;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * SQL Enhancer Engine that uses Apache Calcite for SQL parsing, validation, and optimization.
  * 
- * Phase 1: Basic integration with SQL parsing only
- * Phase 2: Add validation and optimization with caching (uses original SQL as cache keys)
- * Phase 3: Add database-specific dialect support and custom functions
+ * Features:
+ * - SQL syntax validation and parsing
+ * - Query optimization using rule-based transformations
+ * - SQL rewriting for improved performance
+ * - Comprehensive caching for fast repeated queries
+ * - Metrics tracking for monitoring
  */
 @Slf4j
 public class SqlEnhancerEngine {
@@ -23,21 +31,79 @@ public class SqlEnhancerEngine {
     private final ConcurrentHashMap<String, SqlEnhancementResult> cache;
     private final OjpSqlDialect dialect;
     private final org.apache.calcite.sql.SqlDialect calciteDialect;
+    private final OjpSqlDialect targetDialect; // Target dialect for translation
+    private final org.apache.calcite.sql.SqlDialect targetCalciteDialect; // Target Calcite dialect
+    private final boolean translationEnabled; // Whether automatic translation is enabled
+    private final RelationalAlgebraConverter converter;
+    private final boolean conversionEnabled;
+    
+    // Optimization configuration
+    private final boolean optimizationEnabled;
+    private final OptimizationRuleRegistry ruleRegistry;
+    private final List<String> enabledRules;
+    
+    // Schema management
+    private final SchemaCache schemaCache;
+    private final SchemaLoader schemaLoader;
+    private final javax.sql.DataSource dataSource;
+    private final String catalogName;
+    private final String schemaName;
+    private final long schemaRefreshIntervalMillis;
+    
+    // Metrics tracking - using AtomicLong for thread-safe updates without synchronization
+    private final AtomicLong totalQueriesProcessed = new AtomicLong(0);
+    private final AtomicLong totalQueriesOptimized = new AtomicLong(0);
+    private final AtomicLong totalOptimizationTimeMs = new AtomicLong(0);
+    private final AtomicLong totalQueriesModified = new AtomicLong(0);
     
     
     /**
-     * Creates a new SqlEnhancerEngine with the given enabled status and dialect.
+     * Creates a new SqlEnhancerEngine with full configuration options including schema refresh.
      * 
      * @param enabled Whether the SQL enhancer is enabled
-     * @param dialectName The SQL dialect to use
+     * @param dialectName The SQL dialect to use (source dialect)
+     * @param targetDialectName The target SQL dialect for translation (empty = no translation)
+     * @param conversionEnabled Whether to enable SQL-to-RelNode conversion
+     * @param optimizationEnabled Whether to enable query optimization
+     * @param enabledRules List of rule names to enable (null = use safe rules)
+     * @param schemaCache Optional schema cache for real schema metadata (can be null)
+     * @param schemaLoader Optional schema loader for periodic refresh (can be null)
+     * @param dataSource Optional data source for schema refresh (can be null)
+     * @param catalogName Catalog name for schema refresh (can be null)
+     * @param schemaName Schema name for schema refresh (can be null)
+     * @param schemaRefreshIntervalHours Hours between schema refreshes (0 = disabled)
      */
-    public SqlEnhancerEngine(boolean enabled, String dialectName) {
+    public SqlEnhancerEngine(boolean enabled, String dialectName, String targetDialectName, boolean conversionEnabled,
+                             boolean optimizationEnabled, List<String> enabledRules,
+                             SchemaCache schemaCache, SchemaLoader schemaLoader,
+                             javax.sql.DataSource dataSource, String catalogName, String schemaName,
+                             long schemaRefreshIntervalHours) {
         this.enabled = enabled;
+        this.conversionEnabled = conversionEnabled;
+        this.optimizationEnabled = optimizationEnabled;
         this.cache = new ConcurrentHashMap<>();
         this.dialect = OjpSqlDialect.fromString(dialectName);
         this.calciteDialect = dialect.getCalciteDialect();
         
-        // Phase 3: Configure parser with dialect-specific settings
+        // Configure target dialect for translation
+        if (targetDialectName != null && !targetDialectName.trim().isEmpty()) {
+            this.targetDialect = OjpSqlDialect.fromString(targetDialectName);
+            this.targetCalciteDialect = targetDialect.getCalciteDialect();
+            this.translationEnabled = true;
+        } else {
+            this.targetDialect = null;
+            this.targetCalciteDialect = null;
+            this.translationEnabled = false;
+        }
+        
+        this.schemaCache = schemaCache;
+        this.schemaLoader = schemaLoader;
+        this.dataSource = dataSource;
+        this.catalogName = catalogName;
+        this.schemaName = schemaName;
+        this.schemaRefreshIntervalMillis = schemaRefreshIntervalHours * 60 * 60 * 1000; // Convert hours to milliseconds
+        
+        // Configure parser with dialect-specific settings
         SqlParser.Config baseConfig = SqlParser.config();
         
         // Configure conformance based on dialect
@@ -47,11 +113,100 @@ public class SqlEnhancerEngine {
             .withConformance(conformance)
             .withCaseSensitive(false); // Most SQL is case-insensitive
         
+        // Initialize converter if conversion is enabled
+        // Pass SqlDialect for SQL generation and SchemaCache for real schema
+        this.converter = conversionEnabled ? 
+            new RelationalAlgebraConverter(parserConfig, calciteDialect, schemaCache) : null;
+        
+        // Initialize optimization components
+        this.ruleRegistry = new OptimizationRuleRegistry();
+        this.enabledRules = enabledRules != null ? enabledRules : 
+            Arrays.asList("FILTER_REDUCE", "PROJECT_REDUCE", "FILTER_MERGE", "PROJECT_MERGE", "PROJECT_REMOVE");
+        
         if (enabled) {
-            log.info("SQL Enhancer Engine initialized and enabled with dialect: {} (validation and caching)", dialectName);
+            String conversionStatus = conversionEnabled ? " with relational algebra conversion" : "";
+            String optimizationStatus = optimizationEnabled ? " and optimization" : "";
+            String schemaStatus = schemaCache != null ? " and real schema support" : "";
+            String refreshStatus = (schemaLoader != null && dataSource != null && schemaRefreshIntervalHours > 0) ? 
+                " with periodic refresh" : "";
+            String translationStatus = translationEnabled ? " and automatic translation to " + targetDialect : "";
+            log.info("SQL Enhancer Engine initialized and enabled with dialect: {}{}{}{}{}{}", 
+                    dialectName, conversionStatus, optimizationStatus, schemaStatus, refreshStatus, translationStatus);
         } else {
             log.info("SQL Enhancer Engine initialized but disabled");
         }
+    }
+    
+    /**
+     * Creates a new SqlEnhancerEngine with full configuration options (without schema refresh).
+     * 
+     * @param enabled Whether the SQL enhancer is enabled
+     * @param dialectName The SQL dialect to use
+     * @param targetDialectName The target SQL dialect for translation (empty = no translation)
+     * @param conversionEnabled Whether to enable SQL-to-RelNode conversion
+     * @param optimizationEnabled Whether to enable query optimization
+     * @param enabledRules List of rule names to enable (null = use safe rules)
+     * @param schemaCache Optional schema cache for real schema metadata (can be null)
+     * @param schemaRefreshIntervalHours Hours between schema refreshes (0 = disabled)
+     */
+    public SqlEnhancerEngine(boolean enabled, String dialectName, String targetDialectName, boolean conversionEnabled,
+                             boolean optimizationEnabled, List<String> enabledRules,
+                             SchemaCache schemaCache, long schemaRefreshIntervalHours) {
+        this(enabled, dialectName, targetDialectName, conversionEnabled, optimizationEnabled, enabledRules,
+             schemaCache, null, null, null, null, schemaRefreshIntervalHours);
+    }
+    
+    /**
+     * Creates a new SqlEnhancerEngine with full configuration options (no schema cache).
+     * 
+     * @param enabled Whether the SQL enhancer is enabled
+     * @param dialectName The SQL dialect to use
+     * @param targetDialectName The target SQL dialect for translation (empty = no translation)
+     * @param conversionEnabled Whether to enable SQL-to-RelNode conversion
+     * @param optimizationEnabled Whether to enable query optimization
+     * @param enabledRules List of rule names to enable (null = use safe rules)
+     */
+    public SqlEnhancerEngine(boolean enabled, String dialectName, String targetDialectName, boolean conversionEnabled,
+                             boolean optimizationEnabled, List<String> enabledRules) {
+        this(enabled, dialectName, targetDialectName, conversionEnabled, optimizationEnabled, enabledRules, null, 0);
+    }
+    
+    /**
+     * Creates a new SqlEnhancerEngine with full configuration options (no target dialect).
+     * Legacy constructor for backward compatibility.
+     * 
+     * @param enabled Whether the SQL enhancer is enabled
+     * @param dialectName The SQL dialect to use
+     * @param conversionEnabled Whether to enable SQL-to-RelNode conversion
+     * @param optimizationEnabled Whether to enable query optimization
+     * @param enabledRules List of rule names to enable (null = use safe rules)
+     */
+    public SqlEnhancerEngine(boolean enabled, String dialectName, boolean conversionEnabled,
+                             boolean optimizationEnabled, List<String> enabledRules) {
+        this(enabled, dialectName, "", conversionEnabled, optimizationEnabled, enabledRules, null, 0);
+    }
+    
+    /**
+     * Creates a new SqlEnhancerEngine with conversion enabled.
+     * Optimization is disabled by default for backward compatibility.
+     * 
+     * @param enabled Whether the SQL enhancer is enabled
+     * @param dialectName The SQL dialect to use
+     * @param conversionEnabled Whether to enable SQL-to-RelNode conversion
+     */
+    public SqlEnhancerEngine(boolean enabled, String dialectName, boolean conversionEnabled) {
+        this(enabled, dialectName, conversionEnabled, false, null);
+    }
+    
+    /**
+     * Creates a new SqlEnhancerEngine with the given enabled status and dialect.
+     * Conversion is disabled by default for backward compatibility.
+     * 
+     * @param enabled Whether the SQL enhancer is enabled
+     * @param dialectName The SQL dialect to use
+     */
+    public SqlEnhancerEngine(boolean enabled, String dialectName) {
+        this(enabled, dialectName, false);
     }
     
     /**
@@ -109,6 +264,36 @@ public class SqlEnhancerEngine {
     }
     
     /**
+     * Gets optimization statistics.
+     * 
+     * @return String describing optimization statistics
+     */
+    public String getOptimizationStats() {
+        if (!optimizationEnabled) {
+            return "Optimization disabled";
+        }
+        
+        long processed = totalQueriesProcessed.get();
+        long optimized = totalQueriesOptimized.get();
+        long optimizationTime = totalOptimizationTimeMs.get();
+        long modified = totalQueriesModified.get();
+        
+        long avgOptimizationTime = optimized > 0 ? optimizationTime / optimized : 0;
+        
+        double optimizationRate = processed > 0 ? 
+            (100.0 * optimized / processed) : 0.0;
+        
+        double modificationRate = optimized > 0 ? 
+            (100.0 * modified / optimized) : 0.0;
+        
+        return String.format(
+            "Optimization Stats: Processed=%d, Optimized=%d (%.1f%%), Modified=%d (%.1f%%), AvgTime=%dms",
+            processed, optimized, optimizationRate,
+            modified, modificationRate, avgOptimizationTime
+        );
+    }
+    
+    /**
      * Clears the cache.
      */
     public void clearCache() {
@@ -141,11 +326,14 @@ public class SqlEnhancerEngine {
             return cached;
         }
         
+        // Track metrics
+        totalQueriesProcessed.incrementAndGet();
+        
         long startTime = System.currentTimeMillis();
         SqlEnhancementResult result;
         
         try {
-            // Phase 3: Parse and validate SQL with dialect-specific configuration
+            // Parse and validate SQL with dialect-specific configuration
             SqlParser parser = SqlParser.create(sql, parserConfig);
             SqlNode sqlNode = parser.parseQuery();
             
@@ -153,15 +341,90 @@ public class SqlEnhancerEngine {
             log.debug("Successfully parsed and validated SQL with {} dialect: {}", 
                      dialect, sql.substring(0, Math.min(sql.length(), 100)));
             
-            // Phase 3: Return original SQL (full optimization in future enhancement)
-            result = SqlEnhancementResult.success(sql, false);
+            // Relational Algebra Conversion and Optimization (if enabled)
+            if (conversionEnabled && converter != null) {
+                try {
+                    long optimizationStartTime = System.currentTimeMillis();
+                    
+                    // Convert SQL → RelNode
+                    RelNode relNode = converter.convertToRelNode(sql);
+                    log.debug("Successfully converted SQL to RelNode");
+                    
+                    // Apply optimization if enabled
+                    if (optimizationEnabled) {
+                        try {
+                            // Get optimization rules
+                            List<RelOptRule> rules = ruleRegistry.getRulesByNames(enabledRules);
+                            log.debug("Applying {} optimization rules", rules.size());
+                            
+                            // Apply optimizations
+                            RelNode optimizedNode = converter.applyOptimizations(relNode, rules);
+                            
+                            // Generate SQL from optimized RelNode
+                            try {
+                                String optimizedSql = converter.convertToSql(optimizedNode);
+                                
+                                long optimizationEndTime = System.currentTimeMillis();
+                                long optimizationTime = optimizationEndTime - optimizationStartTime;
+                                
+                                // Check if SQL was actually modified
+                                boolean wasModified = !sql.trim().equalsIgnoreCase(optimizedSql.trim());
+                                
+                                // Track metrics
+                                totalQueriesOptimized.incrementAndGet();
+                                totalOptimizationTimeMs.addAndGet(optimizationTime);
+                                if (wasModified) {
+                                    totalQueriesModified.incrementAndGet();
+                                }
+                                
+                                if (wasModified) {
+                                    log.info("SQL optimized with {} rules in {}ms. Original length: {}, Optimized length: {}", 
+                                            rules.size(), optimizationTime, sql.length(), optimizedSql.length());
+                                    log.debug("Original SQL: {}", sql.substring(0, Math.min(sql.length(), 200)));
+                                    log.debug("Optimized SQL: {}", optimizedSql.substring(0, Math.min(optimizedSql.length(), 200)));
+                                }
+                                
+                                result = SqlEnhancementResult.optimized(optimizedSql, wasModified, 
+                                                                       enabledRules, optimizationTime);
+                                
+                                log.debug("Optimization complete in {}ms with {} rules, modified: {}", 
+                                         optimizationTime, rules.size(), wasModified);
+                                
+                            } catch (RelationalAlgebraConverter.SqlGenerationException e) {
+                                log.debug("SQL generation failed, using original SQL: {}", e.getMessage());
+                                long optimizationTime = System.currentTimeMillis() - optimizationStartTime;
+                                // Return original SQL with optimization metadata even though generation failed
+                                result = SqlEnhancementResult.optimized(sql, false, enabledRules, optimizationTime);
+                            }
+                            
+                        } catch (RelationalAlgebraConverter.OptimizationException e) {
+                            log.debug("Optimization failed, using original SQL: {}", e.getMessage());
+                            result = SqlEnhancementResult.success(sql, false);
+                        }
+                    } else {
+                        // Optimization not enabled, return original SQL
+                        result = SqlEnhancementResult.success(sql, false);
+                    }
+                    
+                } catch (RelationalAlgebraConverter.ConversionException e) {
+                    log.debug("Conversion failed, falling back to original SQL: {}", e.getMessage());
+                    result = SqlEnhancementResult.success(sql, false);
+                } catch (Exception e) {
+                    log.warn("Unexpected error during conversion/optimization, falling back to original SQL: {}", 
+                            e.getMessage());
+                    result = SqlEnhancementResult.success(sql, false);
+                }
+            } else {
+                // Conversion not enabled, return original SQL
+                result = SqlEnhancementResult.success(sql, false);
+            }
             
         } catch (SqlParseException e) {
             // Log parse errors with dialect info
             log.debug("SQL parse error with {} dialect: {} for SQL: {}", 
                      dialect, e.getMessage(), sql.substring(0, Math.min(sql.length(), 100)));
             
-            // Phase 3: On parse error, return original SQL (pass-through mode)
+            // On parse error, return original SQL (pass-through mode)
             result = SqlEnhancementResult.passthrough(sql);
         } catch (Exception e) {
             // Catch any unexpected errors
@@ -169,6 +432,33 @@ public class SqlEnhancerEngine {
             
             // Fall back to pass-through mode
             result = SqlEnhancementResult.passthrough(sql);
+        }
+        
+        // Apply automatic dialect translation if enabled
+        if (translationEnabled && !result.isHasErrors()) {
+            try {
+                String sqlToTranslate = result.getEnhancedSql();
+                String translatedSql = applyTranslation(sqlToTranslate);
+                
+                // Check if translation actually changed the SQL
+                boolean wasTranslated = !sqlToTranslate.equals(translatedSql);
+                if (wasTranslated) {
+                    // Create new result with translated SQL, preserving optimization metadata
+                    if (result.isOptimized()) {
+                        result = SqlEnhancementResult.optimized(translatedSql, true, 
+                                                               result.getAppliedRules(), 
+                                                               result.getOptimizationTimeMs());
+                    } else {
+                        result = SqlEnhancementResult.success(translatedSql, true);
+                    }
+                    log.info("SQL automatically translated from {} to {}: {} chars -> {} chars", 
+                            dialect, targetDialect, sqlToTranslate.length(), translatedSql.length());
+                }
+            } catch (Exception e) {
+                log.warn("Automatic translation failed from {} to {}: {}, using untranslated SQL", 
+                        dialect, targetDialect, e.getMessage());
+                // Keep the untranslated result
+            }
         }
         
         long endTime = System.currentTimeMillis();
@@ -183,7 +473,29 @@ public class SqlEnhancerEngine {
         // If two threads cache the same SQL simultaneously, the last one wins (acceptable - same result)
         cache.put(sql, result);
         
+        // Check if schema refresh is needed (after enhancement to minimize overhead)
+        triggerSchemaRefreshIfNeeded();
+        
         return result;
+    }
+    
+    /**
+     * Applies dialect translation to SQL.
+     * Internal method used by automatic translation.
+     * 
+     * @param sql The SQL to translate
+     * @return Translated SQL
+     * @throws Exception if translation fails
+     */
+    private String applyTranslation(String sql) throws Exception {
+        // Parse with current dialect
+        SqlParser parser = SqlParser.create(sql, parserConfig);
+        SqlNode sqlNode = parser.parseQuery();
+        
+        // Convert to target dialect
+        String translated = sqlNode.toSqlString(targetCalciteDialect).getSql();
+        
+        return translated;
     }
     
     /**
@@ -216,6 +528,40 @@ public class SqlEnhancerEngine {
             log.warn("Failed to translate SQL from {} to {}: {}", 
                     this.dialect, targetDialect, e.getMessage());
             return sql; // Return original on error
+        }
+    }
+    
+    /**
+     * Triggers an asynchronous schema refresh if needed.
+     * Checks if refresh interval has passed and refresh is not already in progress.
+     */
+    private void triggerSchemaRefreshIfNeeded() {
+        // Only refresh if all required components are available
+        if (schemaCache == null || schemaLoader == null || dataSource == null) {
+            return;
+        }
+        
+        // Check if refresh is needed and not already in progress
+        if (schemaCache.needsRefresh(schemaRefreshIntervalMillis)) {
+            if (schemaCache.tryAcquireRefreshLock()) {
+                try {
+                    log.debug("Triggering async schema refresh");
+                    // Trigger async refresh
+                    schemaLoader.loadSchemaAsync(dataSource, catalogName, schemaName)
+                        .thenAccept(schema -> {
+                            schemaCache.updateSchema(schema);
+                            log.info("Schema refreshed successfully with {} tables", schema.getTables().size());
+                        })
+                        .exceptionally(ex -> {
+                            log.warn("Schema refresh failed: {}", ex.getMessage());
+                            return null;
+                        })
+                        .whenComplete((result, ex) -> schemaCache.releaseRefreshLock());
+                } catch (Exception e) {
+                    schemaCache.releaseRefreshLock();
+                    log.warn("Failed to start schema refresh: {}", e.getMessage());
+                }
+            }
         }
     }
 }

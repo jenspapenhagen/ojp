@@ -501,6 +501,11 @@ find /etc/ojp/certs \( -name '*.pem' -o -name '*.jks' \) -type f -exec chmod 400
 
 # Directories should be accessible
 find /etc/ojp/certs -type d -exec chmod 500 {} \;
+chmod 400 /etc/ojp/certs/**/ca-cert.pem
+chmod 400 /etc/ojp/certs/**/client-cert.pem
+chmod 400 /etc/ojp/certs/**/client-key.pem
+chmod 400 /etc/ojp/certs/**/*.jks
+
 ```
 
 ### 4. Use Environment Variables in Production

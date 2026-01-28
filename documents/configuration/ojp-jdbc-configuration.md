@@ -108,6 +108,165 @@ Connection backgroundConn = DriverManager.getConnection(
 3. Use either named datasource configuration or default configuration format
 4. The driver will automatically load and send these properties to the server when establishing a connection
 
+### Environment-Specific Configuration
+
+OJP supports environment-specific properties files, allowing you to maintain separate configurations for different environments (development, staging, production, etc.) **without requiring any custom code**.
+
+#### Naming Convention
+
+Use the following naming pattern for environment-specific properties files:
+
+- `ojp-dev.properties` - Development environment
+- `ojp-staging.properties` - Staging environment
+- `ojp-prod.properties` - Production environment
+- `ojp-test.properties` - Testing environment
+- `ojp-{environment}.properties` - Any custom environment name
+
+#### Environment Selection
+
+The environment is automatically determined by (in order of precedence):
+
+1. **System property**: `-Dojp.environment=dev`
+2. **Environment variable**: `OJP_ENVIRONMENT=dev`
+
+If no environment is specified, OJP loads the default `ojp.properties` file.
+
+#### Fallback Behavior
+
+- If an environment is specified but the environment-specific file doesn't exist, OJP automatically falls back to `ojp.properties`
+- This ensures backward compatibility and provides a safe default configuration
+
+#### Configuration Examples
+
+**Development Environment (`ojp-dev.properties`):**
+```properties
+# Development configuration - smaller pools, more logging
+ojp.connection.pool.maximumPoolSize=10
+ojp.connection.pool.minimumIdle=2
+ojp.connection.pool.connectionTimeout=30000
+ojp.connection.pool.idleTimeout=300000
+
+# XA settings for development
+ojp.xa.connection.pool.maxTotal=5
+ojp.xa.connection.pool.minIdle=1
+```
+
+**Staging Environment (`ojp-staging.properties`):**
+```properties
+# Staging configuration - moderate pools, production-like
+ojp.connection.pool.maximumPoolSize=20
+ojp.connection.pool.minimumIdle=5
+ojp.connection.pool.connectionTimeout=20000
+ojp.connection.pool.idleTimeout=600000
+
+# XA settings for staging
+ojp.xa.connection.pool.maxTotal=15
+ojp.xa.connection.pool.minIdle=3
+```
+
+**Production Environment (`ojp-prod.properties`):**
+```properties
+# Production configuration - optimized for high load
+ojp.connection.pool.maximumPoolSize=50
+ojp.connection.pool.minimumIdle=10
+ojp.connection.pool.connectionTimeout=15000
+ojp.connection.pool.idleTimeout=600000
+ojp.connection.pool.maxLifetime=1800000
+
+# XA settings for production
+ojp.xa.connection.pool.maxTotal=40
+ojp.xa.connection.pool.minIdle=8
+ojp.xa.connection.pool.connectionTimeout=25000
+
+# Production-specific datasources
+webapp.ojp.connection.pool.maximumPoolSize=60
+webapp.ojp.connection.pool.minimumIdle=15
+
+api.ojp.connection.pool.maximumPoolSize=40
+api.ojp.connection.pool.minimumIdle=10
+```
+
+#### Running with Environment-Specific Configuration
+
+**Using System Property:**
+```bash
+# Development
+java -Dojp.environment=dev -jar myapp.jar
+
+# Staging
+java -Dojp.environment=staging -jar myapp.jar
+
+# Production
+java -Dojp.environment=prod -jar myapp.jar
+```
+
+**Using Environment Variable:**
+```bash
+# Development
+export OJP_ENVIRONMENT=dev
+java -jar myapp.jar
+
+# Staging
+export OJP_ENVIRONMENT=staging
+java -jar myapp.jar
+
+# Production
+export OJP_ENVIRONMENT=prod
+java -jar myapp.jar
+```
+
+**Docker Deployment:**
+```yaml
+# docker-compose.yml
+services:
+  app-dev:
+    image: myapp:latest
+    environment:
+      - OJP_ENVIRONMENT=dev
+  
+  app-prod:
+    image: myapp:latest
+    environment:
+      - OJP_ENVIRONMENT=prod
+```
+
+**Kubernetes Deployment:**
+```yaml
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: myapp
+spec:
+  template:
+    spec:
+      containers:
+      - name: myapp
+        image: myapp:latest
+        env:
+        - name: OJP_ENVIRONMENT
+          value: "prod"
+```
+
+#### Benefits
+
+- **No Custom Code Required**: Simply specify the environment and OJP automatically loads the correct configuration
+- **Single Application Package**: Deploy the same JAR/WAR to all environments with all configuration files included
+- **Clear Separation**: Each environment has its own clearly named configuration file
+- **Easy Testing**: Test different environment configurations locally by changing the environment variable
+- **Safe Defaults**: Falls back to `ojp.properties` if environment-specific file is missing
+- **Override Support**: Environment variables and system properties can still override file properties
+
+#### Example Configuration Files
+
+Complete example configuration files for different environments are available:
+
+- **[ojp-dev.properties](ojp-dev.properties)** - Development environment configuration
+- **[ojp-staging.properties](ojp-staging.properties)** - Staging environment configuration
+- **[ojp-prod.properties](ojp-prod.properties)** - Production environment configuration
+
+These examples demonstrate recommended settings for each environment and can be used as starting templates.
+
 | Property                              | Type | Default | Description                                              |
 |---------------------------------------|------|---------|----------------------------------------------------------|
 | `ojp.connection.pool.maximumPoolSize` | int  | 20      | Maximum number of connections in the pool                |
@@ -481,6 +640,114 @@ Replace your existing JDBC connection URL by prefixing with `ojp[host:port]_` an
 
 Use the OJP driver class: `org.openjproxy.jdbc.Driver`
 
+### SSL/TLS Certificate Configuration with Placeholders
+
+OJP supports server-side SSL/TLS certificate configuration using property placeholders in JDBC URLs. This allows certificate paths to be configured on the OJP server rather than hardcoded in the client connection URL.
+
+#### Why Use Placeholders?
+
+- **Centralized certificate management**: Certificates reside on the OJP server
+- **Security**: Certificate paths are not exposed in application configuration
+- **Environment flexibility**: Different certificate paths for dev/staging/production
+- **Simplified client configuration**: Clients don't need access to certificate files
+
+#### How to Configure
+
+**Step 1: Configure the JDBC URL with placeholders in `ojp.properties`:**
+
+```properties
+# PostgreSQL with SSL
+mainApp.ojp.datasource.url=jdbc:ojp[localhost:1059(mainApp)]_postgresql://dbhost:5432/mydb?ssl=true&sslmode=verify-full&sslrootcert=${ojp.server.sslrootcert}
+
+# MySQL with SSL
+reporting.ojp.datasource.url=jdbc:ojp[localhost:1059(reporting)]_mysql://dbhost:3306/mydb?useSSL=true&trustCertificateKeyStoreUrl=${ojp.server.mysql.truststore}
+
+# Oracle with wallet
+analytics.ojp.datasource.url=jdbc:ojp[localhost:1059(analytics)]_oracle:thin:@dbhost:2484/myservice?oracle.net.wallet_location=${ojp.server.oracle.wallet.location}
+```
+
+**Step 2: Configure the certificate paths on the OJP server** (see [OJP Server Configuration](ojp-server-configuration.md)):
+
+```bash
+# Using JVM properties
+java -jar ojp-server.jar \
+  -Dojp.server.sslrootcert=/etc/ojp/certs/ca-cert.pem \
+  -Dojp.server.mysql.truststore=file:///etc/ojp/certs/truststore.jks \
+  -Dojp.server.oracle.wallet.location=/etc/ojp/wallet
+
+# Or using environment variables
+export OJP_SERVER_SSLROOTCERT=/etc/ojp/certs/ca-cert.pem
+export OJP_SERVER_MYSQL_TRUSTSTORE=file:///etc/ojp/certs/truststore.jks
+export OJP_SERVER_ORACLE_WALLET_LOCATION=/etc/ojp/wallet
+```
+
+#### Placeholder Format
+
+Placeholders use the format: `${property.name}`
+
+**Security Note**: Property names are validated on the server to prevent attacks if a client is compromised. Only property names starting with `ojp.server.` or `ojp.client.` are allowed, and they must contain only alphanumeric characters, dots, hyphens, and underscores.
+
+**Naming convention:**
+- **Always use the ojp.server prefix**: `${ojp.server.sslrootcert}` (required for validation)
+- Use descriptive names: `${ojp.server.postgresql.sslrootcert}` is better than `${cert1}`
+- Include database type: `${ojp.server.mysql.truststore}`, `${ojp.server.db2.keystore}`
+- Include environment if needed: `${ojp.server.prod.sslrootcert}`
+- Use only allowed characters: alphanumeric, dots (`.`), hyphens (`-`), underscores (`_`)
+- Keep suffix under 200 characters
+
+**Why these rules matter**: If a client application is compromised, attackers could inject malicious property names. The validation rules prevent:
+- Access to system properties like `${java.home}`
+- Command injection through special characters like `;`, `|`, `&`
+- Path traversal attacks like `../../../etc/passwd`
+- SQL injection attempts
+- Denial of service through extremely long names
+
+For complete security details, see the [SSL/TLS Certificate Configuration Guide](ssl-tls-certificate-placeholders.md).
+
+#### Database-Specific Examples
+
+**PostgreSQL:**
+```properties
+ojp.datasource.url=jdbc:ojp[localhost:1059]_postgresql://host:5432/db?\
+ssl=true&sslmode=verify-full&\
+sslrootcert=${ojp.server.sslrootcert}&\
+sslcert=${ojp.server.sslcert}&\
+sslkey=${ojp.server.sslkey}
+```
+
+**MySQL/MariaDB:**
+```properties
+ojp.datasource.url=jdbc:ojp[localhost:1059]_mysql://host:3306/db?\
+useSSL=true&requireSSL=true&\
+trustCertificateKeyStoreUrl=${ojp.server.mysql.truststore}&\
+trustCertificateKeyStorePassword=${ojp.server.mysql.truststorePassword}
+```
+
+**Oracle:**
+```properties
+ojp.datasource.url=jdbc:ojp[localhost:1059]_oracle:thin:@host:2484/service?\
+oracle.net.wallet_location=${ojp.server.oracle.wallet.location}&\
+oracle.net.ssl_server_dn_match=true
+```
+
+**SQL Server:**
+```properties
+ojp.datasource.url=jdbc:ojp[localhost:1059]_sqlserver://host:1433;\
+databaseName=mydb;encrypt=true;\
+trustStore=${ojp.server.sqlserver.truststore};\
+trustStorePassword=${ojp.server.sqlserver.truststorePassword}
+```
+
+**DB2:**
+```properties
+ojp.datasource.url=jdbc:ojp[localhost:1059]_db2://host:50001/mydb:\
+sslConnection=true;\
+sslTrustStoreLocation=${ojp.server.db2.truststore};\
+sslTrustStorePassword=${ojp.server.db2.truststorePassword};
+```
+
+For comprehensive SSL/TLS configuration examples and best practices, see the [SSL/TLS Certificate Configuration Guide](ssl-tls-certificate-placeholders.md).
+
 ### DataSource Parameter Usage
 
 The dataSource specification in parentheses within the OJP connection section specifies which configuration to use:
@@ -533,5 +800,6 @@ The multi-datasource feature is fully backward compatible:
 
 ## Related Documentation
 
+- **[SSL/TLS Certificate Configuration Guide](ssl-tls-certificate-placeholders.md)** - Complete guide for configuring SSL/TLS certificates with property placeholders
 - **[OJP Server Configuration](ojp-server-configuration.md)** - Server startup options and runtime configuration
 - **[Example Configuration Properties](ojp-server-example.properties)** - Complete example configuration file with all settings
