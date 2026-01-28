@@ -8,8 +8,6 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvFileSource;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -17,7 +15,7 @@ import java.sql.SQLException;
 
 import static openjproxy.helpers.SqlHelper.executeUpdate;
 
-public class BasicCrudIntegrationTest {
+ class BasicCrudIntegrationTest {
 
     private static boolean isH2TestEnabled;
     private static boolean isPostgresTestEnabled;
@@ -30,7 +28,7 @@ public class BasicCrudIntegrationTest {
     private static String tablePrefix = "";
 
     @BeforeAll
-    static void setup() {
+     static void setup() {
         isH2TestEnabled = Boolean.parseBoolean(System.getProperty("enableH2Tests", "false"));
         isPostgresTestEnabled = Boolean.parseBoolean(System.getProperty("enablePostgresTests", "false"));
         isMySQLTestEnabled = Boolean.parseBoolean(System.getProperty("enableMySQLTests", "false"));
@@ -43,7 +41,7 @@ public class BasicCrudIntegrationTest {
 
     @ParameterizedTest
     @CsvFileSource(resources = "/h2_postgres_mysql_mariadb_oracle_sqlserver_connections.csv")
-    void crudTestSuccessful(String driverClass, String url, String user, String pwd, boolean isXA) throws SQLException, ClassNotFoundException {
+     void crudTestSuccessful(String driverClass, String url, String user, String pwd, boolean isXA) throws SQLException, ClassNotFoundException {
         // Skip H2 tests if not enabled
         if (url.toLowerCase().contains("_h2:") && !isH2TestEnabled) {
             Assumptions.assumeFalse(true, "Skipping H2 tests");
