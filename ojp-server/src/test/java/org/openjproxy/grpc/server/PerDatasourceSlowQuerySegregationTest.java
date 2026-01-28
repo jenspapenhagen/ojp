@@ -1,6 +1,5 @@
 package org.openjproxy.grpc.server;
 
-import com.google.protobuf.ByteString;
 import com.openjproxy.grpc.ConnectionDetails;
 import com.openjproxy.grpc.SessionInfo;
 import io.grpc.stub.StreamObserver;
@@ -15,13 +14,17 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Test to verify that each datasource gets its own SlowQuerySegregationManager
  * with pool sizes based on actual HikariCP configuration.
  */
-public class PerDatasourceSlowQuerySegregationTest {
+class PerDatasourceSlowQuerySegregationTest {
 
     private StatementServiceImpl statementService;
     private ServerConfiguration serverConfiguration;
@@ -31,7 +34,7 @@ public class PerDatasourceSlowQuerySegregationTest {
         serverConfiguration = new ServerConfiguration();
         SessionManager sessionManager = Mockito.mock(SessionManager.class);
         CircuitBreaker circuitBreaker = Mockito.mock(CircuitBreaker.class);
-        
+
         statementService = new StatementServiceImpl(sessionManager, circuitBreaker, serverConfiguration);
     }
 
@@ -41,7 +44,7 @@ public class PerDatasourceSlowQuerySegregationTest {
         Properties clientProperties1 = new Properties();
         clientProperties1.setProperty("ojp.connection.pool.maximumPoolSize", "10");
         clientProperties1.setProperty("ojp.connection.pool.minimumIdle", "2");
-        
+
         Map<String, Object> propertiesMap1 = new HashMap<>();
         for (String key : clientProperties1.stringPropertyNames()) {
             propertiesMap1.put(key, clientProperties1.getProperty(key));
@@ -51,7 +54,7 @@ public class PerDatasourceSlowQuerySegregationTest {
         Properties clientProperties2 = new Properties();
         clientProperties2.setProperty("ojp.connection.pool.maximumPoolSize", "20");
         clientProperties2.setProperty("ojp.connection.pool.minimumIdle", "5");
-        
+
         Map<String, Object> propertiesMap2 = new HashMap<>();
         for (String key : clientProperties2.stringPropertyNames()) {
             propertiesMap2.put(key, clientProperties2.getProperty(key));
@@ -86,9 +89,9 @@ public class PerDatasourceSlowQuerySegregationTest {
         // Use reflection to access the private slowQuerySegregationManagers map
         Field managersField = StatementServiceImpl.class.getDeclaredField("slowQuerySegregationManagers");
         managersField.setAccessible(true);
-        
+
         @SuppressWarnings("unchecked")
-        Map<String, SlowQuerySegregationManager> managers = 
+        Map<String, SlowQuerySegregationManager> managers =
                 (Map<String, SlowQuerySegregationManager>) managersField.get(statementService);
 
         // Verify that we have two separate managers
@@ -114,20 +117,20 @@ public class PerDatasourceSlowQuerySegregationTest {
         assertNotNull(manager2.getSlotManager(), "Manager 2 should have slot manager");
 
         // Pool sizes should match the configured values (10 and 20)
-        assertEquals(10, manager1.getSlotManager().getTotalSlots(), 
+        assertEquals(10, manager1.getSlotManager().getTotalSlots(),
                 "Manager 1 should have 10 total slots based on pool size");
-        assertEquals(20, manager2.getSlotManager().getTotalSlots(), 
+        assertEquals(20, manager2.getSlotManager().getTotalSlots(),
                 "Manager 2 should have 20 total slots based on pool size");
 
         // Verify slot distribution (20% slow, 80% fast by default)
-        assertEquals(2, manager1.getSlotManager().getSlowSlots(), 
+        assertEquals(2, manager1.getSlotManager().getSlowSlots(),
                 "Manager 1 should have 2 slow slots (20% of 10)");
-        assertEquals(8, manager1.getSlotManager().getFastSlots(), 
+        assertEquals(8, manager1.getSlotManager().getFastSlots(),
                 "Manager 1 should have 8 fast slots (80% of 10)");
 
-        assertEquals(4, manager2.getSlotManager().getSlowSlots(), 
+        assertEquals(4, manager2.getSlotManager().getSlowSlots(),
                 "Manager 2 should have 4 slow slots (20% of 20)");
-        assertEquals(16, manager2.getSlotManager().getFastSlots(), 
+        assertEquals(16, manager2.getSlotManager().getFastSlots(),
                 "Manager 2 should have 16 fast slots (80% of 20)");
     }
 
@@ -136,7 +139,7 @@ public class PerDatasourceSlowQuerySegregationTest {
         // Create properties
         Properties clientProperties = new Properties();
         clientProperties.setProperty("ojp.connection.pool.maximumPoolSize", "15");
-        
+
         Map<String, Object> propertiesMap = new HashMap<>();
         for (String key : clientProperties.stringPropertyNames()) {
             propertiesMap.put(key, clientProperties.getProperty(key));
@@ -156,17 +159,17 @@ public class PerDatasourceSlowQuerySegregationTest {
 
         // Use reflection to call the private method to get manager
         String connHash = ConnectionHashGenerator.hashConnectionDetails(connectionDetails);
-        
+
         java.lang.reflect.Method getManagerMethod = StatementServiceImpl.class
                 .getDeclaredMethod("getSlowQuerySegregationManagerForConnection", String.class);
         getManagerMethod.setAccessible(true);
-        
-        SlowQuerySegregationManager manager = 
+
+        SlowQuerySegregationManager manager =
                 (SlowQuerySegregationManager) getManagerMethod.invoke(statementService, connHash);
 
         assertNotNull(manager, "Should return existing manager for connection hash");
         assertTrue(manager.isEnabled(), "Manager should be enabled");
-        assertEquals(15, manager.getSlotManager().getTotalSlots(), 
+        assertEquals(15, manager.getSlotManager().getTotalSlots(),
                 "Manager should have 15 total slots based on pool size");
     }
 
@@ -176,8 +179,8 @@ public class PerDatasourceSlowQuerySegregationTest {
         java.lang.reflect.Method getManagerMethod = StatementServiceImpl.class
                 .getDeclaredMethod("getSlowQuerySegregationManagerForConnection", String.class);
         getManagerMethod.setAccessible(true);
-        
-        SlowQuerySegregationManager manager = 
+
+        SlowQuerySegregationManager manager =
                 (SlowQuerySegregationManager) getManagerMethod.invoke(statementService, "non-existent-hash");
 
         assertNotNull(manager, "Should return fallback manager for non-existent connection hash");

@@ -7,17 +7,17 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.sql.Blob;
-import java.sql.SQLException;
-import java.util.concurrent.ConcurrentHashMap;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.Mockito.*;
 
 /**
  * Test for LOB null handling scenarios that can cause hanging.
  * This test specifically validates the fix for issue #23.
  */
-public class LobNullHandlingTest {
+ class LobNullHandlingTest {
 
     @Mock
     private SessionManager sessionManager;
@@ -28,14 +28,14 @@ public class LobNullHandlingTest {
     private String testLobUUID;
     
     @BeforeEach
-    void setUp() {
+     void setUp() {
         MockitoAnnotations.openMocks(this);
         testLobUUID = "test-lob-uuid";
         when(sessionInfo.getSessionUUID()).thenReturn("test-session-uuid");
     }
 
     @Test
-    void testGetLobReturnsNull_ShouldNotCauseNullPointerException() {
+     void testGetLobReturnsNull_ShouldNotCauseNullPointerException() {
         // Arrange: Mock sessionManager.getLob to return null (the problematic scenario)
         when(sessionManager.getLob(sessionInfo, testLobUUID)).thenReturn(null);
         
@@ -48,7 +48,7 @@ public class LobNullHandlingTest {
     }
 
     @Test
-    void testLobOperationWithNullBlob_ShouldHandleGracefully() {
+     void testLobOperationWithNullBlob_ShouldHandleGracefully() {
         // This test validates that our fix will handle null Blob gracefully
         // instead of causing NPE that leads to hanging
         
@@ -70,7 +70,7 @@ public class LobNullHandlingTest {
     }
 
     @Test 
-    void testConcurrentLobAccess_ShouldNotCauseConcurrencyIssues() {
+     void testConcurrentLobAccess_ShouldNotCauseConcurrencyIssues() {
         // This test simulates concurrent access that might cause race conditions
         
         // Arrange
