@@ -5,7 +5,11 @@ import org.junit.jupiter.api.Test;
 
 import java.util.Map;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ClusterHealthTrackerTest {
 
@@ -19,9 +23,9 @@ class ClusterHealthTrackerTest {
     @Test
     void testParseClusterHealth() {
         String clusterHealth = "192.168.1.1:1059(UP);192.168.1.2:1059(DOWN);192.168.1.3:1059(UP)";
-        
+
         Map<String, String> healthMap = tracker.parseClusterHealth(clusterHealth);
-        
+
         assertEquals(3, healthMap.size());
         assertEquals("UP", healthMap.get("192.168.1.1:1059"));
         assertEquals("DOWN", healthMap.get("192.168.1.2:1059"));
@@ -32,7 +36,7 @@ class ClusterHealthTrackerTest {
     void testParseClusterHealthEmpty() {
         Map<String, String> healthMap = tracker.parseClusterHealth("");
         assertTrue(healthMap.isEmpty());
-        
+
         healthMap = tracker.parseClusterHealth(null);
         assertTrue(healthMap.isEmpty());
     }
@@ -40,9 +44,9 @@ class ClusterHealthTrackerTest {
     @Test
     void testParseClusterHealthInvalidFormat() {
         String clusterHealth = "invalid-format;192.168.1.1:1059(UP)";
-        
+
         Map<String, String> healthMap = tracker.parseClusterHealth(clusterHealth);
-        
+
         assertEquals(1, healthMap.size());
         assertEquals("UP", healthMap.get("192.168.1.1:1059"));
     }
@@ -50,27 +54,27 @@ class ClusterHealthTrackerTest {
     @Test
     void testCountHealthyServers() {
         String clusterHealth = "192.168.1.1:1059(UP);192.168.1.2:1059(DOWN);192.168.1.3:1059(UP)";
-        
+
         int healthyCount = tracker.countHealthyServers(clusterHealth);
-        
+
         assertEquals(2, healthyCount);
     }
 
     @Test
     void testCountHealthyServersAllDown() {
         String clusterHealth = "192.168.1.1:1059(DOWN);192.168.1.2:1059(DOWN)";
-        
+
         int healthyCount = tracker.countHealthyServers(clusterHealth);
-        
+
         assertEquals(0, healthyCount);
     }
 
     @Test
     void testCountHealthyServersAllUp() {
         String clusterHealth = "192.168.1.1:1059(UP);192.168.1.2:1059(UP);192.168.1.3:1059(UP)";
-        
+
         int healthyCount = tracker.countHealthyServers(clusterHealth);
-        
+
         assertEquals(3, healthyCount);
     }
 
@@ -78,9 +82,9 @@ class ClusterHealthTrackerTest {
     void testHasHealthChangedFirstReport() {
         String connHash = "conn1";
         String clusterHealth = "192.168.1.1:1059(UP);192.168.1.2:1059(UP)";
-        
+
         boolean changed = tracker.hasHealthChanged(connHash, clusterHealth);
-        
+
         // First report should trigger change to ensure pool rebalancing on server restart
         assertTrue(changed);
         assertEquals(clusterHealth, tracker.getLastKnownHealth(connHash));
@@ -90,10 +94,10 @@ class ClusterHealthTrackerTest {
     void testHasHealthChangedNoChange() {
         String connHash = "conn1";
         String clusterHealth = "192.168.1.1:1059(UP);192.168.1.2:1059(UP)";
-        
+
         tracker.hasHealthChanged(connHash, clusterHealth);
         boolean changed = tracker.hasHealthChanged(connHash, clusterHealth);
-        
+
         assertFalse(changed);
     }
 
@@ -102,10 +106,10 @@ class ClusterHealthTrackerTest {
         String connHash = "conn1";
         String initialHealth = "192.168.1.1:1059(UP);192.168.1.2:1059(UP)";
         String newHealth = "192.168.1.1:1059(UP);192.168.1.2:1059(DOWN)";
-        
+
         tracker.hasHealthChanged(connHash, initialHealth);
         boolean changed = tracker.hasHealthChanged(connHash, newHealth);
-        
+
         assertTrue(changed);
         assertEquals(newHealth, tracker.getLastKnownHealth(connHash));
     }
@@ -115,10 +119,10 @@ class ClusterHealthTrackerTest {
         String connHash = "conn1";
         String downHealth = "192.168.1.1:1059(UP);192.168.1.2:1059(DOWN)";
         String recoveredHealth = "192.168.1.1:1059(UP);192.168.1.2:1059(UP)";
-        
+
         tracker.hasHealthChanged(connHash, downHealth);
         boolean changed = tracker.hasHealthChanged(connHash, recoveredHealth);
-        
+
         assertTrue(changed);
         assertEquals(recoveredHealth, tracker.getLastKnownHealth(connHash));
     }
@@ -127,7 +131,7 @@ class ClusterHealthTrackerTest {
     void testHasHealthChangedNullConnHash() {
         boolean changed = tracker.hasHealthChanged(null, "192.168.1.1:1059(UP)");
         assertFalse(changed);
-        
+
         changed = tracker.hasHealthChanged("", "192.168.1.1:1059(UP)");
         assertFalse(changed);
     }
@@ -136,10 +140,10 @@ class ClusterHealthTrackerTest {
     void testRemoveTracking() {
         String connHash = "conn1";
         String clusterHealth = "192.168.1.1:1059(UP);192.168.1.2:1059(UP)";
-        
+
         tracker.hasHealthChanged(connHash, clusterHealth);
         assertNotNull(tracker.getLastKnownHealth(connHash));
-        
+
         tracker.removeTracking(connHash);
         assertNull(tracker.getLastKnownHealth(connHash));
     }
@@ -150,17 +154,17 @@ class ClusterHealthTrackerTest {
         String connHash2 = "conn2";
         String health1 = "192.168.1.1:1059(UP);192.168.1.2:1059(UP)";
         String health2 = "192.168.1.3:1059(UP);192.168.1.4:1059(DOWN)";
-        
+
         tracker.hasHealthChanged(connHash1, health1);
         tracker.hasHealthChanged(connHash2, health2);
-        
+
         assertEquals(health1, tracker.getLastKnownHealth(connHash1));
         assertEquals(health2, tracker.getLastKnownHealth(connHash2));
-        
+
         // Change one shouldn't affect the other
         String newHealth1 = "192.168.1.1:1059(DOWN);192.168.1.2:1059(UP)";
         boolean changed = tracker.hasHealthChanged(connHash1, newHealth1);
-        
+
         assertTrue(changed);
         assertEquals(newHealth1, tracker.getLastKnownHealth(connHash1));
         assertEquals(health2, tracker.getLastKnownHealth(connHash2));
@@ -169,10 +173,10 @@ class ClusterHealthTrackerTest {
     @Test
     void testParseCaseInsensitive() {
         String clusterHealth = "192.168.1.1:1059(up);192.168.1.2:1059(Down);192.168.1.3:1059(UP)";
-        
+
         // Count should work case-insensitively
         int healthyCount = tracker.countHealthyServers(clusterHealth);
-        
+
         assertEquals(2, healthyCount);
     }
 }
