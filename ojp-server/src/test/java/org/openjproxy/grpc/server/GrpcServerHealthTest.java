@@ -1,30 +1,30 @@
 package org.openjproxy.grpc.server;
 
-import org.openjproxy.grpc.GrpcChannelFactory;
 import io.grpc.ManagedChannel;
-import io.grpc.ManagedChannelBuilder;
 import io.grpc.health.v1.HealthCheckRequest;
 import io.grpc.health.v1.HealthCheckResponse;
 import io.grpc.health.v1.HealthGrpc;
-import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.openjproxy.grpc.GrpcChannelFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.openjproxy.grpc.server.OjpHealthManager.*;
+import static org.openjproxy.grpc.server.OjpHealthManager.Services;
 
 /**
  * Integration test for the complete GrpcServer health status functionality.
  * This test verifies that the health endpoints work correctly with the actual server implementation.
  */
-@Slf4j
 class GrpcServerHealthTest {
+    private static final Logger logger = LoggerFactory.getLogger(GrpcServerHealthTest.class);
 
     private static ExecutorService virtualThreadExecutor;
     private ManagedChannel channel;
@@ -113,7 +113,7 @@ class GrpcServerHealthTest {
                 String[] args = {};
                 GrpcServer.main(args);
             } catch (Exception ignored) {
-                log.error("Server interrupted");
+                logger.error("Server interrupted");
             }
         });
 

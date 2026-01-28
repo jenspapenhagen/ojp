@@ -1,6 +1,5 @@
 package openjproxy.jdbc;
 
-import lombok.extern.slf4j.Slf4j;
 import openjproxy.jdbc.testutil.SQLServerConnectionProvider;
 import openjproxy.jdbc.testutil.TestDBUtils;
 import openjproxy.jdbc.testutil.TestDBUtils.ConnectionResult;
@@ -9,6 +8,8 @@ import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvFileSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -16,7 +17,6 @@ import java.sql.SQLException;
 
 import static openjproxy.helpers.SqlHelper.executeUpdate;
 
-@Slf4j
 public class BasicCrudIntegrationTest {
 
     private static boolean isH2TestEnabled;
@@ -53,7 +53,7 @@ public class BasicCrudIntegrationTest {
         if (url.toLowerCase().contains("postgresql") && !isPostgresTestEnabled) {
             Assumptions.assumeFalse(true, "Skipping Postgres tests");
         }
-        
+
         // Skip MySQL tests if not enabled
         if (url.toLowerCase().contains("mysql") && !isMySQLTestEnabled) {
             Assumptions.assumeFalse(true, "Skipping MySQL tests");
@@ -95,7 +95,7 @@ public class BasicCrudIntegrationTest {
             tablePrefix = "oracle_";
         } else if (url.toLowerCase().contains("sqlserver")) {
             url = SQLServerConnectionProvider.getOjpProxyAddress();
-            tablePrefix = "sqlserver_" +  (isXA ? "xa_" : "nonxa_");
+            tablePrefix = "sqlserver_" + (isXA ? "xa_" : "nonxa_");
         } else if (url.toLowerCase().contains("db2")) {
             tablePrefix = "db2_";
         } else if (url.toLowerCase().contains("26257")) {
@@ -138,7 +138,7 @@ public class BasicCrudIntegrationTest {
                 // Ignore rollback errors
             }
         }
-        
+
         // Start new transaction for next operation
         connResult.startXATransactionIfNeeded();
 
@@ -147,13 +147,13 @@ public class BasicCrudIntegrationTest {
                 "title VARCHAR(50) NOT NULL" +
                 ")");
         connResult.commit();
-        
+
         // Start new transaction for next operation
         connResult.startXATransactionIfNeeded();
 
         executeUpdate(conn, " insert into " + tableName + " (id, title) values (1, 'TITLE_1')");
         connResult.commit();
-        
+
         // Start new transaction for next operation
         connResult.startXATransactionIfNeeded();
 
@@ -168,7 +168,7 @@ public class BasicCrudIntegrationTest {
 
         executeUpdate(conn, "update " + tableName + " set title='TITLE_1_UPDATED'");
         connResult.commit();
-        
+
         // Start new transaction for next operation
         connResult.startXATransactionIfNeeded();
 
@@ -181,7 +181,7 @@ public class BasicCrudIntegrationTest {
 
         executeUpdate(conn, " delete from " + tableName + " where id=1 and title='TITLE_1_UPDATED'");
         connResult.commit();
-        
+
         // Start new transaction for next operation
         connResult.startXATransactionIfNeeded();
 
@@ -190,7 +190,7 @@ public class BasicCrudIntegrationTest {
 
         resultSet.close();
         psSelect.close();
-        
+
         // Clean up - drop the test table
         try {
             executeUpdate(conn, "drop table " + tableName);
@@ -198,7 +198,7 @@ public class BasicCrudIntegrationTest {
         } catch (Exception e) {
             // Ignore cleanup errors
         }
-        
+
         connResult.close();
     }
 
