@@ -3,7 +3,6 @@ package openjproxy.jdbc;
 import openjproxy.jdbc.testutil.SQLServerConnectionProvider;
 import openjproxy.jdbc.testutil.TestDBUtils;
 import openjproxy.jdbc.testutil.TestDBUtils.ConnectionResult;
-import org.junit.Assert;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -14,8 +13,10 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 
 import static openjproxy.helpers.SqlHelper.executeUpdate;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
- class BasicCrudIntegrationTest {
+class BasicCrudIntegrationTest {
 
     private static boolean isH2TestEnabled;
     private static boolean isPostgresTestEnabled;
@@ -161,8 +162,8 @@ import static openjproxy.helpers.SqlHelper.executeUpdate;
         resultSet.next();
         int id = resultSet.getInt(1);
         String title = resultSet.getString(2);
-        Assert.assertEquals(1, id);
-        Assert.assertEquals("TITLE_1", title);
+        assertEquals(1, id);
+        assertEquals("TITLE_1", title);
 
         executeUpdate(conn, "update " + tableName + " set title='TITLE_1_UPDATED'");
         connResult.commit();
@@ -174,8 +175,8 @@ import static openjproxy.helpers.SqlHelper.executeUpdate;
         resultSetUpdated.next();
         int idUpdated = resultSetUpdated.getInt(1);
         String titleUpdated = resultSetUpdated.getString(2);
-        Assert.assertEquals(1, idUpdated);
-        Assert.assertEquals("TITLE_1_UPDATED", titleUpdated);
+        assertEquals(1, idUpdated);
+        assertEquals("TITLE_1_UPDATED", titleUpdated);
 
         executeUpdate(conn, " delete from " + tableName + " where id=1 and title='TITLE_1_UPDATED'");
         connResult.commit();
@@ -184,7 +185,7 @@ import static openjproxy.helpers.SqlHelper.executeUpdate;
         connResult.startXATransactionIfNeeded();
 
         ResultSet resultSetAfterDeletion = psSelect.executeQuery();
-        Assert.assertFalse(resultSetAfterDeletion.next());
+        assertFalse(resultSetAfterDeletion.next());
 
         resultSet.close();
         psSelect.close();

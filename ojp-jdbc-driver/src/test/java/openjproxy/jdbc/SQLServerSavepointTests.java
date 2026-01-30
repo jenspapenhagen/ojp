@@ -74,8 +74,8 @@ public class SQLServerSavepointTests {
             // Verify both records exist
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM sqlserver_savepoint_test");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals(2, rs.getInt(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals(2, rs.getInt(1));
             rs.close();
 
             // Rollback to savepoint
@@ -83,13 +83,13 @@ public class SQLServerSavepointTests {
 
             // Verify only initial data remains
             rs = stmt.executeQuery("SELECT COUNT(*) FROM sqlserver_savepoint_test");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals(1, rs.getInt(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals(1, rs.getInt(1));
             rs.close();
 
             rs = stmt.executeQuery("SELECT name FROM sqlserver_savepoint_test WHERE id = 1");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals("Initial Data", rs.getString(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals("Initial Data", rs.getString(1));
             rs.close();
 
             stmt.close();
@@ -149,8 +149,8 @@ public class SQLServerSavepointTests {
             // Verify all three records exist
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM sqlserver_nested_savepoint_test");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals(3, rs.getInt(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals(3, rs.getInt(1));
             rs.close();
 
             // Rollback to level 2 savepoint
@@ -158,8 +158,8 @@ public class SQLServerSavepointTests {
 
             // Should have 2 records
             rs = stmt.executeQuery("SELECT COUNT(*) FROM sqlserver_nested_savepoint_test");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals(2, rs.getInt(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals(2, rs.getInt(1));
             rs.close();
 
             // Rollback to level 1 savepoint
@@ -167,13 +167,13 @@ public class SQLServerSavepointTests {
 
             // Should have 1 record
             rs = stmt.executeQuery("SELECT COUNT(*) FROM sqlserver_nested_savepoint_test");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals(1, rs.getInt(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals(1, rs.getInt(1));
             rs.close();
 
             rs = stmt.executeQuery("SELECT name FROM sqlserver_nested_savepoint_test WHERE id = 1");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals("Level 0", rs.getString(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals("Level 0", rs.getString(1));
             rs.close();
 
             stmt.close();
@@ -235,8 +235,8 @@ public class SQLServerSavepointTests {
             // Verify data is still there
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM sqlserver_savepoint_release_test");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals(2, rs.getInt(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals(2, rs.getInt(1));
             rs.close();
             stmt.close();
 
@@ -292,8 +292,8 @@ public class SQLServerSavepointTests {
             // Verify all data exists
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM sqlserver_savepoint_batch_test");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals(5, rs.getInt(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals(5, rs.getInt(1));
             rs.close();
 
             // Rollback the batch operations
@@ -301,13 +301,13 @@ public class SQLServerSavepointTests {
 
             // Should only have initial data
             rs = stmt.executeQuery("SELECT COUNT(*) FROM sqlserver_savepoint_batch_test");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals(1, rs.getInt(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals(1, rs.getInt(1));
             rs.close();
 
             rs = stmt.executeQuery("SELECT name FROM sqlserver_savepoint_batch_test WHERE id = 1");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals("Initial", rs.getString(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals("Initial", rs.getString(1));
             rs.close();
 
             stmt.close();
@@ -379,15 +379,15 @@ public class SQLServerSavepointTests {
             // Verify final state
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM sqlserver_savepoint_exception_test");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals(2, rs.getInt(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals(2, rs.getInt(1));
             rs.close();
 
             rs = stmt.executeQuery("SELECT name FROM sqlserver_savepoint_exception_test ORDER BY id");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals("Valid Data", rs.getString(1));
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals("Recovery Data", rs.getString(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals("Valid Data", rs.getString(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals("Recovery Data", rs.getString(1));
             rs.close();
 
             stmt.close();

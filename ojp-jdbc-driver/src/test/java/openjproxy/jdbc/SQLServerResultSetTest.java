@@ -57,10 +57,10 @@ public class SQLServerResultSetTest {
         int count = 0;
         while (rs.next()) {
             count++;
-            Assert.assertEquals(count, rs.getInt("id"));
-            Assert.assertEquals("Test " + count, rs.getString("name"));
+            Assertions.assertEquals(count, rs.getInt("id"));
+            Assertions.assertEquals("Test " + count, rs.getString("name"));
         }
-        Assert.assertEquals(5, count);
+        Assertions.assertEquals(5, count);
 
         rs.close();
         ps.close();
@@ -99,20 +99,20 @@ public class SQLServerResultSetTest {
         ResultSet rs = ps.executeQuery();
 
         // Test scrollable operations
-        Assert.assertTrue("Should be able to move to first", rs.first());
-        Assert.assertEquals(1, rs.getInt("id"));
+        Assertions.assertTrue("Should be able to move to first", rs.first());
+        Assertions.assertEquals(1, rs.getInt("id"));
 
-        Assert.assertTrue("Should be able to move to last", rs.last());
-        Assert.assertEquals(10, rs.getInt("id"));
+        Assertions.assertTrue("Should be able to move to last", rs.last());
+        Assertions.assertEquals(10, rs.getInt("id"));
 
-        Assert.assertTrue("Should be able to move to absolute position", rs.absolute(5));
-        Assert.assertEquals(5, rs.getInt("id"));
+        Assertions.assertTrue("Should be able to move to absolute position", rs.absolute(5));
+        Assertions.assertEquals(5, rs.getInt("id"));
 
-        Assert.assertTrue("Should be able to move relative", rs.relative(2));
-        Assert.assertEquals(7, rs.getInt("id"));
+        Assertions.assertTrue("Should be able to move relative", rs.relative(2));
+        Assertions.assertEquals(7, rs.getInt("id"));
 
-        Assert.assertTrue("Should be able to move previous", rs.previous());
-        Assert.assertEquals(6, rs.getInt("id"));
+        Assertions.assertTrue("Should be able to move previous", rs.previous());
+        Assertions.assertEquals(6, rs.getInt("id"));
 
         rs.close();
         ps.close();
@@ -150,27 +150,27 @@ public class SQLServerResultSetTest {
         PreparedStatement ps = conn.prepareStatement("SELECT * FROM sqlserver_rs_types_test");
         ResultSet rs = ps.executeQuery();
 
-        Assert.assertTrue(rs.next());
+        Assertions.assertTrue(rs.next());
 
         // Test getters by index
-        Assert.assertEquals(42, rs.getInt(1));
-        Assert.assertEquals("Type Test", rs.getString(2));
-        Assert.assertEquals(3.14159, rs.getDouble(3), 0.00001);
-        Assert.assertEquals(9876543210L, rs.getLong(4));
-        Assert.assertEquals((byte) 255, rs.getByte(5) );
-        Assert.assertEquals(32000, rs.getShort(6));
-        Assert.assertTrue(rs.getBoolean(7));
-        Assert.assertEquals(new java.math.BigDecimal("123.45"), rs.getBigDecimal(8));
+        Assertions.assertEquals(42, rs.getInt(1));
+        Assertions.assertEquals("Type Test", rs.getString(2));
+        Assertions.assertEquals(3.14159, rs.getDouble(3), 0.00001);
+        Assertions.assertEquals(9876543210L, rs.getLong(4));
+        Assertions.assertEquals((byte) 255, rs.getByte(5) );
+        Assertions.assertEquals(32000, rs.getShort(6));
+        Assertions.assertTrue(rs.getBoolean(7));
+        Assertions.assertEquals(new java.math.BigDecimal("123.45"), rs.getBigDecimal(8));
 
         // Test getters by name
-        Assert.assertEquals(42, rs.getInt("val_int"));
-        Assert.assertEquals("Type Test", rs.getString("val_varchar"));
-        Assert.assertEquals(3.14159, rs.getDouble("val_double_precision"), 0.00001);
-        Assert.assertEquals(9876543210L, rs.getLong("val_bigint"));
-        Assert.assertEquals((byte) 255, rs.getByte("val_tinyint"));
-        Assert.assertEquals(32000, rs.getShort("val_smallint"));
-        Assert.assertTrue(rs.getBoolean("val_boolean"));
-        Assert.assertEquals(new java.math.BigDecimal("123.45"), rs.getBigDecimal("val_decimal"));
+        Assertions.assertEquals(42, rs.getInt("val_int"));
+        Assertions.assertEquals("Type Test", rs.getString("val_varchar"));
+        Assertions.assertEquals(3.14159, rs.getDouble("val_double_precision"), 0.00001);
+        Assertions.assertEquals(9876543210L, rs.getLong("val_bigint"));
+        Assertions.assertEquals((byte) 255, rs.getByte("val_tinyint"));
+        Assertions.assertEquals(32000, rs.getShort("val_smallint"));
+        Assertions.assertTrue(rs.getBoolean("val_boolean"));
+        Assertions.assertEquals(new java.math.BigDecimal("123.45"), rs.getBigDecimal("val_decimal"));
 
         rs.close();
         ps.close();
@@ -200,23 +200,23 @@ public class SQLServerResultSetTest {
         PreparedStatement ps = conn.prepareStatement("SELECT * FROM sqlserver_rs_null_test");
         ResultSet rs = ps.executeQuery();
 
-        Assert.assertTrue(rs.next());
+        Assertions.assertTrue(rs.next());
 
         // Test non-null values
-        Assert.assertEquals(1, rs.getInt("val_int"));
-        Assert.assertFalse(rs.wasNull());
-        Assert.assertEquals("Test", rs.getString("val_varchar"));
-        Assert.assertFalse(rs.wasNull());
+        Assertions.assertEquals(1, rs.getInt("val_int"));
+        Assertions.assertFalse(rs.wasNull());
+        Assertions.assertEquals("Test", rs.getString("val_varchar"));
+        Assertions.assertFalse(rs.wasNull());
 
         // Test null values
-        Assert.assertEquals(0.0, rs.getDouble("val_double_precision"), 0.0);
-        Assert.assertTrue(rs.wasNull());
+        Assertions.assertEquals(0.0, rs.getDouble("val_double_precision"), 0.0);
+        Assertions.assertTrue(rs.wasNull());
 
-        Assert.assertEquals(0L, rs.getLong("val_bigint"));
-        Assert.assertTrue(rs.wasNull());
+        Assertions.assertEquals(0L, rs.getLong("val_bigint"));
+        Assertions.assertTrue(rs.wasNull());
 
-        Assert.assertNull(rs.getObject("val_double_precision"));
-        Assert.assertNull(rs.getObject("val_bigint"));
+        Assertions.assertNull(rs.getObject("val_double_precision"));
+        Assertions.assertNull(rs.getObject("val_bigint"));
 
         rs.close();
         ps.close();
@@ -264,15 +264,15 @@ public class SQLServerResultSetTest {
         PreparedStatement ps = conn.prepareStatement("SELECT * FROM sqlserver_rs_binary_test");
         ResultSet rs = ps.executeQuery();
 
-        Assert.assertTrue(rs.next());
+        Assertions.assertTrue(rs.next());
 
         byte[] retrievedSmall = rs.getBytes("binary_data");
         Assert.assertArrayEquals(smallBinary, retrievedSmall);
 
         byte[] retrievedLarge = rs.getBytes("large_binary");
-        Assert.assertEquals(largeBinary.length, retrievedLarge.length);
+        Assertions.assertEquals(largeBinary.length, retrievedLarge.length);
         for (int i = 0; i < 100; i++) { // Check first 100 bytes
-            Assert.assertEquals(largeBinary[i], retrievedLarge[i]);
+            Assertions.assertEquals(largeBinary[i], retrievedLarge[i]);
         }
 
         rs.close();
@@ -320,21 +320,21 @@ public class SQLServerResultSetTest {
         PreparedStatement ps = conn.prepareStatement("SELECT * FROM sqlserver_rs_datetime_test");
         ResultSet rs = ps.executeQuery();
 
-        Assert.assertTrue(rs.next());
+        Assertions.assertTrue(rs.next());
 
         Date retrievedDate = rs.getDate("date_col");
-        Assert.assertEquals(Date.valueOf("2025-01-15"), retrievedDate);
+        Assertions.assertEquals(Date.valueOf("2025-01-15"), retrievedDate);
 
         Time retrievedTime = rs.getTime("time_col");
-        Assert.assertEquals(Time.valueOf("14:30:45"), retrievedTime);
+        Assertions.assertEquals(Time.valueOf("14:30:45"), retrievedTime);
 
         Timestamp retrievedTimestamp = rs.getTimestamp("datetime2_col");
-        Assert.assertNotNull(retrievedTimestamp);
-        Assert.assertTrue(retrievedTimestamp.toString().contains("2025-01-15"));
+        Assertions.assertNotNull(retrievedTimestamp);
+        Assertions.assertTrue(retrievedTimestamp.toString().contains("2025-01-15"));
 
         OffsetDateTime retrievedOffset = rs.getObject("datetimeoffset_col", OffsetDateTime.class);
-        Assert.assertNotNull(retrievedOffset);
-        Assert.assertTrue(retrievedOffset.toString().contains("2025-01-15"));
+        Assertions.assertNotNull(retrievedOffset);
+        Assertions.assertTrue(retrievedOffset.toString().contains("2025-01-15"));
 
         rs.close();
         ps.close();

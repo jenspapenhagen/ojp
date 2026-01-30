@@ -42,35 +42,35 @@ public class SQLServerStatementExtensiveTests {
         int insertCount = stmt.executeUpdate(
                 "INSERT INTO sqlserver_stmt_basic_test (id, name) VALUES (100, N'Statement Test')"
         );
-        Assert.assertEquals(1, insertCount);
+        Assertions.assertEquals(1, insertCount);
 
         // Test SELECT
         ResultSet rs = stmt.executeQuery("SELECT * FROM sqlserver_stmt_basic_test WHERE id = 100");
-        Assert.assertTrue(rs.next());
-        Assert.assertEquals(100, rs.getInt("id"));
-        Assert.assertEquals("Statement Test", rs.getString("name"));
+        Assertions.assertTrue(rs.next());
+        Assertions.assertEquals(100, rs.getInt("id"));
+        Assertions.assertEquals("Statement Test", rs.getString("name"));
         rs.close();
 
         // Test UPDATE
         int updateCount = stmt.executeUpdate(
                 "UPDATE sqlserver_stmt_basic_test SET name = N'Updated Test' WHERE id = 100"
         );
-        Assert.assertEquals(1, updateCount);
+        Assertions.assertEquals(1, updateCount);
 
         // Verify update
         rs = stmt.executeQuery("SELECT name FROM sqlserver_stmt_basic_test WHERE id = 100");
-        Assert.assertTrue(rs.next());
-        Assert.assertEquals("Updated Test", rs.getString("name"));
+        Assertions.assertTrue(rs.next());
+        Assertions.assertEquals("Updated Test", rs.getString("name"));
         rs.close();
 
         // Test DELETE
         int deleteCount = stmt.executeUpdate("DELETE FROM sqlserver_stmt_basic_test WHERE id = 100");
-        Assert.assertEquals(1, deleteCount);
+        Assertions.assertEquals(1, deleteCount);
 
         // Verify delete
         rs = stmt.executeQuery("SELECT COUNT(*) FROM sqlserver_stmt_basic_test");
-        Assert.assertTrue(rs.next());
-        Assert.assertEquals(2, rs.getInt(1));
+        Assertions.assertTrue(rs.next());
+        Assertions.assertEquals(2, rs.getInt(1));
         rs.close();
 
         stmt.close();
@@ -107,27 +107,27 @@ public class SQLServerStatementExtensiveTests {
         int count = 0;
         while (rs.next()) {
             count++;
-            Assert.assertEquals(count, rs.getInt("id"));
-            Assert.assertEquals("Test " + count, rs.getString("name"));
+            Assertions.assertEquals(count, rs.getInt("id"));
+            Assertions.assertEquals("Test " + count, rs.getString("name"));
         }
-        Assert.assertEquals(2, count);
+        Assertions.assertEquals(2, count);
         rs.close();
 
         // Test SQL Server-specific OFFSET/FETCH
         rs = stmt.executeQuery(
                 "SELECT id, name FROM sqlserver_syntax_test ORDER BY id OFFSET 1 ROWS FETCH NEXT 1 ROWS ONLY"
         );
-        Assert.assertTrue(rs.next());
-        Assert.assertEquals(2, rs.getInt("id"));
-        Assert.assertEquals("Test 2", rs.getString("name"));
-        Assert.assertFalse(rs.next());
+        Assertions.assertTrue(rs.next());
+        Assertions.assertEquals(2, rs.getInt("id"));
+        Assertions.assertEquals("Test 2", rs.getString("name"));
+        Assertions.assertFalse(rs.next());
         rs.close();
 
         // Test SQL Server-specific OUTPUT clause
         ResultSet outputRs = stmt.executeQuery(
                 "INSERT INTO sqlserver_syntax_test (name) OUTPUT INSERTED.id VALUES (N'Test with OUTPUT')"
         );
-        Assert.assertTrue(outputRs.next());
+        Assertions.assertTrue(outputRs.next());
         int insertedId = outputRs.getInt(1);
         System.out.println("Inserted ID: " + insertedId);
         outputRs.close();
@@ -157,22 +157,22 @@ public class SQLServerStatementExtensiveTests {
 
         // Execute batch
         int[] results = stmt.executeBatch();
-        Assert.assertEquals(4, results.length);
+        Assertions.assertEquals(4, results.length);
         for (int i = 0; i < 3; i++) {
-            Assert.assertEquals(1, results[i]); // Each INSERT affects 1 row
+            Assertions.assertEquals(1, results[i]); // Each INSERT affects 1 row
         }
-        Assert.assertEquals(1, results[3]); // UPDATE affects 1 row
+        Assertions.assertEquals(1, results[3]); // UPDATE affects 1 row
 
         // Verify batch results
         ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM sqlserver_batch_stmt_test");
-        Assert.assertTrue(rs.next());
-        Assert.assertEquals(3, rs.getInt(1));
+        Assertions.assertTrue(rs.next());
+        Assertions.assertEquals(3, rs.getInt(1));
         rs.close();
 
         rs = stmt.executeQuery("SELECT name FROM sqlserver_batch_stmt_test WHERE id = 10");
 
-        Assert.assertTrue(rs.next());
-        Assert.assertEquals("Updated Batch 1", rs.getString(1));
+        Assertions.assertTrue(rs.next());
+        Assertions.assertEquals("Updated Batch 1", rs.getString(1));
         rs.close();
 
         stmt.close();
@@ -212,9 +212,9 @@ public class SQLServerStatementExtensiveTests {
         cs.setInt(1, 11);
         ResultSet rs = cs.executeQuery();
 
-        Assert.assertTrue(rs.next());
-        Assert.assertEquals(11, rs.getInt("id"));
-        Assert.assertEquals("Procedure Test", rs.getString("name"));
+        Assertions.assertTrue(rs.next());
+        Assertions.assertEquals(11, rs.getInt("id"));
+        Assertions.assertEquals("Procedure Test", rs.getString("name"));
         rs.close();
         cs.close();
 
@@ -245,8 +245,8 @@ public class SQLServerStatementExtensiveTests {
 
             // Verify data exists in transaction
             ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM sqlserver_txn_stmt_test");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals(1, rs.getInt(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals(1, rs.getInt(1));
             rs.close();
 
             // Test explicit transaction commands
@@ -256,8 +256,8 @@ public class SQLServerStatementExtensiveTests {
             
             // Verify both records
             rs = stmt.executeQuery("SELECT COUNT(*) FROM sqlserver_txn_stmt_test");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals(2, rs.getInt(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals(2, rs.getInt(1));
             rs.close();
 
             // Rollback to savepoint
@@ -265,8 +265,8 @@ public class SQLServerStatementExtensiveTests {
 
             // Should only have first record
             rs = stmt.executeQuery("SELECT COUNT(*) FROM sqlserver_txn_stmt_test");
-            Assert.assertTrue(rs.next());
-            Assert.assertEquals(1, rs.getInt(1));
+            Assertions.assertTrue(rs.next());
+            Assertions.assertEquals(1, rs.getInt(1));
             rs.close();
 
             conn.commit();
@@ -302,10 +302,10 @@ public class SQLServerStatementExtensiveTests {
         int count = 0;
         while (rs.next()) {
             count++;
-            Assert.assertEquals(count, rs.getInt("id"));
-            Assert.assertEquals("Record " + count, rs.getString("name"));
+            Assertions.assertEquals(count, rs.getInt("id"));
+            Assertions.assertEquals("Record " + count, rs.getString("name"));
         }
-        Assert.assertEquals(100, count);
+        Assertions.assertEquals(100, count);
         rs.close();
 
         stmt.close();
@@ -324,20 +324,20 @@ public class SQLServerStatementExtensiveTests {
         Statement stmt = conn.createStatement();
 
         // Test default properties
-        Assert.assertEquals(ResultSet.TYPE_FORWARD_ONLY, stmt.getResultSetType());
-        Assert.assertEquals(ResultSet.CONCUR_READ_ONLY, stmt.getResultSetConcurrency());
+        Assertions.assertEquals(ResultSet.TYPE_FORWARD_ONLY, stmt.getResultSetType());
+        Assertions.assertEquals(ResultSet.CONCUR_READ_ONLY, stmt.getResultSetConcurrency());
 
         // Test fetch size
         stmt.setFetchSize(50);
-        Assert.assertEquals(50, stmt.getFetchSize());
+        Assertions.assertEquals(50, stmt.getFetchSize());
 
         // Test max rows
         stmt.setMaxRows(100);
-        Assert.assertEquals(100, stmt.getMaxRows());
+        Assertions.assertEquals(100, stmt.getMaxRows());
 
         // Test query timeout
         stmt.setQueryTimeout(30);
-        Assert.assertEquals(30, stmt.getQueryTimeout());
+        Assertions.assertEquals(30, stmt.getQueryTimeout());
 
         // Test escape processing
         stmt.setEscapeProcessing(false);
@@ -350,7 +350,7 @@ public class SQLServerStatementExtensiveTests {
                 ResultSet.TYPE_SCROLL_INSENSITIVE,
                 ResultSet.CONCUR_READ_ONLY
         );
-        Assert.assertEquals(ResultSet.TYPE_FORWARD_ONLY, scrollableStmt.getResultSetType());
+        Assertions.assertEquals(ResultSet.TYPE_FORWARD_ONLY, scrollableStmt.getResultSetType());
         scrollableStmt.close();
 
         conn.close();

@@ -4,6 +4,7 @@ import io.grpc.StatusRuntimeException;
 import lombok.SneakyThrows;
 import openjproxy.jdbc.testutil.TestDBUtils;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -29,6 +30,7 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.Executor;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -61,7 +63,7 @@ public class H2ConnectionExtensiveTests {
     @CsvFileSource(resources = "/h2_connection.csv")
     void testConnectionProperties(String driverClass, String url, String user, String password) throws SQLException {
         this.setUp(driverClass, url, user, password);
-        assertFalse( connection.isClosed());
+        Assertions.assertFalse(connection.isClosed());
         assertTrue( connection.isValid(5));
         assertEquals("PUBLIC", connection.getSchema());
         assertNull(connection.getClientInfo("nonexistent"));
@@ -73,7 +75,7 @@ public class H2ConnectionExtensiveTests {
         this.setUp(driverClass, url, user, password);
         assertTrue( connection.getAutoCommit());
         connection.setAutoCommit(false);
-        assertFalse( connection.getAutoCommit());
+        Assertions.assertFalse(connection.getAutoCommit());
 
         int isolation = connection.getTransactionIsolation();
         assertEquals(Connection.TRANSACTION_READ_COMMITTED, isolation);

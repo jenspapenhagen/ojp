@@ -173,7 +173,7 @@ class DbcpConnectionPoolProviderTest {
                 .build();
 
         DataSource ds2 = provider.createDataSource(configFalse);
-        assertFalse(((BasicDataSource) ds2).getDefaultAutoCommit());
+        assertFalse((BasicDataSource) ds2).getDefaultAutoCommit());
         provider.closeDataSource(ds2);
     }
 
@@ -254,7 +254,7 @@ class DbcpConnectionPoolProviderTest {
         assertEquals(2, stats.get("activeConnections"));
         assertEquals(10, stats.get("maxPoolSize"));
         assertEquals(2, stats.get("minIdle"));
-        assertFalse((Boolean) stats.get("isClosed"));
+        assertFalse(Boolean) stats.get("isClosed"));
 
         conn1.close();
         conn2.close();

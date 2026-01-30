@@ -169,7 +169,7 @@ class HikariConnectionPoolProviderTest {
                 .build();
 
         DataSource ds2 = provider.createDataSource(configFalse);
-        assertFalse(((HikariDataSource) ds2).isAutoCommit());
+        assertFalse((HikariDataSource) ds2).isAutoCommit());
         provider.closeDataSource(ds2);
     }
 
@@ -230,7 +230,7 @@ class HikariConnectionPoolProviderTest {
         assertEquals(2, stats.get("activeConnections"));
         assertEquals(10, stats.get("maxPoolSize"));
         assertEquals(2, stats.get("minIdle"));
-        assertFalse((Boolean) stats.get("isClosed"));
+        assertFalse(Boolean) stats.get("isClosed"));
 
         conn1.close();
         conn2.close();

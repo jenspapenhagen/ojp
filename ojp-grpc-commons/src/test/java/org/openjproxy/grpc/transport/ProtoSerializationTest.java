@@ -65,10 +65,11 @@ public class ProtoSerializationTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> result = ProtoSerialization.deserializeFromTransport(bytes, Map.class);
 
+        assertNotNull(result);
         assertEquals("hello", result.get("string"));
         assertEquals(42.0, result.get("int")); // Numbers are stored as doubles
         assertEquals(3.14, result.get("double"));
-        assertTrue( result.get("boolean"));
+        assertTrue((Boolean) result.get("boolean"));
         assertNull(result.get("null"));
     }
 
@@ -121,11 +122,12 @@ public class ProtoSerializationTest {
         @SuppressWarnings("unchecked")
         List<Object> result = ProtoSerialization.deserializeFromTransport(bytes, List.class);
 
+        assertNotNull(result);
         assertEquals(5, result.size());
         assertEquals("string", result.get(0));
         assertEquals(42.0, result.get(1)); // Numbers are stored as doubles
         assertEquals(3.14, result.get(2));
-        assertTrue( result.get(3));
+        assertTrue((Boolean) result.get(3));
         assertNull(result.get(4));
     }
 
