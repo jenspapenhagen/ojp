@@ -41,17 +41,17 @@ public class SQLServerDatabaseMetaDataExtensiveTests {
         DatabaseMetaData meta = connection.getMetaData();
 
         // 1–5: Basic database information (SQL Server-specific values)
-        Assertions.assertEquals(true, meta.allProceduresAreCallable());
-        Assertions.assertEquals(true, meta.allTablesAreSelectable());
+        Assertions.assertTrue( meta.allProceduresAreCallable());
+        Assertions.assertTrue( meta.allTablesAreSelectable());
         Assertions.assertTrue(meta.getURL().contains("sqlserver") || meta.getURL().contains(":1433"));
         Assertions.assertNotNull(meta.getUserName()); // SQL Server username
-        Assertions.assertEquals(false, meta.isReadOnly());
+        Assertions.assertFalse( meta.isReadOnly());
 
         // 6–10: Null handling and database product info (SQL Server-specific behaviors)
-        Assertions.assertEquals(false, meta.nullsAreSortedHigh());  // SQL Server behavior
-        Assertions.assertEquals(true, meta.nullsAreSortedLow());   // SQL Server sorts nulls low
-        Assertions.assertEquals(false, meta.nullsAreSortedAtStart());
-        Assertions.assertEquals(false, meta.nullsAreSortedAtEnd());
+        Assertions.assertFalse( meta.nullsAreSortedHigh());  // SQL Server behavior
+        Assertions.assertTrue( meta.nullsAreSortedLow());   // SQL Server sorts nulls low
+        Assertions.assertFalse( meta.nullsAreSortedAtStart());
+        Assertions.assertFalse( meta.nullsAreSortedAtEnd());
         Assertions.assertTrue(meta.getDatabaseProductName().toLowerCase().contains("microsoft"));
 
         // 11–15: Version information
@@ -62,18 +62,18 @@ public class SQLServerDatabaseMetaDataExtensiveTests {
         Assertions.assertTrue(meta.getDriverMinorVersion() >= 0);
 
         // 16–20: File handling and identifiers
-        Assertions.assertEquals(false, meta.usesLocalFiles());
-        Assertions.assertEquals(false, meta.usesLocalFilePerTable());
-        Assertions.assertEquals(true, meta.supportsMixedCaseIdentifiers());
-        Assertions.assertEquals(false, meta.storesUpperCaseIdentifiers()); // SQL Server doesn't force uppercase
-        Assertions.assertEquals(false, meta.storesLowerCaseIdentifiers()); // SQL Server doesn't force lowercase
+        Assertions.assertFalse( meta.usesLocalFiles());
+        Assertions.assertFalse( meta.usesLocalFilePerTable());
+        Assertions.assertTrue( meta.supportsMixedCaseIdentifiers());
+        Assertions.assertFalse( meta.storesUpperCaseIdentifiers()); // SQL Server doesn't force uppercase
+        Assertions.assertFalse( meta.storesLowerCaseIdentifiers()); // SQL Server doesn't force lowercase
 
         // 21–25: Quoted identifiers
-        Assertions.assertEquals(true, meta.storesMixedCaseIdentifiers()); // SQL Server preserves case
-        Assertions.assertEquals(true, meta.supportsMixedCaseQuotedIdentifiers());
-        Assertions.assertEquals(false, meta.storesUpperCaseQuotedIdentifiers());
-        Assertions.assertEquals(false, meta.storesLowerCaseQuotedIdentifiers());
-        Assertions.assertEquals(true, meta.storesMixedCaseQuotedIdentifiers()); // SQL Server behavior
+        Assertions.assertTrue( meta.storesMixedCaseIdentifiers()); // SQL Server preserves case
+        Assertions.assertTrue( meta.supportsMixedCaseQuotedIdentifiers());
+        Assertions.assertFalse( meta.storesUpperCaseQuotedIdentifiers());
+        Assertions.assertFalse( meta.storesLowerCaseQuotedIdentifiers());
+        Assertions.assertTrue( meta.storesMixedCaseQuotedIdentifiers()); // SQL Server behavior
 
         // 26–30: String handling and functions
         Assertions.assertTrue(meta.getIdentifierQuoteString().equals("[") || meta.getIdentifierQuoteString().equals("\""));
@@ -86,83 +86,83 @@ public class SQLServerDatabaseMetaDataExtensiveTests {
         Assertions.assertNotNull(meta.getTimeDateFunctions());
         Assertions.assertEquals("\\", meta.getSearchStringEscape()); // SQL Server escape for LIKE
         Assertions.assertNotNull(meta.getExtraNameCharacters());
-        Assertions.assertEquals(true, meta.supportsAlterTableWithAddColumn());
-        Assertions.assertEquals(true, meta.supportsAlterTableWithDropColumn());
+        Assertions.assertTrue( meta.supportsAlterTableWithAddColumn());
+        Assertions.assertTrue( meta.supportsAlterTableWithDropColumn());
 
         // 36–40: Column operations and table correlation names
-        Assertions.assertEquals(true, meta.supportsColumnAliasing());
-        Assertions.assertEquals(true, meta.nullPlusNonNullIsNull());  // SQL Server: NULL + 'text' = NULL
-        Assertions.assertEquals(true, meta.supportsConvert());
-        Assertions.assertEquals(true, meta.supportsTableCorrelationNames());
-        Assertions.assertEquals(false, meta.supportsDifferentTableCorrelationNames());
+        Assertions.assertTrue( meta.supportsColumnAliasing());
+        Assertions.assertTrue( meta.nullPlusNonNullIsNull());  // SQL Server: NULL + 'text' = NULL
+        Assertions.assertTrue( meta.supportsConvert());
+        Assertions.assertTrue( meta.supportsTableCorrelationNames());
+        Assertions.assertFalse( meta.supportsDifferentTableCorrelationNames());
 
         // 41–45: Expression handling and ORDER BY
-        Assertions.assertEquals(true, meta.supportsExpressionsInOrderBy());
-        Assertions.assertEquals(true, meta.supportsOrderByUnrelated());
-        Assertions.assertEquals(true, meta.supportsGroupBy());
-        Assertions.assertEquals(true, meta.supportsGroupByUnrelated());
-        Assertions.assertEquals(true, meta.supportsGroupByBeyondSelect());
+        Assertions.assertTrue( meta.supportsExpressionsInOrderBy());
+        Assertions.assertTrue( meta.supportsOrderByUnrelated());
+        Assertions.assertTrue( meta.supportsGroupBy());
+        Assertions.assertTrue( meta.supportsGroupByUnrelated());
+        Assertions.assertTrue( meta.supportsGroupByBeyondSelect());
 
         // 46–50: LIKE operations and escape characters
-        Assertions.assertEquals(true, meta.supportsLikeEscapeClause());
-        Assertions.assertEquals(true, meta.supportsMultipleResultSets()); // Depends on driver implementation
-        Assertions.assertEquals(true, meta.supportsMultipleTransactions());
-        Assertions.assertEquals(true, meta.supportsNonNullableColumns());
-        Assertions.assertEquals(true, meta.supportsMinimumSQLGrammar());
+        Assertions.assertTrue( meta.supportsLikeEscapeClause());
+        Assertions.assertTrue( meta.supportsMultipleResultSets()); // Depends on driver implementation
+        Assertions.assertTrue( meta.supportsMultipleTransactions());
+        Assertions.assertTrue( meta.supportsNonNullableColumns());
+        Assertions.assertTrue( meta.supportsMinimumSQLGrammar());
 
         // 51–55: SQL grammar support levels
-        Assertions.assertEquals(true, meta.supportsCoreSQLGrammar());
-        Assertions.assertEquals(false, meta.supportsExtendedSQLGrammar());
-        Assertions.assertEquals(true, meta.supportsANSI92EntryLevelSQL());
-        Assertions.assertEquals(false, meta.supportsANSI92IntermediateSQL());
-        Assertions.assertEquals(false, meta.supportsANSI92FullSQL()); // SQL Server doesn't fully support ANSI 92
+        Assertions.assertTrue( meta.supportsCoreSQLGrammar());
+        Assertions.assertFalse( meta.supportsExtendedSQLGrammar());
+        Assertions.assertTrue( meta.supportsANSI92EntryLevelSQL());
+        Assertions.assertFalse( meta.supportsANSI92IntermediateSQL());
+        Assertions.assertFalse( meta.supportsANSI92FullSQL()); // SQL Server doesn't fully support ANSI 92
 
         // 56–60: Outer joins and schema operations
-        Assertions.assertEquals(true, meta.supportsOuterJoins());
-        Assertions.assertEquals(true, meta.supportsFullOuterJoins());
-        Assertions.assertEquals(true, meta.supportsLimitedOuterJoins());
+        Assertions.assertTrue( meta.supportsOuterJoins());
+        Assertions.assertTrue( meta.supportsFullOuterJoins());
+        Assertions.assertTrue( meta.supportsLimitedOuterJoins());
         Assertions.assertNotNull(meta.getSchemaTerm());
         Assertions.assertNotNull(meta.getProcedureTerm());
 
         // 61–65: Catalog and cursor operations
         Assertions.assertNotNull(meta.getCatalogTerm());
-        Assertions.assertEquals(true, meta.isCatalogAtStart());
+        Assertions.assertTrue( meta.isCatalogAtStart());
         Assertions.assertEquals(".", meta.getCatalogSeparator());
-        Assertions.assertEquals(true, meta.supportsSchemasInDataManipulation());
-        Assertions.assertEquals(true, meta.supportsSchemasInProcedureCalls());
+        Assertions.assertTrue( meta.supportsSchemasInDataManipulation());
+        Assertions.assertTrue( meta.supportsSchemasInProcedureCalls());
 
         // 66–70: Schema and catalog support in various contexts
-        Assertions.assertEquals(true, meta.supportsSchemasInTableDefinitions());
-        Assertions.assertEquals(true, meta.supportsSchemasInIndexDefinitions());
-        Assertions.assertEquals(true, meta.supportsSchemasInPrivilegeDefinitions());
-        Assertions.assertEquals(true, meta.supportsCatalogsInDataManipulation());
-        Assertions.assertEquals(true, meta.supportsCatalogsInProcedureCalls());
+        Assertions.assertTrue( meta.supportsSchemasInTableDefinitions());
+        Assertions.assertTrue( meta.supportsSchemasInIndexDefinitions());
+        Assertions.assertTrue( meta.supportsSchemasInPrivilegeDefinitions());
+        Assertions.assertTrue( meta.supportsCatalogsInDataManipulation());
+        Assertions.assertTrue( meta.supportsCatalogsInProcedureCalls());
 
         // 71–75: Catalog support in definitions
-        Assertions.assertEquals(true, meta.supportsCatalogsInTableDefinitions());
-        Assertions.assertEquals(true, meta.supportsCatalogsInIndexDefinitions());
-        Assertions.assertEquals(true, meta.supportsCatalogsInPrivilegeDefinitions());
-        Assertions.assertEquals(true, meta.supportsPositionedDelete());
-        Assertions.assertEquals(true, meta.supportsPositionedUpdate());
+        Assertions.assertTrue( meta.supportsCatalogsInTableDefinitions());
+        Assertions.assertTrue( meta.supportsCatalogsInIndexDefinitions());
+        Assertions.assertTrue( meta.supportsCatalogsInPrivilegeDefinitions());
+        Assertions.assertTrue( meta.supportsPositionedDelete());
+        Assertions.assertTrue( meta.supportsPositionedUpdate());
 
         // 76–80: SELECT FOR UPDATE and stored procedures
-        Assertions.assertEquals(false, meta.supportsSelectForUpdate()); // SQL Server doesn't support SELECT FOR UPDATE
-        Assertions.assertEquals(true, meta.supportsStoredProcedures());
-        Assertions.assertEquals(true, meta.supportsSubqueriesInComparisons());
-        Assertions.assertEquals(true, meta.supportsSubqueriesInExists());
-        Assertions.assertEquals(true, meta.supportsSubqueriesInIns());
+        Assertions.assertFalse( meta.supportsSelectForUpdate()); // SQL Server doesn't support SELECT FOR UPDATE
+        Assertions.assertTrue( meta.supportsStoredProcedures());
+        Assertions.assertTrue( meta.supportsSubqueriesInComparisons());
+        Assertions.assertTrue( meta.supportsSubqueriesInExists());
+        Assertions.assertTrue( meta.supportsSubqueriesInIns());
 
         // 81–85: Subquery support and correlation names
-        Assertions.assertEquals(true, meta.supportsSubqueriesInQuantifieds());
-        Assertions.assertEquals(true, meta.supportsCorrelatedSubqueries());
-        Assertions.assertEquals(true, meta.supportsUnion());
-        Assertions.assertEquals(true, meta.supportsUnionAll());
-        Assertions.assertEquals(false, meta.supportsOpenCursorsAcrossCommit());
+        Assertions.assertTrue( meta.supportsSubqueriesInQuantifieds());
+        Assertions.assertTrue( meta.supportsCorrelatedSubqueries());
+        Assertions.assertTrue( meta.supportsUnion());
+        Assertions.assertTrue( meta.supportsUnionAll());
+        Assertions.assertFalse( meta.supportsOpenCursorsAcrossCommit());
 
         // 86–90: Cursor and statement persistence
-        Assertions.assertEquals(false, meta.supportsOpenCursorsAcrossRollback()); // SQL Server behavior
-        Assertions.assertEquals(true, meta.supportsOpenStatementsAcrossCommit());
-        Assertions.assertEquals(true, meta.supportsOpenStatementsAcrossRollback());
+        Assertions.assertFalse( meta.supportsOpenCursorsAcrossRollback()); // SQL Server behavior
+        Assertions.assertTrue( meta.supportsOpenStatementsAcrossCommit());
+        Assertions.assertTrue( meta.supportsOpenStatementsAcrossRollback());
         Assertions.assertTrue(meta.getMaxBinaryLiteralLength() == 0);
         Assertions.assertTrue(meta.getMaxCharLiteralLength() == 0);
 
@@ -184,7 +184,7 @@ public class SQLServerDatabaseMetaDataExtensiveTests {
         Assertions.assertTrue(meta.getMaxProcedureNameLength() > 0);
         Assertions.assertTrue(meta.getMaxCatalogNameLength() > 0);
         Assertions.assertTrue(meta.getMaxRowSize() > 0);
-        Assertions.assertEquals(false, meta.doesMaxRowSizeIncludeBlobs()); // SQL Server behavior
+        Assertions.assertFalse( meta.doesMaxRowSizeIncludeBlobs()); // SQL Server behavior
         Assertions.assertTrue(meta.getMaxStatementLength() > 0);
 
         // 106–110: More limits and transaction support
@@ -195,11 +195,11 @@ public class SQLServerDatabaseMetaDataExtensiveTests {
         Assertions.assertTrue(meta.getDefaultTransactionIsolation() >= 0);
 
         // 111–115: Transaction and DDL support
-        Assertions.assertEquals(true, meta.supportsTransactions());
-        Assertions.assertEquals(true, meta.supportsDataDefinitionAndDataManipulationTransactions());
-        Assertions.assertEquals(false, meta.supportsDataManipulationTransactionsOnly());
-        Assertions.assertEquals(false, meta.dataDefinitionCausesTransactionCommit()); // SQL Server behavior
-        Assertions.assertEquals(false, meta.dataDefinitionIgnoredInTransactions());
+        Assertions.assertTrue( meta.supportsTransactions());
+        Assertions.assertTrue( meta.supportsDataDefinitionAndDataManipulationTransactions());
+        Assertions.assertFalse( meta.supportsDataManipulationTransactionsOnly());
+        Assertions.assertFalse( meta.dataDefinitionCausesTransactionCommit()); // SQL Server behavior
+        Assertions.assertFalse( meta.dataDefinitionIgnoredInTransactions());
 
         // Clean up
         TestDBUtils.cleanupTestTables(connection, "sqlserver_db_metadata_test");
@@ -220,8 +220,8 @@ public class SQLServerDatabaseMetaDataExtensiveTests {
         Assertions.assertNotNull(version);
         
         // Test SQL Server supports various features
-        Assertions.assertEquals(true, meta.supportsStoredProcedures());
-        Assertions.assertEquals(true, meta.supportsBatchUpdates());
+        Assertions.assertTrue( meta.supportsStoredProcedures());
+        Assertions.assertTrue( meta.supportsBatchUpdates());
         
         // Test SQL Server identifier handling
         Assertions.assertTrue(meta.getIdentifierQuoteString().equals("[") || 

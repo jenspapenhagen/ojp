@@ -104,10 +104,10 @@ public class MySQLMariaDBConnectionExtensiveTests {
         boolean originalAutoCommit = connection.getAutoCommit();
         
         connection.setAutoCommit(false);
-        Assert.assertEquals(false, connection.getAutoCommit());
+        Assert.assertFalse( connection.getAutoCommit());
         
         connection.setAutoCommit(true);
-        Assert.assertEquals(true, connection.getAutoCommit());
+        Assert.assertTrue( connection.getAutoCommit());
         
         // Restore original state
         connection.setAutoCommit(originalAutoCommit);
@@ -133,10 +133,10 @@ public class MySQLMariaDBConnectionExtensiveTests {
     void testIsClosed(String driverClass, String url, String user, String password) throws SQLException {
         setUp(driverClass, url, user, password);
         
-        Assert.assertEquals(false, connection.isClosed());
+        Assert.assertFalse( connection.isClosed());
         
         connection.close();
-        Assert.assertEquals(true, connection.isClosed());
+        Assert.assertTrue( connection.isClosed());
     }
 
     @ParameterizedTest
@@ -315,7 +315,7 @@ public class MySQLMariaDBConnectionExtensiveTests {
         // Test with closed connection
         connection.close();
         isValid = connection.isValid(5);
-        Assert.assertEquals(false, isValid);
+        Assert.assertFalse( isValid);
     }
 
     @ParameterizedTest

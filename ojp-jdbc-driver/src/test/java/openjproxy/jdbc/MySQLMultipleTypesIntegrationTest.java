@@ -110,7 +110,7 @@ public class MySQLMultipleTypesIntegrationTest {
         Assert.assertEquals(33333333333333l, valBigint);
         Assert.assertEquals(127, valTinyint);
         Assert.assertEquals(32767, valSmallint);
-        Assert.assertEquals(true, valBoolean);
+        Assert.assertTrue( valBoolean);
         Assert.assertEquals(new BigDecimal(10), valDecimal);
         Assert.assertEquals(20.20f, valFloat, 0.001);
         Assert.assertEquals((byte) 49, valByte);//Mysql return the byte as a character somehow and the byte value of character 1 is 49 (tested with direct connection)

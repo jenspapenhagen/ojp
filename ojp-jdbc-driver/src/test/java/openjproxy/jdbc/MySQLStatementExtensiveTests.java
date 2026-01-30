@@ -323,7 +323,7 @@ public class MySQLStatementExtensiveTests {
         if (url.toLowerCase().contains("mysql"))
             Assert.assertEquals(!poolable, statement.isPoolable());
         else
-            Assert.assertEquals(false, statement.isPoolable());
+            Assert.assertFalse( statement.isPoolable());
 
 
         statement.setPoolable(poolable);

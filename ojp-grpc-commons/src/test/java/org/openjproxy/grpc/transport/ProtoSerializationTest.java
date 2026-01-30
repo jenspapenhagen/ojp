@@ -68,7 +68,7 @@ public class ProtoSerializationTest {
         assertEquals("hello", result.get("string"));
         assertEquals(42.0, result.get("int")); // Numbers are stored as doubles
         assertEquals(3.14, result.get("double"));
-        assertEquals(true, result.get("boolean"));
+        assertTrue( result.get("boolean"));
         assertNull(result.get("null"));
     }
 
@@ -125,7 +125,7 @@ public class ProtoSerializationTest {
         assertEquals("string", result.get(0));
         assertEquals(42.0, result.get(1)); // Numbers are stored as doubles
         assertEquals(3.14, result.get(2));
-        assertEquals(true, result.get(3));
+        assertTrue( result.get(3));
         assertNull(result.get(4));
     }
 

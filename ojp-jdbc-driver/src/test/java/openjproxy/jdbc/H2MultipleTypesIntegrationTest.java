@@ -76,7 +76,7 @@ public class H2MultipleTypesIntegrationTest {
         Assert.assertEquals(33333333333333L, resultSet.getLong(4));
         Assert.assertEquals(127, resultSet.getInt(5));
         Assert.assertEquals(32767, resultSet.getInt(6));
-        Assert.assertEquals(true, resultSet.getBoolean(7));
+        Assert.assertTrue( resultSet.getBoolean(7));
         Assert.assertEquals(new BigDecimal(10), resultSet.getBigDecimal(8));
         Assert.assertEquals(20.20f+"", ""+resultSet.getFloat(9));
         Assert.assertEquals((byte) 1, resultSet.getByte(10));
@@ -93,7 +93,7 @@ public class H2MultipleTypesIntegrationTest {
         Assert.assertEquals(32767, resultSet.getInt("val_smallint"));
         Assert.assertEquals(new BigDecimal(10), resultSet.getBigDecimal("val_decimal"));
         Assert.assertEquals(20.20f+"", ""+resultSet.getFloat("val_float"));
-        Assert.assertEquals(true, resultSet.getBoolean("val_boolean"));
+        Assert.assertTrue( resultSet.getBoolean("val_boolean"));
         Assert.assertEquals((byte) 1, resultSet.getByte("val_byte"));
         Assert.assertEquals("AAAA", new String(resultSet.getBytes("val_binary")));
         Assert.assertEquals("29/03/2025", sdf.format(resultSet.getDate("val_date")));
