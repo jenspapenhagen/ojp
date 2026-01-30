@@ -94,12 +94,12 @@ class CockroachDBResultSetMetaDataExtensiveTests {
 
         // isCurrency - None of these columns represent currency explicitly
         boolean isCurrency1 = metaData.isCurrency(1);
-        assertTrue(isCurrency1 == true || isCurrency1 == false); // Accept both
+        assertTrue(isCurrency1 || !isCurrency1); // Accept both
         assertFalse(metaData.isCurrency(2));
         boolean isCurrency3 = metaData.isCurrency(3);
-        assertTrue(isCurrency3 == true || isCurrency3 == false); // Accept both
+        assertTrue(isCurrency3 || !isCurrency3); // Accept both
         boolean isCurrency4 = metaData.isCurrency(4);
-        assertTrue(isCurrency4 == true || isCurrency4 == false); // Accept both
+        assertTrue(isCurrency4 || !isCurrency4); // Accept both
 
         // isNullable - CockroachDB NULL constraints
         int nullable1 = metaData.isNullable(1);
@@ -111,7 +111,7 @@ class CockroachDBResultSetMetaDataExtensiveTests {
         // isSigned - CockroachDB numeric types are signed
         assertTrue(metaData.isSigned(1));
         boolean signed2 = metaData.isSigned(2); // VARCHAR is not signed but driver may vary
-        assertTrue(signed2 == true || signed2 == false);
+        assertTrue(signed2 || !signed2);
         assertTrue(metaData.isSigned(3));
         assertTrue(metaData.isSigned(4));
 
@@ -154,15 +154,15 @@ class CockroachDBResultSetMetaDataExtensiveTests {
 
         // isReadOnly
         boolean readOnly1 = metaData.isReadOnly(1);
-        assertTrue(readOnly1 == true || readOnly1 == false);
+        assertTrue(readOnly1 || !readOnly1);
 
         // isWritable
         boolean writable1 = metaData.isWritable(1);
-        assertTrue(writable1 == true || writable1 == false);
+        assertTrue(writable1 || !writable1);
 
         // isDefinitelyWritable
         boolean definitelyWritable1 = metaData.isDefinitelyWritable(1);
-        assertTrue(definitelyWritable1 == true || definitelyWritable1 == false);
+        assertTrue(definitelyWritable1 || !definitelyWritable1);
 
         // getColumnClassName
         assertNotNull(metaData.getColumnClassName(1));

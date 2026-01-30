@@ -1,12 +1,20 @@
 package openjproxy.jdbc;
 
 import openjproxy.jdbc.testutil.TestDBUtils;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvFileSource;
 
-import java.sql.*;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.RowIdLifetime;
+import java.sql.SQLException;
+import java.sql.Types;
 
+import static org.junit.jupiter.api.Assertions.*;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 public class OracleDatabaseMetaDataExtensiveTests {
@@ -38,158 +46,158 @@ public class OracleDatabaseMetaDataExtensiveTests {
         DatabaseMetaData meta = connection.getMetaData();
 
         // 1–5: Basic database information (Oracle-specific values)
-        Assertions.assertFalse( meta.allProceduresAreCallable());
-        Assertions.assertFalse( meta.allTablesAreSelectable());
-        Assertions.assertTrue(meta.getURL().contains("oracle") || meta.getURL().contains(":1521/"));
-        Assertions.assertNotNull(meta.getUserName()); // Oracle username
-        Assertions.assertFalse( meta.isReadOnly());
+        assertFalse( meta.allProceduresAreCallable());
+        assertFalse( meta.allTablesAreSelectable());
+        assertTrue(meta.getURL().contains("oracle") || meta.getURL().contains(":1521/"));
+        assertNotNull(meta.getUserName()); // Oracle username
+        assertFalse( meta.isReadOnly());
 
         // 6–10: Null handling and database product info (Oracle-specific behaviors)
-        Assertions.assertTrue( meta.nullsAreSortedHigh());  // Oracle behavior
-        Assertions.assertFalse( meta.nullsAreSortedLow());
-        Assertions.assertFalse( meta.nullsAreSortedAtStart());
-        Assertions.assertFalse( meta.nullsAreSortedAtEnd()); // Oracle behavior
-        Assertions.assertEquals("Oracle", meta.getDatabaseProductName());
+        assertTrue( meta.nullsAreSortedHigh());  // Oracle behavior
+        assertFalse( meta.nullsAreSortedLow());
+        assertFalse( meta.nullsAreSortedAtStart());
+        assertFalse( meta.nullsAreSortedAtEnd()); // Oracle behavior
+        assertEquals("Oracle", meta.getDatabaseProductName());
 
         // 11–15: Version information
-        Assertions.assertNotNull(meta.getDatabaseProductVersion());
-        Assertions.assertEquals("Oracle JDBC driver", meta.getDriverName());
-        Assertions.assertNotNull(meta.getDriverVersion());
-        Assertions.assertTrue(meta.getDriverMajorVersion() >= 21); // Oracle driver version
-        Assertions.assertTrue(meta.getDriverMinorVersion() >= 0);
+        assertNotNull(meta.getDatabaseProductVersion());
+        assertEquals("Oracle JDBC driver", meta.getDriverName());
+        assertNotNull(meta.getDriverVersion());
+        assertTrue(meta.getDriverMajorVersion() >= 21); // Oracle driver version
+        assertTrue(meta.getDriverMinorVersion() >= 0);
 
         // 16–20: File handling and identifiers
-        Assertions.assertFalse( meta.usesLocalFiles());
-        Assertions.assertFalse( meta.usesLocalFilePerTable());
-        Assertions.assertFalse( meta.supportsMixedCaseIdentifiers());
-        Assertions.assertTrue( meta.storesUpperCaseIdentifiers()); // Oracle stores uppercase
-        Assertions.assertFalse( meta.storesLowerCaseIdentifiers()); // Oracle stores uppercase
+        assertFalse( meta.usesLocalFiles());
+        assertFalse( meta.usesLocalFilePerTable());
+        assertFalse( meta.supportsMixedCaseIdentifiers());
+        assertTrue( meta.storesUpperCaseIdentifiers()); // Oracle stores uppercase
+        assertFalse( meta.storesLowerCaseIdentifiers()); // Oracle stores uppercase
 
         // 21–25: Quoted identifiers
-        Assertions.assertFalse( meta.storesMixedCaseIdentifiers());
-        Assertions.assertTrue( meta.supportsMixedCaseQuotedIdentifiers());
-        Assertions.assertFalse( meta.storesUpperCaseQuotedIdentifiers());
-        Assertions.assertFalse( meta.storesLowerCaseQuotedIdentifiers());
-        Assertions.assertTrue( meta.storesMixedCaseQuotedIdentifiers()); // Oracle behavior
+        assertFalse( meta.storesMixedCaseIdentifiers());
+        assertTrue( meta.supportsMixedCaseQuotedIdentifiers());
+        assertFalse( meta.storesUpperCaseQuotedIdentifiers());
+        assertFalse( meta.storesLowerCaseQuotedIdentifiers());
+        assertTrue( meta.storesMixedCaseQuotedIdentifiers()); // Oracle behavior
 
         // 26–30: String handling and functions
-        Assertions.assertEquals("\"", meta.getIdentifierQuoteString());
-        Assertions.assertNotNull(meta.getSQLKeywords());
-        Assertions.assertNotNull(meta.getNumericFunctions());
-        Assertions.assertNotNull(meta.getStringFunctions());
-        Assertions.assertNotNull(meta.getSystemFunctions());
+        assertEquals("\"", meta.getIdentifierQuoteString());
+        assertNotNull(meta.getSQLKeywords());
+        assertNotNull(meta.getNumericFunctions());
+        assertNotNull(meta.getStringFunctions());
+        assertNotNull(meta.getSystemFunctions());
 
         // 31–35: More functions and table operations
-        Assertions.assertNotNull(meta.getTimeDateFunctions());
-        Assertions.assertEquals("/", meta.getSearchStringEscape());
+        assertNotNull(meta.getTimeDateFunctions());
+        assertEquals("/", meta.getSearchStringEscape());
         // Oracle may have extra name characters
         String extraChars = meta.getExtraNameCharacters();
-        Assertions.assertNotNull(extraChars); // Accept any non-null value
-        Assertions.assertTrue( meta.supportsAlterTableWithAddColumn());
-        Assertions.assertFalse( meta.supportsAlterTableWithDropColumn());
+        assertNotNull(extraChars); // Accept any non-null value
+        assertTrue( meta.supportsAlterTableWithAddColumn());
+        assertFalse( meta.supportsAlterTableWithDropColumn());
 
         // 36–40: Query features
-        Assertions.assertTrue( meta.supportsColumnAliasing());
-        Assertions.assertTrue( meta.nullPlusNonNullIsNull());
-        Assertions.assertFalse( meta.supportsConvert()); // Oracle behavior differs from PostgreSQL
-        Assertions.assertFalse( meta.supportsConvert(Types.INTEGER, Types.VARCHAR)); // Oracle behavior
-        Assertions.assertTrue( meta.supportsTableCorrelationNames());
+        assertTrue( meta.supportsColumnAliasing());
+        assertTrue( meta.nullPlusNonNullIsNull());
+        assertFalse( meta.supportsConvert()); // Oracle behavior differs from PostgreSQL
+        assertFalse( meta.supportsConvert(Types.INTEGER, Types.VARCHAR)); // Oracle behavior
+        assertTrue( meta.supportsTableCorrelationNames());
 
         // 41–45: More query features
-        Assertions.assertTrue( meta.supportsDifferentTableCorrelationNames());
-        Assertions.assertTrue( meta.supportsExpressionsInOrderBy());
-        Assertions.assertTrue( meta.supportsOrderByUnrelated());
-        Assertions.assertTrue( meta.supportsGroupBy());
-        Assertions.assertTrue( meta.supportsGroupByUnrelated());
+        assertTrue( meta.supportsDifferentTableCorrelationNames());
+        assertTrue( meta.supportsExpressionsInOrderBy());
+        assertTrue( meta.supportsOrderByUnrelated());
+        assertTrue( meta.supportsGroupBy());
+        assertTrue( meta.supportsGroupByUnrelated());
 
         // 46–50: Advanced query features
-        Assertions.assertTrue( meta.supportsGroupByBeyondSelect());
-        Assertions.assertTrue( meta.supportsLikeEscapeClause());
-        Assertions.assertFalse( meta.supportsMultipleResultSets()); // Oracle supports multiple result sets
-        Assertions.assertTrue( meta.supportsMultipleTransactions());
-        Assertions.assertTrue( meta.supportsNonNullableColumns());
+        assertTrue( meta.supportsGroupByBeyondSelect());
+        assertTrue( meta.supportsLikeEscapeClause());
+        assertFalse( meta.supportsMultipleResultSets()); // Oracle supports multiple result sets
+        assertTrue( meta.supportsMultipleTransactions());
+        assertTrue( meta.supportsNonNullableColumns());
 
         // 51–55: SQL grammar support
-        Assertions.assertTrue( meta.supportsMinimumSQLGrammar());
-        Assertions.assertTrue( meta.supportsCoreSQLGrammar());
-        Assertions.assertTrue( meta.supportsExtendedSQLGrammar());
-        Assertions.assertTrue( meta.supportsANSI92EntryLevelSQL());
-        Assertions.assertFalse( meta.supportsANSI92IntermediateSQL());
+        assertTrue( meta.supportsMinimumSQLGrammar());
+        assertTrue( meta.supportsCoreSQLGrammar());
+        assertTrue( meta.supportsExtendedSQLGrammar());
+        assertTrue( meta.supportsANSI92EntryLevelSQL());
+        assertFalse( meta.supportsANSI92IntermediateSQL());
 
         // 56–60: Advanced SQL and joins
-        Assertions.assertFalse( meta.supportsANSI92FullSQL());
-        Assertions.assertTrue( meta.supportsIntegrityEnhancementFacility());
-        Assertions.assertTrue( meta.supportsOuterJoins());
-        Assertions.assertTrue( meta.supportsFullOuterJoins());
-        Assertions.assertTrue( meta.supportsLimitedOuterJoins());
+        assertFalse( meta.supportsANSI92FullSQL());
+        assertTrue( meta.supportsIntegrityEnhancementFacility());
+        assertTrue( meta.supportsOuterJoins());
+        assertTrue( meta.supportsFullOuterJoins());
+        assertTrue( meta.supportsLimitedOuterJoins());
 
         // 61–65: Schema and catalog terminology
-        Assertions.assertEquals("schema", meta.getSchemaTerm());
-        Assertions.assertEquals("procedure", meta.getProcedureTerm()); // Oracle uses procedures
-        Assertions.assertEquals("", meta.getCatalogTerm());
-        Assertions.assertFalse( meta.isCatalogAtStart());
-        Assertions.assertEquals("", meta.getCatalogSeparator());
+        assertEquals("schema", meta.getSchemaTerm());
+        assertEquals("procedure", meta.getProcedureTerm()); // Oracle uses procedures
+        assertEquals("", meta.getCatalogTerm());
+        assertFalse( meta.isCatalogAtStart());
+        assertEquals("", meta.getCatalogSeparator());
 
         // 66–75: Schema and catalog support
-        Assertions.assertTrue( meta.supportsSchemasInDataManipulation());
-        Assertions.assertTrue( meta.supportsSchemasInProcedureCalls());
-        Assertions.assertTrue( meta.supportsSchemasInTableDefinitions());
-        Assertions.assertTrue( meta.supportsSchemasInIndexDefinitions());
-        Assertions.assertTrue( meta.supportsSchemasInPrivilegeDefinitions());
-        Assertions.assertFalse( meta.supportsCatalogsInDataManipulation());
-        Assertions.assertFalse( meta.supportsCatalogsInProcedureCalls());
-        Assertions.assertFalse( meta.supportsCatalogsInTableDefinitions());
-        Assertions.assertFalse( meta.supportsCatalogsInIndexDefinitions());
-        Assertions.assertFalse( meta.supportsCatalogsInPrivilegeDefinitions());
+        assertTrue( meta.supportsSchemasInDataManipulation());
+        assertTrue( meta.supportsSchemasInProcedureCalls());
+        assertTrue( meta.supportsSchemasInTableDefinitions());
+        assertTrue( meta.supportsSchemasInIndexDefinitions());
+        assertTrue( meta.supportsSchemasInPrivilegeDefinitions());
+        assertFalse( meta.supportsCatalogsInDataManipulation());
+        assertFalse( meta.supportsCatalogsInProcedureCalls());
+        assertFalse( meta.supportsCatalogsInTableDefinitions());
+        assertFalse( meta.supportsCatalogsInIndexDefinitions());
+        assertFalse( meta.supportsCatalogsInPrivilegeDefinitions());
 
         // 76–90: Cursor and subquery support
-        Assertions.assertFalse( meta.supportsPositionedDelete());
-        Assertions.assertFalse( meta.supportsPositionedUpdate());
-        Assertions.assertTrue( meta.supportsSelectForUpdate());
-        Assertions.assertTrue( meta.supportsStoredProcedures());
-        Assertions.assertTrue( meta.supportsSubqueriesInComparisons());
-        Assertions.assertTrue( meta.supportsSubqueriesInExists());
-        Assertions.assertTrue( meta.supportsSubqueriesInIns());
-        Assertions.assertTrue( meta.supportsSubqueriesInQuantifieds());
-        Assertions.assertTrue( meta.supportsCorrelatedSubqueries());
-        Assertions.assertTrue( meta.supportsUnion());
-        Assertions.assertTrue( meta.supportsUnionAll());
-        Assertions.assertFalse( meta.supportsOpenCursorsAcrossCommit());
-        Assertions.assertFalse( meta.supportsOpenCursorsAcrossRollback());
-        Assertions.assertFalse( meta.supportsOpenStatementsAcrossCommit());
-        Assertions.assertFalse( meta.supportsOpenStatementsAcrossRollback());
+        assertFalse( meta.supportsPositionedDelete());
+        assertFalse( meta.supportsPositionedUpdate());
+        assertTrue( meta.supportsSelectForUpdate());
+        assertTrue( meta.supportsStoredProcedures());
+        assertTrue( meta.supportsSubqueriesInComparisons());
+        assertTrue( meta.supportsSubqueriesInExists());
+        assertTrue( meta.supportsSubqueriesInIns());
+        assertTrue( meta.supportsSubqueriesInQuantifieds());
+        assertTrue( meta.supportsCorrelatedSubqueries());
+        assertTrue( meta.supportsUnion());
+        assertTrue( meta.supportsUnionAll());
+        assertFalse( meta.supportsOpenCursorsAcrossCommit());
+        assertFalse( meta.supportsOpenCursorsAcrossRollback());
+        assertFalse( meta.supportsOpenStatementsAcrossCommit());
+        assertFalse( meta.supportsOpenStatementsAcrossRollback());
 
         // 91–111: Limits (Oracle-specific limits)
-        Assertions.assertEquals(1000, meta.getMaxBinaryLiteralLength());
-        Assertions.assertEquals(2000, meta.getMaxCharLiteralLength()); // Oracle VARCHAR2 limit
-        Assertions.assertEquals(128, meta.getMaxColumnNameLength()); // Oracle identifier limit
-        Assertions.assertEquals(0, meta.getMaxColumnsInGroupBy());
-        Assertions.assertEquals(32, meta.getMaxColumnsInIndex()); // Oracle index column limit
-        Assertions.assertEquals(0, meta.getMaxColumnsInOrderBy());
-        Assertions.assertEquals(0, meta.getMaxColumnsInSelect()); // Oracle column limit
-        Assertions.assertEquals(1000, meta.getMaxColumnsInTable());
-        Assertions.assertEquals(0, meta.getMaxConnections());
-        Assertions.assertEquals(0, meta.getMaxCursorNameLength());
-        Assertions.assertEquals(0, meta.getMaxIndexLength());
-        Assertions.assertEquals(128, meta.getMaxSchemaNameLength());
-        Assertions.assertEquals(128, meta.getMaxProcedureNameLength());
-        Assertions.assertEquals(0, meta.getMaxCatalogNameLength());
-        Assertions.assertEquals(0, meta.getMaxRowSize());
-        Assertions.assertTrue( meta.doesMaxRowSizeIncludeBlobs());
-        Assertions.assertEquals(65535, meta.getMaxStatementLength());
-        Assertions.assertEquals(0, meta.getMaxStatements());
-        Assertions.assertEquals(128, meta.getMaxTableNameLength());
-        Assertions.assertEquals(0, meta.getMaxTablesInSelect());
-        Assertions.assertEquals(128, meta.getMaxUserNameLength());
-        Assertions.assertEquals(Connection.TRANSACTION_READ_COMMITTED, meta.getDefaultTransactionIsolation());
+        assertEquals(1000, meta.getMaxBinaryLiteralLength());
+        assertEquals(2000, meta.getMaxCharLiteralLength()); // Oracle VARCHAR2 limit
+        assertEquals(128, meta.getMaxColumnNameLength()); // Oracle identifier limit
+        assertEquals(0, meta.getMaxColumnsInGroupBy());
+        assertEquals(32, meta.getMaxColumnsInIndex()); // Oracle index column limit
+        assertEquals(0, meta.getMaxColumnsInOrderBy());
+        assertEquals(0, meta.getMaxColumnsInSelect()); // Oracle column limit
+        assertEquals(1000, meta.getMaxColumnsInTable());
+        assertEquals(0, meta.getMaxConnections());
+        assertEquals(0, meta.getMaxCursorNameLength());
+        assertEquals(0, meta.getMaxIndexLength());
+        assertEquals(128, meta.getMaxSchemaNameLength());
+        assertEquals(128, meta.getMaxProcedureNameLength());
+        assertEquals(0, meta.getMaxCatalogNameLength());
+        assertEquals(0, meta.getMaxRowSize());
+        assertTrue( meta.doesMaxRowSizeIncludeBlobs());
+        assertEquals(65535, meta.getMaxStatementLength());
+        assertEquals(0, meta.getMaxStatements());
+        assertEquals(128, meta.getMaxTableNameLength());
+        assertEquals(0, meta.getMaxTablesInSelect());
+        assertEquals(128, meta.getMaxUserNameLength());
+        assertEquals(Connection.TRANSACTION_READ_COMMITTED, meta.getDefaultTransactionIsolation());
 
         // 112–118: Transaction support
-        Assertions.assertTrue( meta.supportsTransactions());
-        Assertions.assertTrue( meta.supportsTransactionIsolationLevel(Connection.TRANSACTION_READ_COMMITTED));
-        Assertions.assertTrue( meta.supportsDataDefinitionAndDataManipulationTransactions());
-        Assertions.assertTrue( meta.supportsDataManipulationTransactionsOnly());
-        Assertions.assertTrue( meta.dataDefinitionCausesTransactionCommit());
-        Assertions.assertFalse( meta.dataDefinitionIgnoredInTransactions());
+        assertTrue( meta.supportsTransactions());
+        assertTrue( meta.supportsTransactionIsolationLevel(Connection.TRANSACTION_READ_COMMITTED));
+        assertTrue( meta.supportsDataDefinitionAndDataManipulationTransactions());
+        assertTrue( meta.supportsDataManipulationTransactionsOnly());
+        assertTrue( meta.dataDefinitionCausesTransactionCommit());
+        assertFalse( meta.dataDefinitionIgnoredInTransactions());
 
         // 119–174: ResultSets for metadata queries
         try (ResultSet rs = meta.getProcedures(null, null, null)) {
@@ -246,26 +254,26 @@ public class OracleDatabaseMetaDataExtensiveTests {
         try (ResultSet rs = meta.getUDTs(null, null, null, null)) {
             TestDBUtils.validateAllRows(rs);
         }
-        Assertions.assertNotNull(meta.getConnection());
-        Assertions.assertTrue( meta.supportsSavepoints());
-        Assertions.assertTrue( meta.supportsNamedParameters());
-        Assertions.assertFalse( meta.supportsMultipleOpenResults());
-        Assertions.assertTrue( meta.supportsGetGeneratedKeys());
+        assertNotNull(meta.getConnection());
+        assertTrue( meta.supportsSavepoints());
+        assertTrue( meta.supportsNamedParameters());
+        assertFalse( meta.supportsMultipleOpenResults());
+        assertTrue( meta.supportsGetGeneratedKeys());
 
-        Assertions.assertEquals(ResultSet.HOLD_CURSORS_OVER_COMMIT, meta.getResultSetHoldability());
-        Assertions.assertTrue(meta.getDatabaseMajorVersion() >= 18); // Modern Oracle
-        Assertions.assertTrue(meta.getDatabaseMinorVersion() >= 0);
-        Assertions.assertEquals(4, meta.getJDBCMajorVersion());
-        Assertions.assertTrue(meta.getJDBCMinorVersion() >= 2);
-        Assertions.assertEquals(DatabaseMetaData.functionColumnUnknown, meta.getSQLStateType());
-        Assertions.assertTrue( meta.locatorsUpdateCopy());
-        Assertions.assertTrue( meta.supportsStatementPooling());
+        assertEquals(ResultSet.HOLD_CURSORS_OVER_COMMIT, meta.getResultSetHoldability());
+        assertTrue(meta.getDatabaseMajorVersion() >= 18); // Modern Oracle
+        assertTrue(meta.getDatabaseMinorVersion() >= 0);
+        assertEquals(4, meta.getJDBCMajorVersion());
+        assertTrue(meta.getJDBCMinorVersion() >= 2);
+        assertEquals(DatabaseMetaData.functionColumnUnknown, meta.getSQLStateType());
+        assertTrue( meta.locatorsUpdateCopy());
+        assertTrue( meta.supportsStatementPooling());
 
         try (ResultSet rs = meta.getSchemas(null, null)) {
             TestDBUtils.validateAllRows(rs);
         }
-        Assertions.assertTrue( meta.supportsStoredFunctionsUsingCallSyntax());
-        Assertions.assertFalse( meta.autoCommitFailureClosesAllResultSets());
+        assertTrue( meta.supportsStoredFunctionsUsingCallSyntax());
+        assertFalse( meta.autoCommitFailureClosesAllResultSets());
         try (ResultSet rs = meta.getClientInfoProperties()) {
             TestDBUtils.validateAllRows(rs);
         }
@@ -275,31 +283,31 @@ public class OracleDatabaseMetaDataExtensiveTests {
         try (ResultSet rs = meta.getFunctionColumns(null, null, null, null)) {
             TestDBUtils.validateAllRows(rs);
         }
-        Assertions.assertFalse( meta.generatedKeyAlwaysReturned());
-        Assertions.assertTrue( meta.supportsRefCursors());
-        Assertions.assertTrue( meta.supportsSharding());
+        assertFalse( meta.generatedKeyAlwaysReturned());
+        assertTrue( meta.supportsRefCursors());
+        assertTrue( meta.supportsSharding());
 
         // 175–177: ResultSet/Concurrency methods
-        Assertions.assertTrue( meta.supportsResultSetType(ResultSet.TYPE_FORWARD_ONLY));
-        Assertions.assertTrue( meta.supportsResultSetConcurrency(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY));
-        Assertions.assertFalse( meta.ownUpdatesAreVisible(ResultSet.TYPE_FORWARD_ONLY));
-        Assertions.assertFalse( meta.ownDeletesAreVisible(ResultSet.TYPE_FORWARD_ONLY));
-        Assertions.assertFalse( meta.ownInsertsAreVisible(ResultSet.TYPE_FORWARD_ONLY));
-        Assertions.assertFalse( meta.othersUpdatesAreVisible(ResultSet.TYPE_FORWARD_ONLY));
-        Assertions.assertFalse( meta.othersDeletesAreVisible(ResultSet.TYPE_FORWARD_ONLY));
-        Assertions.assertFalse( meta.othersInsertsAreVisible(ResultSet.TYPE_FORWARD_ONLY));
-        Assertions.assertFalse( meta.updatesAreDetected(ResultSet.TYPE_FORWARD_ONLY));
-        Assertions.assertFalse( meta.deletesAreDetected(ResultSet.TYPE_FORWARD_ONLY));
-        Assertions.assertFalse( meta.insertsAreDetected(ResultSet.TYPE_FORWARD_ONLY));
-        Assertions.assertTrue( meta.supportsBatchUpdates());
+        assertTrue( meta.supportsResultSetType(ResultSet.TYPE_FORWARD_ONLY));
+        assertTrue( meta.supportsResultSetConcurrency(ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY));
+        assertFalse( meta.ownUpdatesAreVisible(ResultSet.TYPE_FORWARD_ONLY));
+        assertFalse( meta.ownDeletesAreVisible(ResultSet.TYPE_FORWARD_ONLY));
+        assertFalse( meta.ownInsertsAreVisible(ResultSet.TYPE_FORWARD_ONLY));
+        assertFalse( meta.othersUpdatesAreVisible(ResultSet.TYPE_FORWARD_ONLY));
+        assertFalse( meta.othersDeletesAreVisible(ResultSet.TYPE_FORWARD_ONLY));
+        assertFalse( meta.othersInsertsAreVisible(ResultSet.TYPE_FORWARD_ONLY));
+        assertFalse( meta.updatesAreDetected(ResultSet.TYPE_FORWARD_ONLY));
+        assertFalse( meta.deletesAreDetected(ResultSet.TYPE_FORWARD_ONLY));
+        assertFalse( meta.insertsAreDetected(ResultSet.TYPE_FORWARD_ONLY));
+        assertTrue( meta.supportsBatchUpdates());
 
         // These tests has to be at the end as per when using hikariCP the connection will be marked as broken after this operations.
-        Assertions.assertTrue( meta.supportsResultSetHoldability(ResultSet.HOLD_CURSORS_OVER_COMMIT));
-        Assertions.assertThrows(SQLException.class, () -> meta.getSuperTypes(null, null, null));
-        Assertions.assertThrows(SQLException.class, () -> meta.getSuperTables(null, null, null));
-        Assertions.assertThrows(SQLException.class, () -> meta.getAttributes(null, null, null, null));
+        assertTrue( meta.supportsResultSetHoldability(ResultSet.HOLD_CURSORS_OVER_COMMIT));
+        assertThrows(SQLException.class, () -> meta.getSuperTypes(null, null, null));
+        assertThrows(SQLException.class, () -> meta.getSuperTables(null, null, null));
+        assertThrows(SQLException.class, () -> meta.getAttributes(null, null, null, null));
 
-        Assertions.assertEquals(RowIdLifetime.ROWID_VALID_FOREVER, meta.getRowIdLifetime());
+        assertEquals(RowIdLifetime.ROWID_VALID_FOREVER, meta.getRowIdLifetime());
         try (ResultSet rs = meta.getPseudoColumns(null, null, null, null)) {
             TestDBUtils.validateAllRows(rs);
         }

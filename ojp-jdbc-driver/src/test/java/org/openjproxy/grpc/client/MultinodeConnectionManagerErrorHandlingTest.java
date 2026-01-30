@@ -141,7 +141,7 @@ class MultinodeConnectionManagerErrorHandlingTest {
      * Helper method to invoke the private isConnectionLevelError method via reflection.
      */
     private boolean invokeIsConnectionLevelError(Exception exception) throws Exception {
-        List<ServerEndpoint> endpoints = Arrays.asList(new ServerEndpoint("localhost", 10591));
+        List<ServerEndpoint> endpoints = List.of(new ServerEndpoint("localhost", 10591));
         MultinodeConnectionManager manager = new MultinodeConnectionManager(endpoints);
         
         Method method = MultinodeConnectionManager.class.getDeclaredMethod("isConnectionLevelError", Exception.class);
