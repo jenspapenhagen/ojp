@@ -13,6 +13,8 @@ import java.sql.Timestamp;
 import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.Calendar;
+import java.util.Collections;
+import java.util.List;
 import java.util.TimeZone;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -31,7 +33,7 @@ class ProtoConverterTemporalTest {
         Parameter param = Parameter.builder()
             .index(1)
             .type(ParameterType.TIMESTAMP)
-            .values(Arrays.asList(timestamp))
+            .values(List.of(timestamp))
             .build();
         
         // Convert to proto
@@ -39,7 +41,7 @@ class ProtoConverterTemporalTest {
         assertNotNull(proto);
         assertEquals(1, proto.getIndex());
         assertEquals(1, proto.getValuesCount());
-        assertTrue(proto.getValues(0).getValueCase() == ParameterValue.ValueCase.TIMESTAMP_VALUE);
+        assertSame(proto.getValues(0).getValueCase(), ParameterValue.ValueCase.TIMESTAMP_VALUE);
         
         // Verify timezone is set (should be system default)
         TimestampWithZone tsWithZone = proto.getValues(0).getTimestampValue();
@@ -73,7 +75,7 @@ class ProtoConverterTemporalTest {
         // Convert to proto
         ParameterProto proto = ProtoConverter.toProto(param);
         assertNotNull(proto);
-        assertTrue(proto.getValues(0).getValueCase() == ParameterValue.ValueCase.TIMESTAMP_VALUE);
+        assertSame(proto.getValues(0).getValueCase(), ParameterValue.ValueCase.TIMESTAMP_VALUE);
         
         // Verify timezone from calendar is used
         TimestampWithZone tsWithZone = proto.getValues(0).getTimestampValue();
@@ -114,7 +116,7 @@ class ProtoConverterTemporalTest {
         Parameter param = Parameter.builder()
             .index(1)
             .type(ParameterType.TIMESTAMP)
-            .values(Arrays.asList((Object) null))
+            .values(Collections.singletonList((Object) null))
             .build();
         
         ParameterProto proto = ProtoConverter.toProto(param);
@@ -131,14 +133,14 @@ class ProtoConverterTemporalTest {
         Parameter param = Parameter.builder()
             .index(1)
             .type(ParameterType.DATE)
-            .values(Arrays.asList(date))
+            .values(Collections.singletonList(date))
             .build();
         
         // Convert to proto
         ParameterProto proto = ProtoConverter.toProto(param);
         assertNotNull(proto);
         assertEquals(1, proto.getValuesCount());
-        assertTrue(proto.getValues(0).getValueCase() == ParameterValue.ValueCase.DATE_VALUE);
+        assertSame(proto.getValues(0).getValueCase(), ParameterValue.ValueCase.DATE_VALUE);
         
         // Verify date values
         com.google.type.Date protoDate = proto.getValues(0).getDateValue();
@@ -158,7 +160,7 @@ class ProtoConverterTemporalTest {
         Parameter param = Parameter.builder()
             .index(1)
             .type(ParameterType.DATE)
-            .values(Arrays.asList((Object) null))
+            .values(Collections.singletonList((Object) null))
             .build();
         
         ParameterProto proto = ProtoConverter.toProto(param);
@@ -173,14 +175,14 @@ class ProtoConverterTemporalTest {
         Parameter param = Parameter.builder()
             .index(1)
             .type(ParameterType.TIME)
-            .values(Arrays.asList(time))
+            .values(List.of(time))
             .build();
         
         // Convert to proto
         ParameterProto proto = ProtoConverter.toProto(param);
         assertNotNull(proto);
         assertEquals(1, proto.getValuesCount());
-        assertTrue(proto.getValues(0).getValueCase() == ParameterValue.ValueCase.TIME_VALUE);
+        assertSame(proto.getValues(0).getValueCase(), ParameterValue.ValueCase.TIME_VALUE);
         
         // Verify time values
         com.google.type.TimeOfDay protoTime = proto.getValues(0).getTimeValue();
@@ -200,7 +202,7 @@ class ProtoConverterTemporalTest {
         Parameter param = Parameter.builder()
             .index(1)
             .type(ParameterType.TIME)
-            .values(Arrays.asList((Object) null))
+            .values(Collections.singletonList((Object) null))
             .build();
         
         ParameterProto proto = ProtoConverter.toProto(param);
@@ -218,19 +220,19 @@ class ProtoConverterTemporalTest {
         Parameter timestampParam = Parameter.builder()
             .index(1)
             .type(ParameterType.TIMESTAMP)
-            .values(Arrays.asList(timestamp))
+            .values(List.of(timestamp))
             .build();
         
         Parameter dateParam = Parameter.builder()
             .index(2)
             .type(ParameterType.DATE)
-            .values(Arrays.asList(date))
+            .values(Collections.singletonList(date))
             .build();
         
         Parameter timeParam = Parameter.builder()
             .index(3)
             .type(ParameterType.TIME)
-            .values(Arrays.asList(time))
+            .values(List.of(time))
             .build();
         
         // Convert all to proto
@@ -239,9 +241,9 @@ class ProtoConverterTemporalTest {
         ParameterProto proto3 = ProtoConverter.toProto(timeParam);
         
         // Verify all have correct typed values
-        assertTrue(proto1.getValues(0).getValueCase() == ParameterValue.ValueCase.TIMESTAMP_VALUE);
-        assertTrue(proto2.getValues(0).getValueCase() == ParameterValue.ValueCase.DATE_VALUE);
-        assertTrue(proto3.getValues(0).getValueCase() == ParameterValue.ValueCase.TIME_VALUE);
+        assertSame(proto1.getValues(0).getValueCase(), ParameterValue.ValueCase.TIMESTAMP_VALUE);
+        assertSame(proto2.getValues(0).getValueCase(), ParameterValue.ValueCase.DATE_VALUE);
+        assertSame(proto3.getValues(0).getValueCase(), ParameterValue.ValueCase.TIME_VALUE);
         
         // Convert back
         Parameter result1 = ProtoConverter.fromProto(proto1);
@@ -250,6 +252,6 @@ class ProtoConverterTemporalTest {
         
         assertEquals(timestamp, result1.getValues().get(0));
         assertEquals(date, result2.getValues().get(0));
-        assertEquals(time.toString(), ((Time) result3.getValues().get(0)).toString());
+        assertEquals(time.toString(), result3.getValues().get(0).toString());
     }
 }

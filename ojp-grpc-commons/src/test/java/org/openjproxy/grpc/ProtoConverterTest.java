@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.openjproxy.grpc.dto.ParameterType;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -41,7 +42,7 @@ public class ProtoConverterTest {
         // Convert back to Object with BYTES type (should preserve empty array)
         Object result = ProtoConverter.fromParameterValue(pv, ParameterType.BYTES);
         assertNotNull(result, "Empty byte array should not be null");
-        assertTrue(result instanceof byte[]);
+        assertInstanceOf(byte[].class, result);
         assertEquals(0, ((byte[]) result).length);
     }
 
@@ -54,7 +55,7 @@ public class ProtoConverterTest {
         // Convert back with BLOB type
         Object result = ProtoConverter.fromParameterValue(pv, ParameterType.BLOB);
         assertNotNull(result, "Empty BLOB should not be null");
-        assertTrue(result instanceof byte[]);
+        assertInstanceOf(byte[].class, result);
         assertEquals(0, ((byte[]) result).length);
     }
 
@@ -71,7 +72,7 @@ public class ProtoConverterTest {
         // Convert back to Object
         Object result = ProtoConverter.fromParameterValue(pv, ParameterType.BYTES);
         assertNotNull(result);
-        assertTrue(result instanceof byte[]);
+        assertInstanceOf(byte[].class, result);
         assertArrayEquals(dataArray, (byte[]) result);
     }
 
@@ -87,7 +88,7 @@ public class ProtoConverterTest {
         ParameterValue emptyPv = ProtoConverter.toParameterValue(emptyArray);
         Object emptyResult = ProtoConverter.fromParameterValue(emptyPv, ParameterType.BYTES);
         assertNotNull(emptyResult, "Empty byte array should not be null");
-        assertTrue(emptyResult instanceof byte[]);
+        assertInstanceOf(byte[].class, emptyResult);
         assertEquals(0, ((byte[]) emptyResult).length);
         
         // Verify they're different
@@ -145,7 +146,7 @@ public class ProtoConverterTest {
         // Convert back to Object with BIG_DECIMAL type
         Object result = ProtoConverter.fromParameterValue(pv, ParameterType.BIG_DECIMAL);
         assertNotNull(result);
-        assertTrue(result instanceof BigDecimal);
+        assertInstanceOf(BigDecimal.class, result);
         assertEquals(testValue, result);
     }
 
@@ -227,7 +228,7 @@ public class ProtoConverterTest {
         // Convert back to Object
         Object result = ProtoConverter.fromParameterValue(pv, null);
         assertNotNull(result);
-        assertTrue(result instanceof java.time.OffsetDateTime);
+        assertInstanceOf(OffsetDateTime.class, result);
         assertEquals(offsetDateTime.toInstant(), ((java.time.OffsetDateTime) result).toInstant());
     }
     

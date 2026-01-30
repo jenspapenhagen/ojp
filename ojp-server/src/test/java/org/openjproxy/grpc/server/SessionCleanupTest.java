@@ -3,19 +3,14 @@ package org.openjproxy.grpc.server;
 import com.openjproxy.grpc.SessionInfo;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 
 import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
 
 /**
  * Tests for session activity tracking and cleanup functionality.
@@ -31,7 +26,7 @@ class SessionCleanupTest {
     @BeforeEach
     void setUp() {
         sessionManager = new SessionManagerImpl();
-        mockConnection = Mockito.mock(Connection.class);
+        mockConnection = mock(Connection.class);
     }
 
     @Test

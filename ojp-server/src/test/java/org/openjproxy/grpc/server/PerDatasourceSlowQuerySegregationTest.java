@@ -5,7 +5,6 @@ import com.openjproxy.grpc.SessionInfo;
 import io.grpc.stub.StreamObserver;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
 import org.openjproxy.grpc.ProtoConverter;
 import org.openjproxy.grpc.server.utils.ConnectionHashGenerator;
 
@@ -14,11 +13,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.mock;
 
 /**
  * Test to verify that each datasource gets its own SlowQuerySegregationManager
@@ -32,8 +28,8 @@ class PerDatasourceSlowQuerySegregationTest {
     @BeforeEach
     void setUp() {
         serverConfiguration = new ServerConfiguration();
-        SessionManager sessionManager = Mockito.mock(SessionManager.class);
-        CircuitBreaker circuitBreaker = Mockito.mock(CircuitBreaker.class);
+        SessionManager sessionManager = mock(SessionManager.class);
+        CircuitBreaker circuitBreaker = mock(CircuitBreaker.class);
 
         statementService = new StatementServiceImpl(sessionManager, circuitBreaker, serverConfiguration);
     }
@@ -77,8 +73,8 @@ class PerDatasourceSlowQuerySegregationTest {
                 .addAllProperties(ProtoConverter.propertiesToProto(propertiesMap2))
                 .build();
 
-        StreamObserver<SessionInfo> responseObserver1 = Mockito.mock(StreamObserver.class);
-        StreamObserver<SessionInfo> responseObserver2 = Mockito.mock(StreamObserver.class);
+        StreamObserver<SessionInfo> responseObserver1 = mock(StreamObserver.class);
+        StreamObserver<SessionInfo> responseObserver2 = mock(StreamObserver.class);
 
         // Connect with first datasource
         statementService.connect(connectionDetails1, responseObserver1);
@@ -154,7 +150,7 @@ class PerDatasourceSlowQuerySegregationTest {
                 .addAllProperties(ProtoConverter.propertiesToProto(propertiesMap))
                 .build();
 
-        StreamObserver<SessionInfo> responseObserver = Mockito.mock(StreamObserver.class);
+        StreamObserver<SessionInfo> responseObserver = mock(StreamObserver.class);
         statementService.connect(connectionDetails, responseObserver);
 
         // Use reflection to call the private method to get manager
